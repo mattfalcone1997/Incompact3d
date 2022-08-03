@@ -108,7 +108,7 @@ subroutine init_xcompact3d()
        simu_stats, compute_cfldiff, &
        init_inflow_outflow
 
-  use param, only : ilesmod, jles,itype
+  use param, only : ilesmod, jles,itype, iaccel
   use param, only : irestart
 
   use variables, only : nx, ny, nz, nxm, nym, nzm
@@ -129,7 +129,7 @@ subroutine init_xcompact3d()
 
   integer :: ierr
 
-  integer :: nargin, FNLength, status, DecInd
+  integer :: nargin, FNLength, status, DecInd, i
   logical :: back
   character(len=80) :: InputFN, FNBase
     
@@ -203,6 +203,16 @@ subroutine init_xcompact3d()
      if (irestart==1) then
         call restart_forces(0)
      endif
+  endif
+
+  if (iaccel.eq.1) then
+      call accel_source
+      if (nrank.eq.0) then
+         open(13,file="source.dat",action='write')
+         do i = 1, nx
+            write(13,*) real(i-1,mytype)*dx, source(i,1,1)
+         enddo
+      endif
   endif
 
   !####################################################################
@@ -326,3 +336,31 @@ subroutine check_transients()
   if (nrank == 0) write(*,*)'## Main duz1 ', avg_param
   
 end subroutine check_transients
+
+subroutine accel_source
+   use param
+   use variables
+   use dbg_schemes
+   implicit none
+
+   real(mytype) :: x_coord, U_infty, U_infty_grad
+   integer :: i
+
+   if (iaccel.ne.1) then
+      source(:,:,:) = zero
+      return
+   endif
+
+   do i = 1, nx
+      x_coord = real(i - 1, mytype) * dx
+
+      U_infty = one +  half *(U_ratio - one)*(&
+                        tanh_prec( alpha_accel*(x_coord - accel_centre )) &
+                     + one )
+
+      U_infty_grad = half*alpha_accel*(U_ratio-one)*cosh_prec( alpha_accel*(x_coord &
+             - accel_centre ) )**(-two)
+
+      source(i,:,:) = U_infty*U_infty_grad
+   enddo
+   end subroutine

@@ -71,6 +71,7 @@ subroutine parameter(input_i3d)
   NAMELIST /CASE/ tgv_twod, pfront
   NAMELIST/ALMParam/iturboutput,NTurbines,TurbinesPath,NActuatorlines,ActuatorlinesPath,eps_factor,rho_air
   NAMELIST/ADMParam/Ndiscs,ADMcoords,C_T,aind,iturboutput,rho_air
+  NAMELIST/accelTBL/iaccel, U_ratio, accel_centre, alpha_accel
 
 #ifdef DEBG
   if (nrank == 0) write(*,*) '# parameter start'
@@ -194,9 +195,15 @@ subroutine parameter(input_i3d)
   if(ilesmod.ne.0) then
      read(10, nml=LESModel); rewind(10)
   endif
+  
   if (itype.eq.itype_tbl) then
      read(10, nml=Tripping); rewind(10)
   endif
+
+  if (itype.eq.itype_tbl) then
+      read(10, nml=accelTBL); rewind(10)
+   endif
+
   if (itype.eq.itype_abl) then
      read(10, nml=ABL); rewind(10)
   endif
@@ -527,6 +534,13 @@ subroutine parameter(input_i3d)
         write(*,*)  "TGV 2D: ", tgv_twod
      endif
      write(*,*) '==========================================================='
+     if (iaccel.eq.1) then
+      write(*,*) "Spatial acceleration TBL parameters:"
+      write(*,"(' U_ratio                : ',F17.8)") U_ratio
+      write(*,"(' Accel alpha            : ',F17.8)") alpha_accel
+      write(*,"(' Accel centre           : ',F17.8)") accel_centre
+      write(*,*) '==========================================================='
+     endif
   endif
   
   if (iibm.eq.3) then ! This is only for the Cubic Spline Reconstruction
@@ -682,5 +696,8 @@ subroutine parameter_defaults()
   ys_tr_tbl=0.350508_mytype
   ts_tr_tbl=1.402033_mytype
   x0_tr_tbl=3.505082_mytype
+   ! Accel
 
+  iaccel = 0
+  U_ratio = one
 end subroutine parameter_defaults

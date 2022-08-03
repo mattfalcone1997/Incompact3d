@@ -75,6 +75,7 @@ contains
 
     use navier, only : tbl_flrt
     use param , only : zero, zptwofive
+    use param , only : U_ratio, alpha_accel, accel_centre
 
     implicit none
 
@@ -82,8 +83,7 @@ contains
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
 
     real(mytype) :: x, y, z, um
-    real(mytype) :: udx,udy,udz,uddx,uddy,uddz,cx
-
+    real(mytype) :: udx,udy,udz,uddx,uddy,uddz,cx, dudx
     integer :: i, j, k, is
 
     !INFLOW with an update of bxx1, byy1 and bzz1 at the inlet
@@ -136,12 +136,18 @@ contains
         enddo
       enddo
     endif
+
+    dudx = zero
     !! Top Boundary
     if (nclyn == 2) then
        do k = 1, xsize(3)
           do i = 1, xsize(1)
+            x = real(i-1,mytype)*dx
+            if (iaccel.eq.1) dudx = half*alpha_accel*(U_ratio-one)*dcosh( alpha_accel*(x &
+                                    - accel_centre ) )**(-two)
+
              byxn(i, k) = ux(i, xsize(2) - 1, k)
-             byyn(i, k) = uy(i, xsize(2) - 1, k)
+             byyn(i, k) = uy(i, xsize(2) - 1, k) - dudx*(yp(ny)- yp(ny - 1))
              byzn(i, k) = uz(i, xsize(2) - 1, k)
           enddo
        enddo

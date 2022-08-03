@@ -400,6 +400,10 @@ module param
   real(mytype), allocatable, dimension(:) :: h_coeff1, h_1,phase1
   real(mytype), allocatable, dimension(:) :: h_coeff2, h_2,phase2
 
+  ! TBL accel
+  integer :: iaccel
+  real(mytype), allocatable, dimension(:,:,:) :: source
+  real(mytype) :: alpha_accel, U_ratio, accel_centre
   !numbers
 
   real(mytype),parameter :: zpone=0.1_mytype
