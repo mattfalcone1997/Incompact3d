@@ -39,3 +39,4 @@ test*
 checkpoint
 restart*
 forces.dat*
+.vscode/
