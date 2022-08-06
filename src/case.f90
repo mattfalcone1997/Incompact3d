@@ -18,6 +18,7 @@ module case
   use jet
   use lockexch
   use tbl
+  use tbl_recy
   use abl
   use uniform
   use sandbox
@@ -97,6 +98,10 @@ contains
     elseif (itype.eq.itype_tbl) then
 
        call init_tbl (ux1, uy1, uz1, ep1, phi1)
+
+    elseif (itype.eq.itype_tbl_recy) then
+
+        call init_tbl_recy (ux1, uy1, uz1, ep1, phi1)
 
     elseif (itype.eq.itype_abl) then
 
@@ -182,6 +187,10 @@ contains
 
        call boundary_conditions_tbl (ux, uy, uz, phi)
 
+    elseif (itype.eq.itype_tbl_recy) then
+
+        call boundary_conditions_tbl_recy (ux, uy, uz, phi)
+
     elseif (itype.eq.itype_abl) then
 
        call boundary_conditions_abl (ux, uy, uz, phi)
@@ -214,10 +223,10 @@ contains
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),nrhotime), intent(in) :: rho1
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)), intent(in) :: ep1
     real(mytype), dimension(ph1%zst(1):ph1%zen(1), ph1%zst(2):ph1%zen(2), nzmsize, npress), intent(in) :: pp3
-
-    !call write_snapshot(rho1, ux1, uy1, uz1, pp3, phi1, ep1, itime)
-    !call postprocess_case(rho1, ux1, uy1, uz1, pp3, phi1, ep1)
-    !call overall_statistic(ux1, uy1, uz1, phi1, pp3, ep1)
+    character(len=32) :: num
+    ! call write_snapshot(rho1, ux1, uy1, uz1, pp3, phi1, ep1, itime,num)
+    ! call postprocess_case(rho1, ux1, uy1, uz1, pp3, phi1, ep1)
+    ! call overall_statistic(ux1, uy1, uz1, phi1, pp3, ep1)
 
   end subroutine preprocessing
   !##################################################################
@@ -327,6 +336,10 @@ contains
 
        call postprocess_tbl (ux, uy, uz, ep)
 
+    elseif (itype.eq.itype_tbl_recy) then
+
+        call postprocess_tbl_recy (ux, uy, uz, ep)
+
     elseif (itype.eq.itype_abl) then
 
        call postprocess_abl (ux, uy, uz, ep)
@@ -373,6 +386,10 @@ contains
     else if (itype .eq. itype_tbl) then
 
        call visu_tbl_init(case_visu_init)
+
+    else if (itype .eq. itype_tbl_recy) then
+
+        call visu_tbl_recy_init(case_visu_init)
 
     else if (itype .eq. itype_lockexch) then
 
@@ -430,6 +447,11 @@ contains
 
        call visu_tbl(ux1, uy1, uz1, pp3, phi1, ep1, num)
        called_visu = .true.
+
+    elseif (itype.eq.itype_tbl_recy) then
+
+    call visu_tbl_recy(ux1, uy1, uz1, pp3, phi1, ep1, num)
+    called_visu = .true.
        
    elseif (itype.eq.itype_uniform) then
 
@@ -476,7 +498,9 @@ contains
     elseif (itype.eq.itype_abl) then
 
        call momentum_forcing_abl(dux1, duy1, duz1, ux1, uy1, uz1, phi1)
+    elseif (itype.eq.itype_tbl_recy) then
 
+        call momentum_forcing_tbl_recy(dux1, duy1, duz1, ux1, uy1, uz1)
     endif
 
   end subroutine momentum_forcing

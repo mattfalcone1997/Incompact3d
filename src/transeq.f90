@@ -560,9 +560,6 @@ contains
        duz1(:,:,:,1)=duz1(:,:,:,1)+Fdiscz(:,:,:)/rho_air
     endif
 
-    if (iaccel.eq.1) then
-      dux1(:,:,:,1)=dux1(:,:,:,1) + source(:,:,:)
-    endif
 #ifdef DEBG
     avg_param = zero
     call avg3d (dux1, avg_param)

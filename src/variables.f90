@@ -1328,10 +1328,6 @@ contains
        Gammadisc = zero
     endif
 
-    if (iaccel.eq.1) then
-      call alloc_x(source)
-    endif
-
     !! LMN
     if (.not.ilmn) then
        nrhotime = 1 !! Save some space

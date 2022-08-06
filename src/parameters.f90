@@ -71,8 +71,9 @@ subroutine parameter(input_i3d)
   NAMELIST /CASE/ tgv_twod, pfront
   NAMELIST/ALMParam/iturboutput,NTurbines,TurbinesPath,NActuatorlines,ActuatorlinesPath,eps_factor,rho_air
   NAMELIST/ADMParam/Ndiscs,ADMcoords,C_T,aind,iturboutput,rho_air
-  NAMELIST/accelTBL/iaccel, U_ratio, accel_centre, alpha_accel
-
+  NAMELIST/TBLRecy/plane_location, t_avg1,t_avg2, t_recy1, t_recy2, iaccel
+  NAMELIST/accelTBL/U_ratio, accel_centre, alpha_accel
+  
 #ifdef DEBG
   if (nrank == 0) write(*,*) '# parameter start'
 #endif
@@ -200,8 +201,11 @@ subroutine parameter(input_i3d)
      read(10, nml=Tripping); rewind(10)
   endif
 
-  if (itype.eq.itype_tbl) then
-      read(10, nml=accelTBL); rewind(10)
+  if (itype.eq.itype_tbl_recy) then
+      read(10, nml=TBLRecy); rewind(10)
+      if(iaccel.eq.1) then
+         read(10, nml=accelTBL); rewind(10)
+      endif
    endif
 
   if (itype.eq.itype_abl) then
@@ -335,6 +339,8 @@ subroutine parameter(input_i3d)
         print *,'Jet'
      elseif (itype.eq.itype_tbl) then
         print *,'Turbulent boundary layer'
+      elseif (itype.eq.itype_tbl_recy) then
+      print *,'Turbulent boundary layer using recycling method'
      elseif (itype.eq.itype_abl) then
         print *,'Atmospheric boundary layer'
      elseif (itype.eq.itype_uniform) then
@@ -534,12 +540,26 @@ subroutine parameter(input_i3d)
         write(*,*)  "TGV 2D: ", tgv_twod
      endif
      write(*,*) '==========================================================='
-     if (iaccel.eq.1) then
-      write(*,*) "Spatial acceleration TBL parameters:"
-      write(*,"(' U_ratio                : ',F17.8)") U_ratio
-      write(*,"(' Accel alpha            : ',F17.8)") alpha_accel
-      write(*,"(' Accel centre           : ',F17.8)") accel_centre
-      write(*,*) '==========================================================='
+     if (itype.eq.itype_tbl_recy) then
+      write(*,*) "Reycling-rescaling TBL parameters:"
+      write(*,"(' Recycling plane loc    : ',F17.8)") plane_location
+      write(*,"(' time average change 1  : ',F17.8)") t_avg1
+      write(*,"(' time average change 2  : ',F17.8)") t_avg2
+      write(*,"(' time recy change 1     : ',F17.8)") t_recy1
+      write(*,"(' time recy change 2     : ',F17.8)") t_recy2
+
+      if (iaccel.eq.1) then
+         write(*,*) "TBL has spatial acceleration. Parameters:"
+         write(*,"(' U_ratio                : ',F17.8)") U_ratio
+         write(*,"(' Accel alpha            : ',F17.8)") alpha_accel
+         write(*,"(' Accel centre           : ',F17.8)") accel_centre
+         write(*,*) '==========================================================='
+
+      else
+         write(*,*) "TBL doesn't have spatial acceleration."
+
+      endif
+
      endif
   endif
   

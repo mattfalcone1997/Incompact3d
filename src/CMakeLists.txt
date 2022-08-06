@@ -25,6 +25,7 @@ add_executable(xcompact3d
                     BC-Periodic-hill.f90
 		    BC-Sandbox.f90
                     BC-TBL.f90
+                    BC-TBL-recycle.f90
                     BC-TGV.f90
                     BC-Uniform.f90
                     BC-User.f90

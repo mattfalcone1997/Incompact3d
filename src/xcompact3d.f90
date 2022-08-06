@@ -205,16 +205,6 @@ subroutine init_xcompact3d()
      endif
   endif
 
-  if (iaccel.eq.1) then
-      call accel_source
-      if (nrank.eq.0) then
-         open(13,file="source.dat",action='write')
-         do i = 1, nx
-            write(13,*) real(i-1,mytype)*dx, source(i,1,1)
-         enddo
-      endif
-  endif
-
   !####################################################################
   ! initialise visu
   if (ivisu.ne.0) then
@@ -237,6 +227,11 @@ subroutine init_xcompact3d()
      end if
      call restart(ux1,uy1,uz1,dux1,duy1,duz1,ep1,pp3(:,:,:,1),phi1,dphi1,px1,py1,pz1,rho1,drho1,mu1,0)
   endif
+  
+!   call postprocessing(rho1, ux1, uy1, uz1, pp3, phi1, ep1)
+!   call MPI_Barrier(MPI_COMM_WORLD,ierr)
+!   if (nrank  == 0) write(*,*) "End."
+!    call MPI_ABORT(MPI_COMM_WORLD,1,ierr); stop
 
   if ((ioutflow.eq.1).or.(iin.eq.3)) then
      call init_inflow_outflow()
@@ -336,31 +331,3 @@ subroutine check_transients()
   if (nrank == 0) write(*,*)'## Main duz1 ', avg_param
   
 end subroutine check_transients
-
-subroutine accel_source
-   use param
-   use variables
-   use dbg_schemes
-   implicit none
-
-   real(mytype) :: x_coord, U_infty, U_infty_grad
-   integer :: i
-
-   if (iaccel.ne.1) then
-      source(:,:,:) = zero
-      return
-   endif
-
-   do i = 1, nx
-      x_coord = real(i - 1, mytype) * dx
-
-      U_infty = one +  half *(U_ratio - one)*(&
-                        tanh_prec( alpha_accel*(x_coord - accel_centre )) &
-                     + one )
-
-      U_infty_grad = half*alpha_accel*(U_ratio-one)*cosh_prec( alpha_accel*(x_coord &
-             - accel_centre ) )**(-two)
-
-      source(i,:,:) = U_infty*U_infty_grad
-   enddo
-   end subroutine

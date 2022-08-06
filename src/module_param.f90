@@ -283,7 +283,8 @@ module param
        itype_tbl = 9, &
        itype_abl = 10, &
        itype_uniform = 11, &
-       itype_sandbox = 12
+       itype_sandbox = 12, &
+       itype_tbl_recy = 13
 
   integer :: cont_phi,itr,itime,itest,iprocessing
   integer :: ifft,istret,iforc_entree,iturb
@@ -400,10 +401,15 @@ module param
   real(mytype), allocatable, dimension(:) :: h_coeff1, h_1,phase1
   real(mytype), allocatable, dimension(:) :: h_coeff2, h_2,phase2
 
-  ! TBL accel
+  ! TBL recyling
   integer :: iaccel
-  real(mytype), allocatable, dimension(:,:,:) :: source
+  real(mytype) :: t_avg1, t_avg2
+  real(mytype) :: t_recy1, t_recy2
+  real(mytype) :: plane_location
+
+  !TBL acceleration params
   real(mytype) :: alpha_accel, U_ratio, accel_centre
+
   !numbers
 
   real(mytype),parameter :: zpone=0.1_mytype
