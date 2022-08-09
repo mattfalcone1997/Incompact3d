@@ -18,14 +18,30 @@ module tbl_recy
   real(mytype), dimension(:,:), allocatable :: recy_mean_z, recy_mean_t
   real(mytype), dimension(:,:), allocatable :: inlt_mean_z, inlt_mean_t
   integer :: plane_index
-#ifdef DEBG
-   real(mytype), allocatable, dimension(:) :: dbg_u_inner, dbg_v_inner
-   real(mytype), allocatable, dimension(:) :: dbg_u_outer, dbg_v_outer
-   real(mytype), allocatable, dimension(:) :: dbg_u, dbg_v
+
+  abstract interface 
+  subroutine u_infty_interface(index,u_infty, u_infty_grad)
+     import mytype
+     integer, intent(in) :: index
+     real(mytype), intent(out) :: u_infty, u_infty_grad
+
+  end subroutine
+end interface
+
+procedure(u_infty_interface), pointer :: u_infty_calc
+
+#ifdef BL_DEBG
+   real(mytype), allocatable, dimension(:) :: dbg_u_inner, dbg_u_outer
+   real(mytype), allocatable, dimension(:) :: dbg_v_inner, dbg_v_outer
+   real(mytype), allocatable, dimension(:) :: dbg_w_inner, dbg_w_outer
+   real(mytype), allocatable, dimension(:,:) :: dbg_w_fluct, dbg_v_fluct, dbg_u_fluct
+
+   real(mytype), allocatable, dimension(:) :: dbg_u, dbg_v, dbg_w
    real(mytype), allocatable, dimension(:) :: dbg_y_plus_inlt, dbg_y_plus_recy
    real(mytype), allocatable, dimension(:) :: dbg_eta_inlt, dbg_eta_recy
-   real(mytype) :: dbg_gamma
+   real(mytype), allocatable, dimension(:) :: dbg_u_fluct_in, dbg_v_fluct_in, dbg_w_fluct_in
 
+   real(mytype) :: dbg_gamma
 #endif
 
   PRIVATE ! All functions/subroutines private by default
@@ -55,21 +71,36 @@ contains
     integer, dimension (:), allocatable :: seed
     real(mytype), dimension(:,:), allocatable :: u_mean, v_mean
 
-#ifdef DEBG
+#ifdef BL_DEBG
     real(mytype), allocatable, dimension(:,:,:) :: ux_dbg, uy_dbg, uz_dbg
-    real(mytype) :: dbg_val, dbg_t_recy1, dbg_t_recy2
+    real(mytype) :: dbg_t_recy1, dbg_t_recy2
     real(mytype), allocatable, dimension(:) :: y_vals
     real(mytype), allocatable, dimension(:) :: y_in, y_out
     real(mytype), allocatable, dimension(:) :: u_out, u_in
+    real(mytype), allocatable, dimension(:,:) :: fluct_out, fluct_in
+
     real(mytype) :: dbg_dv_inlt, dbg_dv_recy
     real(mytype) :: dbg_delta_inlt, dbg_delta_recy
+
     allocate(ux_dbg(xsize(1),xsize(2),xsize(3)))
     allocate(uy_dbg(xsize(1),xsize(2),xsize(3)))
     allocate(uz_dbg(xsize(1),xsize(2),xsize(3)))
     
     allocate(dbg_u_inner(xsize(2)), dbg_v_inner(xsize(2)))
     allocate(dbg_u_outer(xsize(2)), dbg_v_outer(xsize(2)))
-    allocate(dbg_u(xsize(2)), dbg_v(xsize(2)))
+    allocate(dbg_w_inner(xsize(2)), dbg_w_outer(xsize(2)))
+
+    allocate(dbg_u(xsize(2)), dbg_v(xsize(2)), dbg_w(xsize(2)))
+    allocate(fluct_in(xsize(2), xsize(3)))
+    allocate(fluct_out(xsize(2), xsize(3)))
+
+    allocate(dbg_u_fluct_in(xsize(2)))
+    allocate(dbg_v_fluct_in(xsize(2)))
+    allocate(dbg_w_fluct_in(xsize(2)))
+
+    allocate(dbg_u_fluct(xsize(2), xsize(3)))
+    allocate(dbg_v_fluct(xsize(2), xsize(3)))
+    allocate(dbg_w_fluct(xsize(2), xsize(3)))
 
     allocate(dbg_y_plus_inlt(ny))
     allocate(dbg_y_plus_recy(ny))
@@ -114,9 +145,6 @@ contains
       endif
     enddo
 
-    call alloc_x(source)
-    source(:,:,:) = zero
-
     if (iscalar==1) then
 
        phi1(:,:,:,:) = zptwofive !change as much as you want
@@ -131,7 +159,7 @@ contains
     endif
     ux1=zero;uy1=zero;uz1=zero 
 
-#ifdef DEBG
+#ifdef BL_DEBG
     if (nrank.eq.0) write(*,*) "# TBL recy debug:"
     if (nrank.eq.0) write(*,*) "# Creating debug velocities"
     do j = 1, ny
@@ -196,8 +224,33 @@ contains
       u_in(i)  = real(i -one     , mytype)
    enddo
 
+   do j = 1, xsize(2)
+      jdx = xstart(2) + j -1
+      fluct_in(j,:) = real(jdx -one     , mytype)
+   enddo
+
    call mean_interp(y_in, y_out, u_in, u_out )
    call check_mean_interp('mean_interp',u_out, y_out)
+
+   call fluct_interp(y_in, y_out, fluct_in, fluct_out)
+   call check_fluct_interp('fluct_interp',fluct_out, y_out)
+
+   ! check fluctuation interp
+   do j = 1, xsize(2)
+      jdx = xstart(2) + j -1
+      ux1(:,j,:) = real(jdx -one     , mytype)
+      uy1(:,j,:) = real(jdx -one     , mytype)
+      uz1(:,j,:) = real(jdx -one     , mytype)
+   enddo
+
+   recy_mean_z(:,:) = zero
+
+   call fluct_flow_inlt_calc(ux1, two*uy1, three*uz1,&
+             dbg_u_fluct, dbg_v_fluct, dbg_w_fluct )
+   
+   call check_fluct_interp('u_fluct',dbg_u_fluct, y_in)
+   call check_fluct_interp('v_fluct',dbg_v_fluct, two*y_in)
+   call check_fluct_interp('w_fluct',dbg_w_fluct, three*y_in)
 
 #endif
    if (irestart.ne.1) then
@@ -220,11 +273,11 @@ contains
       do j=1,xsize(2)
          if (istret==0) y=real(j+xstart(2)-1,mytype)*dy
          if (istret/=0) y=yp(j+xstart(2)-1)
-         um=exp_prec(-c*y)
+         um = exp_prec(-c*y)
          do i=1,xsize(1)
                ux1(i,j,k)=init_noise*um*(two*ux1(i,j,k)-one)
-               uy1(i,j,k)=init_noise*um*(two*ux1(i,j,k)-one)
-               uz1(i,j,k)=init_noise*um*(two*ux1(i,j,k)-one)
+               uy1(i,j,k)=init_noise*um*(two*uy1(i,j,k)-one)
+               uz1(i,j,k)=init_noise*um*(two*uz1(i,j,k)-one)
          enddo
       enddo
       enddo    
@@ -248,9 +301,18 @@ contains
          enddo
       enddo
 
+      if (iaccel.eq.0) then
+         u_infty_calc => zpg_BL
+      else if (iaccel.eq.1) then
+         u_infty_calc => tanh_BL
+      else
+         write(*,*) "Invalid iaccel value"
+         call MPI_Abort(MPI_COMM_WORLD, 1,ierror)
+      endif
 
+      call accel_source
       call compute_recycle_mean(ux1, uy1, uz1, reset=.true.)
-#ifdef DEBG
+#ifdef BL_DEBG
 
       call GetScalings(dbg_dv_inlt, dbg_dv_recy, dbg_delta_inlt, dbg_delta_recy, reset=.true.)
       call output_scalings("real",dbg_dv_inlt, dbg_dv_recy, dbg_delta_inlt, dbg_delta_recy)
@@ -276,7 +338,7 @@ contains
 
 
 
-#ifdef DEBG
+#ifdef BL_DEBG
     if (nrank  ==  0) write(*,*) '# init end ok'
 #endif
 
@@ -284,27 +346,65 @@ contains
     return
   end subroutine init_tbl_recy
 
+  subroutine zpg_BL(index,u_infty, u_infty_grad)
+   use param
+   use variables
+   use dbg_schemes, only : tanh_prec, cosh_prec
+
+   integer, intent(in) :: index
+   real(mytype), intent(out) :: u_infty, u_infty_grad
+
+   u_infty = one
+   u_infty_grad = zero
+
+   end subroutine
+
+   subroutine tanh_BL(index,u_infty, u_infty_grad)
+      use param
+      use variables
+      use dbg_schemes, only : tanh_prec, cosh_prec
+   
+      integer, intent(in) :: index
+      real(mytype), intent(out) :: u_infty, u_infty_grad
+      
+      real(mytype) :: x_coord
+
+      x_coord = real(index - 1, mytype) * dx
+   
+      u_infty = one +  half *(U_ratio - one)*(&
+                  tanh_prec( alpha_accel*(x_coord - accel_centre )) &
+                     + one )
+   
+      u_infty_grad = half*alpha_accel*(U_ratio-one)*cosh_prec( alpha_accel*(x_coord &
+                      - accel_centre ) )**(-two)
+   end subroutine
   subroutine accel_source
    use param
    use variables
    use dbg_schemes
    implicit none
 
-   real(mytype) :: x_coord, U_infty, U_infty_grad
+   real(mytype) :: x_coord, u_infty, u_infty_grad
    integer :: i
 
+   call alloc_x(source)
    do i = 1, nx
-      x_coord = real(i - 1, mytype) * dx
+      call u_infty_calc(i, u_infty, u_infty_grad)
 
-      U_infty = one +  half *(U_ratio - one)*(&
-                        tanh_prec( alpha_accel*(x_coord - accel_centre )) &
-                     + one )
-
-      U_infty_grad = half*alpha_accel*(U_ratio-one)*cosh_prec( alpha_accel*(x_coord &
-             - accel_centre ) )**(-two)
-
-      source(i,:,:) = U_infty*U_infty_grad
+      source(i,:,:) = u_infty*u_infty_grad
    enddo
+
+   if (nrank .eq.0) then
+      open(unit=13,file='u_infty.csv',action='write', status='replace')
+
+      write(13,*) "i, x, u_infty, u_infty_grad, source"
+      do i = 1, nx
+         x_coord = real(i-1, mytype)*dx
+         call u_infty_calc(i, u_infty, u_infty_grad)
+
+         write(13,"(I0,*(',',g0))") i, x_coord, u_infty, u_infty_grad, source(i,1,1)
+      enddo
+   endif
    end subroutine
 
   subroutine momentum_forcing_tbl_recy(dux1, duy1, duz1, ux1, uy1, uz1)
@@ -326,12 +426,9 @@ contains
   end subroutine momentum_forcing_tbl_recy
   !********************************************************************
   subroutine boundary_conditions_tbl_recy (ux,uy,uz,phi)
-
+   use MPI
     use navier, only : tbl_flrt
     use param , only : zero, zptwofive
-    use param , only : U_ratio, alpha_accel, accel_centre
-    use dbg_schemes
-
     implicit none
 
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux,uy,uz
@@ -342,9 +439,9 @@ contains
                                                  v_fluct,&
                                                  w_fluct
 
-    real(mytype) :: x, y, z, um
+    real(mytype) :: x, y, z, u_infty
     real(mytype) :: udx,udy,udz,uddx,uddy,uddz,cx, dudx
-    integer :: i, j, k, is
+    integer :: i, j, k
     
     allocate(u_mean(xsize(2)))
     allocate(v_mean(xsize(2)))
@@ -357,7 +454,7 @@ contains
     
     call compute_recycle_mean(ux, uy, uz)
     call mean_flow_inlt_calc(u_mean, v_mean)
-    call fluct_flow_inlt_calc(u_fluct, v_fluct, w_fluct)
+    call fluct_flow_inlt_calc(ux, uy, uz, u_fluct, v_fluct, w_fluct)
 
     do k = 1,xsize(3)
       do j = 1, xsize(2)
@@ -414,14 +511,11 @@ contains
       enddo
     endif
 
-    dudx = zero
     !! Top Boundary
     if (nclyn == 2) then
        do k = 1, xsize(3)
           do i = 1, xsize(1)
-            x = real(i-1,mytype)*dx
-            if (iaccel.eq.1) dudx = half*alpha_accel*(U_ratio-one)*cosh_prec( alpha_accel*(x &
-                                    - accel_centre ) )**(-two)
+            call u_infty_calc(i, u_infty, dudx)
 
              byxn(i, k) = ux(i, xsize(2) - 1, k)
              byyn(i, k) = uy(i, xsize(2) - 1, k) - dudx*(yp(ny)- yp(ny - 1))
@@ -471,8 +565,8 @@ contains
    real(mytype) :: u_tmp, eps, y
    real(mytype) :: gamma, w, u_infty
    integer :: j, jdx
-#ifdef DEBG
-   
+#ifdef BL_DEBG
+   character(20) :: fname
 #endif
    allocate(y_plus_inlt(ny))
    allocate(y_plus_recy(ny))
@@ -510,7 +604,7 @@ contains
       eta_recy(j) = y / delta_recy      
    enddo
 
-#ifdef DEBG
+#ifdef BL_DEBG
    dbg_gamma          = gamma
    dbg_eta_inlt(:)    = eta_inlt(:)
    dbg_eta_recy(:)    = eta_recy(:)
@@ -541,13 +635,13 @@ contains
 
       ! inner u
       u_tmp = gamma*u_inner(j)*(one - w) 
-#ifdef DEBG
+#ifdef BL_DEBG
       dbg_u_inner(j) = u_inner(j)
 #endif
       ! outer u
       u_tmp = u_tmp + w*(gamma*u_outer(j) +&
                         (one - gamma)*u_infty)
-#ifdef DEBG
+#ifdef BL_DEBG
 
       dbg_u_outer(j) = u_outer(j)
 
@@ -567,19 +661,161 @@ contains
 
    enddo
 
+#ifdef BL_DEBG
+   write(fname,"('real-',I0)") itime
+
+   do j = 1, xsize(2)
+      dbg_u(j) = um_inlt(j)
+      dbg_v(j) = vm_inlt(j)
+   enddo
+   call output_mean_flow_recy(trim(fname))
+#endif
+
 
 
   end subroutine
 
-  subroutine fluct_flow_inlt_calc(u_fluct, v_fluct, w_fluct)
-   real(mytype), dimension(:,:) :: u_fluct
-   real(mytype), dimension(:,:) :: v_fluct
-   real(mytype), dimension(:,:) :: w_fluct
+  subroutine fluct_flow_inlt_calc(ux, uy, uz, u_fluct, v_fluct, w_fluct)
+   real(mytype), dimension(:,:,:), intent(in) :: ux, uy, uz
+   real(mytype), dimension(:,:), intent(out) :: u_fluct
+   real(mytype), dimension(:,:), intent(out) :: v_fluct
+   real(mytype), dimension(:,:), intent(out) :: w_fluct
 
-   u_fluct(:,:) = zero
-   v_fluct(:,:) = zero
-   w_fluct(:,:) = zero
+   real(mytype) :: dv_inlt, dv_recy
+   real(mytype) :: delta_inlt, delta_recy
 
+   real(mytype), dimension(:,:), allocatable :: u_fluct_in
+   real(mytype), dimension(:,:), allocatable :: v_fluct_in
+   real(mytype), dimension(:,:), allocatable :: w_fluct_in
+
+   real(mytype), dimension(:,:), allocatable :: u_fluct_inner, u_fluct_outer
+   real(mytype), dimension(:,:), allocatable :: v_fluct_inner, v_fluct_outer 
+   real(mytype), dimension(:,:), allocatable :: w_fluct_inner, w_fluct_outer
+
+   real(mytype), dimension(:), allocatable :: y_plus_inlt
+   real(mytype), dimension(:), allocatable :: y_plus_recy
+   real(mytype), dimension(:), allocatable :: eta_inlt
+   real(mytype), dimension(:), allocatable :: eta_recy
+   real(mytype) :: y, w, u_tmp, gamma
+   integer :: j,k, jdx
+#ifdef BL_DEBG
+   character(20) :: fname
+#endif
+   allocate(u_fluct_in(xsize(2),xsize(3)))
+   allocate(v_fluct_in(xsize(2),xsize(3)))
+   allocate(w_fluct_in(xsize(2),xsize(3)))
+
+   allocate(u_fluct_inner(xsize(2),xsize(3)))
+   allocate(v_fluct_inner(xsize(2),xsize(3)))
+   allocate(w_fluct_inner(xsize(2),xsize(3)))
+
+   allocate(u_fluct_outer(xsize(2),xsize(3)))
+   allocate(v_fluct_outer(xsize(2),xsize(3)))
+   allocate(w_fluct_outer(xsize(2),xsize(3)))
+
+   do k = 1, xsize(3)
+      do j = 1, xsize(2)
+         jdx = xstart(2) + j -1
+         u_fluct_in(j,k) =  ux(plane_index,j,k) - recy_mean_z(1,jdx)
+         v_fluct_in(j,k) =  uy(plane_index,j,k) - recy_mean_z(2,jdx)
+         w_fluct_in(j,k) =  uz(plane_index,j,k) - recy_mean_z(3,jdx)
+      enddo
+   enddo
+
+   allocate(y_plus_inlt(ny))
+   allocate(y_plus_recy(ny))
+   allocate(eta_inlt(ny))
+   allocate(eta_recy(ny))
+
+   call GetScalings(dv_inlt, dv_recy, delta_inlt, delta_recy)
+
+   gamma = dv_recy / dv_inlt
+   
+   do j = 1, ny
+      if (istret==0) y=real(j-1,mytype)*dy
+      if (istret/=0) y=yp(j)
+
+      y_plus_inlt(j) = y / dv_inlt
+      y_plus_recy(j) = y / dv_recy
+      eta_inlt(j) = y / delta_inlt
+      eta_recy(j) = y / delta_recy      
+   enddo
+
+#ifdef BL_DEBG
+   dbg_gamma          = gamma
+   dbg_eta_inlt(:)    = eta_inlt(:)
+   dbg_eta_recy(:)    = eta_recy(:)
+   dbg_y_plus_inlt(:) = y_plus_inlt(:)
+   dbg_y_plus_recy(:) = y_plus_recy(:)
+
+#endif
+
+   ! interpolating u for inner and outer
+   call fluct_interp(y_plus_recy, y_plus_inlt,&
+                     u_fluct_in, u_fluct_inner)
+
+   call fluct_interp(eta_recy, eta_inlt,&
+                     u_fluct_in, u_fluct_outer)
+
+   ! interpolating v for inner and outer
+   call fluct_interp(y_plus_recy, y_plus_inlt,&
+                     v_fluct_in, v_fluct_inner)
+
+   call fluct_interp(eta_recy, eta_inlt,&
+                     v_fluct_in, v_fluct_outer)
+
+   ! interpolating w for inner and outer
+   call fluct_interp(y_plus_recy, y_plus_inlt,&
+                     w_fluct_in, w_fluct_inner)
+
+   call fluct_interp(eta_recy, eta_inlt,&
+                     w_fluct_in, w_fluct_outer)               
+
+#ifdef BL_DEBG
+   do j = 1, xsize(2)
+      dbg_u_fluct_in(j) = u_fluct_in(j,1)
+      dbg_v_fluct_in(j) = v_fluct_in(j,1)
+      dbg_w_fluct_in(j) = w_fluct_in(j,1)
+
+      dbg_u_inner(j) = u_fluct_inner(j,1)
+      dbg_u_outer(j) = u_fluct_outer(j,1)
+      dbg_v_inner(j) = v_fluct_inner(j,1)
+      dbg_v_outer(j) = v_fluct_outer(j,1)
+      dbg_w_inner(j) = w_fluct_inner(j,1)
+      dbg_w_outer(j) = w_fluct_outer(j,1)
+   enddo
+#endif                     
+   do k = 1, xsize(3)
+      do j = 1, xsize(2)
+         jdx = xstart(2) + j -1
+         ! u mean inlet calculation
+         w = recycleWeighting(eta_inlt(jdx))
+
+         ! u
+         u_tmp = gamma*u_fluct_inner(j,k)*(one - w) 
+         u_fluct(j,k) = u_tmp + w*gamma*u_fluct_outer(j,k)
+
+         ! v
+         u_tmp = gamma*v_fluct_inner(j,k)*(one - w) 
+         v_fluct(j,k) = u_tmp + w*gamma*v_fluct_outer(j,k)
+
+         ! w
+         u_tmp = gamma*w_fluct_inner(j,k)*(one - w) 
+         w_fluct(j,k) = u_tmp + w*gamma*w_fluct_outer(j,k)
+
+      enddo
+   enddo
+
+#ifdef BL_DEBG
+   write(fname,"('fluct-',I0)") itime
+
+   do j = 1, xsize(2)
+      dbg_u(j) = u_fluct(j,1)
+      dbg_v(j) = v_fluct(j,1)
+      dbg_w(j) = w_fluct(j,1)
+   enddo
+   call output_fluct_flow_recy(trim(fname))
+#endif   
    end subroutine
    function recycleWeighting(eta) result(w)
       use dbg_schemes, only : tanh_prec
@@ -857,9 +1093,11 @@ contains
 
    real(mytype), intent(out) :: delta_v_inlt, delta_v_recy, delta_inlt, delta_recy
    logical, intent(in), optional :: reset
-   real(mytype), save :: delta_inlt_old
    real(mytype) :: delta_meas
+
    logical, save :: first_call = .true.
+   real(mytype), save :: delta_inlt_old
+   integer, save :: c_time
    real(mytype) :: dyy, u_infty_recy, u_infty_inlt, u_thresh
    real(mytype) :: theta_inlt, theta_recy, int_inlt
    real(mytype) :: int_recy, mid_u, u_tau
@@ -914,12 +1152,15 @@ contains
       else
          first_call = .false.
       endif
+   else if (c_time .eq.itime) then
+      delta_inlt = delta_inlt_old
    else
       delta_inlt = delta_inlt_old + alp*( one - theta_inlt)*delta_inlt_old
 
       if (abs_prec(delta_inlt - delta_meas) > zpone) then
          delta_inlt = delta_meas + sign(zpone,delta_inlt - delta_meas)
       endif
+      c_time = itime
    endif
 
    delta_inlt_old = delta_inlt
@@ -938,7 +1179,7 @@ contains
   subroutine mean_interp(y_in, y_out, u_in, u_out)
    real(mytype), dimension(:),intent(in) :: y_in, y_out, u_in
    real(mytype), dimension(:), intent(out) :: u_out
-   real(mytype) :: dyy
+
    integer :: j, k, j_lower, j_upper, idx
 
    do j = 1, xsize(2)
@@ -963,97 +1204,85 @@ contains
 
   end subroutine mean_interp
 
-!   subroutine fluct_interp(y_in, y_out, u_in, u_out)
-!    use decomp_2d
-!    use MPI
+  subroutine fluct_interp(y_in, y_out, u_in, u_out)
+   use iso_fortran_env, only: output_unit
+   use decomp_2d
+   use MPI
 
-!    real(mytype), dimension(:),intent(in) :: y_in, y_out
-!    real(mytype), dimension(:,:),intent(in) :: u_in
-!    real(mytype), dimension(:,:), intent(out) :: u_out
-!    integer :: i, j
-!    integer, dimension(2) :: sizes, subsizes, starts
+   real(mytype), dimension(:),intent(in) :: y_in, y_out
+   real(mytype), dimension(:,:),intent(in) :: u_in
+   real(mytype), dimension(:,:), intent(out) :: u_out
+   integer :: i, j, k
+
+   integer :: color, key
+   integer, dimension(2) :: dims, coords
+   logical, dimension(2) :: periods 
+
+   integer :: sendcount, ierr, split_comm_y
+   real(mytype), allocatable, dimension(:,:) :: u_in_local
+   integer, allocatable, dimension(:) :: ldispl,displs,recvcounts
+
+   integer :: j_lower, j_upper, idx, send_glb
+   real(mytype), allocatable, dimension(:,:) :: u_in_switched
+
+   call MPI_Cart_get(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, ierr)
    
-!    integer, dimension(2) :: dims, coords
-!    logical, dimension(2) :: periods 
+   key = coords(1)
+   color = coords(2)
 
-!    integer, allocatable, dimension(:) :: sendcounts, sdispls
-!    integer, allocatable, dimension(:) :: recvcounts, rdispls
-!    integer, allocatable, dimension(:) :: gstarts, gends
+   call MPI_Comm_split(DECOMP_2D_COMM_CART_X, color, key, split_comm_y,ierr)
 
+   allocate(u_in_local(xsize(3),ny))
+   allocate(displs(dims(1)))
+   allocate(recvcounts(dims(1)))
+   allocate(u_in_switched(xsize(3),xsize(2)))
+   allocate(ldispl(dims(1)))
 
-!    call MPI_Cart_get(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, ierr)
+   call MPI_Allgather(xstart(2), 1, MPI_INTEGER, ldispl,&
+                     1, MPI_INTEGER,split_comm_y,ierr)  
+   call MPI_Allgather(xsize(2)*xsize(3), 1, MPI_INTEGER, recvcounts,&
+                     1, MPI_INTEGER,split_comm_y,ierr)                        
    
-!    key = coords(1)
-!    color = coords(2)
+   sendcount = xsize(2)*xsize(3)
+   do j = 1, xsize(2)
+      do k = 1, xsize(3)
+         u_in_switched(k,j) = u_in(j,k)
+      enddo
+   enddo
 
-!    call MPI_Comm_split(DECOMP_2D_COMM_CART_X, color, key, split_comm_y,ierr)
-
-!    allocate(sendcounts(dims(1)))
-!    allocate(sdispls(dims(1)))
-!    allocate(recvcounts(dims(1)))
-!    allocate(rdispls(dims(1)))
-!    allocate(gstarts(dims(1)))
-!    allocate(gends(dims(1)))
-
-!    call MPI_Allgather(xstart(2), 1, MPI_INTEGER, gstarts,&
-!                      1, MPI_INTEGER,split_comm_y,ierr)
-!    call MPI_Allgather(xend(2), 1, MPI_INTEGER, gends,&
-!                      1, MPI_INTEGER,split_comm_y,ierr)                     
-
-!    y_low = y_in(xstart(2))
-!    y_top = y_in(xend(2))
-!    do j = 1, dims(1)
-!       yend = y_out(gends(j))
-!       ystart = y_out(gstarts(j))
-
-      
-!       if (yend .ge. y_low .and.ystart .le.y_low) then
-!          do j = xstart(2), xend(2)
-!             if (y_in(j).gt. yend) then
-!                sendcounts(j) = j - xstart(2)
-!                exit
-!             endif
-!          enddo
-!          sdispls(j) = 0
-!       else if (ystart.ge.y_low .and. yend.le. ytop) then
-
-!          do j = xstart(2), xend(2)
-!             if (y_in(j).gt. ystart) then
-!                sdispls(j) = j-2 - xstart(2)
-!                exit
-!             endif
-            
-!          enddo
-
-!          do j = xstart(2), xend(2)
-!             if (y_in(j).gt. yend) then
-!                sendcounts(j) = j - sdispls(j) + 1 - xstart(2)
-!                exit
-!             endif
-!          enddo
-!       else if (yend .le. ytop) then
-!          do j = xstart(2), xend(2)
-!             if (y_in(j).gt. yend) then
-!                sdispls(j) = j-2 - xstart(2)
-!                exit
-!             endif
-!          enddo
-!          sendcounts(j) = xend(2)  - sdispls(j) -1
-
-!       else
-!          sendcounts(j) = 0
-!       endif
-!    enddo
-
-!    ! STUFF NEEDS FINISHING
-!    call MPI_Alltoallv(u_in,&
-!                      sendcounts,&
-!                      sdispls,
-!                      TYPE_HERE,&
-!                      )
+   displs = xsize(3)*(ldispl - 1)
 
 
-!   end subroutine fluct_interp
+   call MPI_Allreduce(sendcount,send_glb,1,MPI_INTEGER,MPI_SUM,split_comm_y,ierr)
+   call MPI_Allgatherv(u_in_switched, sendcount, real_type,u_in_local,&
+                        recvcounts,displs,real_type,split_comm_y,&
+                        ierr)
+
+   do i = 1, xsize(3)
+      do j = 1, xsize(2)
+         idx = xstart(2) + j -1
+         do k = 1, ny
+            if (y_in(k).gt.y_out(idx )) then
+               j_lower = k - 1
+               j_upper = k
+
+               u_out(j,i) = u_in_local(i,j_lower) + &
+                        (y_out(idx) - y_in(j_lower)) * &
+                        (u_in_local(i,j_upper) - u_in_local(i,j_lower))
+               exit
+            elseif (k == ny) then
+               u_out(j,i) = u_in_local(i, ny)
+               exit
+
+            endif
+
+         enddo
+      enddo
+   enddo
+
+   deallocate(u_in_switched)
+   deallocate(u_in_local)
+  end subroutine fluct_interp
 
   !############################################################################
   subroutine postprocess_tbl_recy(ux1,uy1,uz1,ep1)
@@ -1161,7 +1390,7 @@ contains
 
   end subroutine visu_tbl_recy
 
-#ifdef DEBG
+#ifdef BL_DEBG
    subroutine check_mean_avg(name,y_vals, mean_array)
       use MPI
       use decomp_2d
@@ -1214,7 +1443,7 @@ contains
 
       integer, dimension(2) :: dims, coords
       logical, dimension(2) :: periods 
-      integer :: ierror, i,j,k
+      integer :: ierror, j
 
       call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, ierror)
 
@@ -1246,7 +1475,7 @@ contains
 
       integer, dimension(2) :: dims, coords
       logical, dimension(2) :: periods 
-      integer :: ierror, i,j,k
+      integer :: ierror, i,j
       real(mytype) :: dbg_val
 
       call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, ierror)
@@ -1284,7 +1513,7 @@ contains
 
       integer, dimension(2) :: dims, coords
       logical, dimension(2) :: periods 
-      integer :: ierror, i,j,k, idx
+      integer :: ierror, i,j, idx
       real(mytype) :: dbg_val
 
       call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, ierror)
@@ -1321,8 +1550,8 @@ contains
 
       integer, dimension(2) :: dims, coords
       logical, dimension(2) :: periods 
-      integer :: ierror, i,j,k, idx
-      real(mytype) :: dbg_val, y, w
+      integer :: ierror, i,j , idx
+      real(mytype) :: w
 
       call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, ierror)
 
@@ -1351,5 +1580,88 @@ contains
          call MPI_Barrier(MPI_COMM_WORLD,ierror)
       enddo
    end subroutine
+
+   subroutine output_fluct_flow_recy(name)
+      use MPI
+      use decomp_2d
+
+      character(len=*), intent(in) :: name
+
+      integer, dimension(2) :: dims, coords
+      logical, dimension(2) :: periods 
+      integer :: ierror, i,j, idx
+      real(mytype) :: w
+
+      call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, ierror)
+
+      if (nrank.eq.0) then
+         open(13, file='tbl_recy-dbg-'//trim(name)//'.log',action='write',status='replace')
+         write(13, *) "jdx, j, y, gamma, w, y_plus_inlt, y_plus_recy, eta_inlt, eta_recy,u_in,  u_mean, u_inner,"//&
+                  " u_outer, u, v_in, v_mean, v_inner, v_outer, v, w_in,  w_mean , w_inner, w_outer, w"
+         close(13)
+      endif
+      
+      do j = 0, nproc, dims(2)
+         if (j == nrank) then
+            open(13, file='tbl_recy-dbg-'//trim(name)//'.log',action='write',access='append',status='old')
+            do  i = 1, xsize(2)
+               idx = xstart(2) + i - 1
+               w = recycleWeighting(dbg_eta_inlt(idx))
+               write(13,"(I0,',', I0, *(',',g0))") idx, i, yp(idx), dbg_gamma, w, dbg_y_plus_inlt(idx), dbg_y_plus_recy(idx),&
+                                       dbg_eta_inlt(idx), dbg_eta_recy(idx),  &
+                                       dbg_u_fluct_in(i), recy_mean_z(1,idx), dbg_u_inner(i), dbg_u_outer(i), dbg_u(i), &
+                                       dbg_v_fluct_in(i), recy_mean_z(2,idx), dbg_v_inner(i), dbg_v_outer(i), dbg_v(i),&
+                                       dbg_w_fluct_in(i), recy_mean_z(3,idx), dbg_w_inner(i), dbg_w_outer(i), dbg_w(i)
+            enddo
+            
+            close(13)
+         endif
+   
+         call MPI_Barrier(MPI_COMM_WORLD,ierror)
+      enddo
+   end subroutine   
+
+   subroutine check_fluct_interp(name, u, u_exp)
+      use MPI
+      use decomp_2d
+      use dbg_schemes, only: abs_prec
+
+      character(len=*), intent(in) :: name
+      real(mytype), dimension(:,:), intent(in) :: u
+      real(mytype), dimension(:), intent(in) :: u_exp
+
+      integer, dimension(2) :: dims, coords
+      logical, dimension(2) :: periods 
+      integer :: ierror, i,j,k
+      real(mytype) :: dbg_val
+
+      call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, ierror)
+
+      if (nrank.eq.0) then
+         open(13, file='tbl_recy-dbg-'//trim(name)//'.log',action='write',status='replace')
+         close(13)
+      endif
+      
+      do j = 0, nproc
+         if (j == nrank) then
+            open(13, file='tbl_recy-dbg-'//trim(name)//'.log',action='write',access='append',status='old')
+            do k = 1, xsize(3)
+               do  i = 1, xsize(2)
+                  dbg_val = u_exp(xstart(2)+ i -1) - u(i,k)
+                  if (abs_prec(dbg_val) > 1e-10_mytype) then
+                     write(13,"('Rank: ',I5,' J (global): ',I5,' J (local): ',I5,' K (global): ',I5,' K (local): ',I5,' u_exp',F17.8, ' u',F17.8)")&
+                           nrank, xstart(2)+ i -1, i, xstart(3)+ k -1, k, u_exp(xstart(2)+ i -1), u(i,k)
+                  endif
+               enddo
+            enddo
+            
+            close(13)
+         endif
+   
+         call MPI_Barrier(MPI_COMM_WORLD,ierror)
+      enddo
+
+   end subroutine
+
 #endif
 end module tbl_recy

@@ -72,7 +72,7 @@ subroutine parameter(input_i3d)
   NAMELIST/ALMParam/iturboutput,NTurbines,TurbinesPath,NActuatorlines,ActuatorlinesPath,eps_factor,rho_air
   NAMELIST/ADMParam/Ndiscs,ADMcoords,C_T,aind,iturboutput,rho_air
   NAMELIST/TBLRecy/plane_location, t_avg1,t_avg2, t_recy1, t_recy2, iaccel
-  NAMELIST/accelTBL/U_ratio, accel_centre, alpha_accel
+  NAMELIST/tanhAccelTBL/U_ratio, accel_centre, alpha_accel
   
 #ifdef DEBG
   if (nrank == 0) write(*,*) '# parameter start'
@@ -203,9 +203,11 @@ subroutine parameter(input_i3d)
 
   if (itype.eq.itype_tbl_recy) then
       read(10, nml=TBLRecy); rewind(10)
+
       if(iaccel.eq.1) then
-         read(10, nml=accelTBL); rewind(10)
+         read(10, nml=tanhAccelTBL); rewind(10)
       endif
+
    endif
 
   if (itype.eq.itype_abl) then
