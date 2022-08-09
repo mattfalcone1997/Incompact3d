@@ -1251,9 +1251,6 @@ contains
    enddo
 
    displs = xsize(3)*(ldispl - 1)
-
-
-   call MPI_Allreduce(sendcount,send_glb,1,MPI_INTEGER,MPI_SUM,split_comm_y,ierr)
    call MPI_Allgatherv(u_in_switched, sendcount, real_type,u_in_local,&
                         recvcounts,displs,real_type,split_comm_y,&
                         ierr)
