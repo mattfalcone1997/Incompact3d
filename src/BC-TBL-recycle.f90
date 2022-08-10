@@ -1080,6 +1080,8 @@ contains
                            ( one - dtdivT )*recy_mean_t(:,:)                           
    endif
 
+   call MPI_Comm_free(split_comm_y,ierr)
+   call MPI_Comm_free(split_comm_z,ierr)
    deallocate(inlt_mean_z_local)
    deallocate(recy_mean_z_local)
    deallocate(recy_mean_z_ls)
@@ -1276,6 +1278,8 @@ contains
          enddo
       enddo
    enddo
+
+   call MPI_Comm_free(split_comm_y,ierr)
 
    deallocate(u_in_switched)
    deallocate(u_in_local)
