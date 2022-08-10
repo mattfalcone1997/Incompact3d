@@ -586,10 +586,10 @@ contains
 
 
 
-   if (itime < t_recy1) then
+   if (t < t_recy1) then
       eps = zero
-   else if (itime < t_recy2) then
-      eps = (itime - t_recy1)/ (t_recy2 - t_recy1)
+   else if (t < t_recy2) then
+      eps = (t - t_recy1)/ (t_recy2 - t_recy1)
    else
       eps = one
    endif
