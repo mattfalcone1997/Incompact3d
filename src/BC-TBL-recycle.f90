@@ -696,7 +696,7 @@ contains
    real(mytype), dimension(:), allocatable :: y_plus_recy
    real(mytype), dimension(:), allocatable :: eta_inlt
    real(mytype), dimension(:), allocatable :: eta_recy
-   real(mytype) :: y, w, u_tmp, gamma
+   real(mytype) :: y, w, u_tmp, gamma, factor
    integer :: j,k, jdx
 #ifdef BL_DEBG
    character(20) :: fname
@@ -784,7 +784,14 @@ contains
       dbg_w_inner(j) = w_fluct_inner(j,1)
       dbg_w_outer(j) = w_fluct_outer(j,1)
    enddo
-#endif                     
+#endif       
+   
+   if (t < spinup_time) then
+      factor = fluct_multiply(gamma*u_fluct_inner)
+   else
+      factor = one
+   endif
+
    do k = 1, xsize(3)
       do j = 1, xsize(2)
          jdx = xstart(2) + j -1
@@ -792,15 +799,15 @@ contains
          w = recycleWeighting(eta_inlt(jdx))
 
          ! u
-         u_tmp = gamma*u_fluct_inner(j,k)*(one - w) 
+         u_tmp = gamma*factor*u_fluct_inner(j,k)*(one - w) 
          u_fluct(j,k) = u_tmp + w*gamma*u_fluct_outer(j,k)
 
          ! v
-         u_tmp = gamma*v_fluct_inner(j,k)*(one - w) 
+         u_tmp = gamma*factor*v_fluct_inner(j,k)*(one - w) 
          v_fluct(j,k) = u_tmp + w*gamma*v_fluct_outer(j,k)
 
          ! w
-         u_tmp = gamma*w_fluct_inner(j,k)*(one - w) 
+         u_tmp = gamma*factor*w_fluct_inner(j,k)*(one - w) 
          w_fluct(j,k) = u_tmp + w*gamma*w_fluct_outer(j,k)
 
       enddo
@@ -827,6 +834,22 @@ contains
 
       w = half * ( one + tanh_prec(a*(eta - b)/&
             ((one - two*b)*eta + b))/tanh_prec(a) )
+
+   end function
+
+   real(mytype) function fluct_multiply(u_fluct_inner)
+      use MPI
+      real(mytype), dimension(:,:), intent(in) :: u_fluct_inner
+
+      integer :: j, k, ierr
+      real(mytype) :: local_max, max_val
+
+      local_max = maxval(dabs(u_fluct_inner))
+
+      call MPI_Allreduce(local_max, max_val, 1, real_type,&
+                         MPI_MAX, DECOMP_2D_COMM_CART_X, ierr)
+
+      fluct_multiply = max(init_noise/max_val, one)                         
 
    end function
   !********************************************************************
