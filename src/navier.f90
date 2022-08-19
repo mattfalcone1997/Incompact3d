@@ -430,6 +430,11 @@ contains
             nxmsize,xsize(1),xsize(2),xsize(3),1)
     endif
 
+    if (itype.eq.itype_tbl_recy) then 
+      py1(1,:,:) = zero
+      pz1(1,:,:) = zero
+    endif
+
     !we are in X pencils:
     if (nclx1.eq.2) then
        do k=1,xsize(3)
