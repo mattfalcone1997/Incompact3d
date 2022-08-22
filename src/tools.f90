@@ -1925,7 +1925,7 @@ subroutine tbl_tripping(tb,ta)
         y_pos=yp(xstart(2)+(j-1))
         do k=1,xsize(3)
            ta(i,j,k)=((one-b_tr)*h_1(k)+b_tr*h_2(k))
-           ta(i,j,k)=A_tr*exp_prec(-((x_pos-x0_tr_tbl)/xs_tr_tbl)**2-((y_pos-0.05_mytype)/ys_tr_tbl)**2)*ta(i,j,k)
+           ta(i,j,k)=A_tr*exp_prec(-((x_pos-x0_tr_tbl)/xs_tr_tbl)**2-((y_pos-y0_tr_tbl)/ys_tr_tbl)**2)*ta(i,j,k)
            tb(i,j,k)=tb(i,j,k)+ta(i,j,k)
 
            z_pos=-zlz*zpfive+real(xstart(3)+(k-1)-1,mytype)*dz
