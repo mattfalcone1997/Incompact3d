@@ -574,8 +574,14 @@ contains
 
     if (itrip == 1) then
        !call tripping(tb1,td1)
-       call tbl_tripping(duy1(:,:,:,1),td1)
-       if ((nrank==0).and.(mod(itime,ilist)==0)) write(*,*) 'TRIPPING!!'
+      if (itype.eq.itype_tbl) then
+         call tbl_tripping(duy1(:,:,:,1),td1)
+         if ((nrank==0).and.(mod(itime,ilist)==0)) write(*,*) 'TRIPPING!!'
+      endif
+      if (itype.eq.itype_tbl_recy .and. t < t_recy1) then
+         call tbl_tripping(duy1(:,:,:,1),td1)
+         if ((nrank==0).and.(mod(itime,ilist)==0)) write(*,*) 'TRIPPING!!'
+      endif
     endif
 #ifdef DEBG
     avg_param = zero

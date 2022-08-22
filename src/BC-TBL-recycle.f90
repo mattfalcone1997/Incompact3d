@@ -255,32 +255,32 @@ contains
 #endif
    if (irestart.ne.1) then
          ! initialise fluctuations using random numbers
-      ux1=zero
-      uy1=zero
-      uz1=zero
-      byx1=zero;byy1=zero;byz1=zero
+      ! ux1=zero
+      ! uy1=zero
+      ! uz1=zero
+      ! byx1=zero;byy1=zero;byz1=zero
 
-      call system_clock(count=code)    
-      call random_seed(size = ii)
-      call random_seed(put = code+63946*(nrank+1)*(/ (i - 1, i = 1, ii) /))
+      ! call system_clock(count=code)    
+      ! call random_seed(size = ii)
+      ! call random_seed(put = code+63946*(nrank+1)*(/ (i - 1, i = 1, ii) /))
 
-      call random_number(ux1)
-      call random_number(uy1)
-      call random_number(uz1)
+      ! call random_number(ux1)
+      ! call random_number(uy1)
+      ! call random_number(uz1)
 
-      c = two * log_prec(ten) / yly
-      do k=1,xsize(3)
-      do j=1,xsize(2)
-         if (istret==0) y=real(j+xstart(2)-1,mytype)*dy
-         if (istret/=0) y=yp(j+xstart(2)-1)
-         um = exp_prec(-c*y)
-         do i=1,xsize(1)
-               ux1(i,j,k)=init_noise*um*(two*ux1(i,j,k)-one)
-               uy1(i,j,k)=init_noise*um*(two*uy1(i,j,k)-one)
-               uz1(i,j,k)=init_noise*um*(two*uz1(i,j,k)-one)
-         enddo
-      enddo
-      enddo    
+      ! c = two * log_prec(ten) / yly
+      ! do k=1,xsize(3)
+      ! do j=1,xsize(2)
+      !    if (istret==0) y=real(j+xstart(2)-1,mytype)*dy
+      !    if (istret/=0) y=yp(j+xstart(2)-1)
+      !    um = exp_prec(-c*y)
+      !    do i=1,xsize(1)
+      !          ux1(i,j,k)=init_noise*um*(two*ux1(i,j,k)-one)
+      !          uy1(i,j,k)=init_noise*um*(two*uy1(i,j,k)-one)
+      !          uz1(i,j,k)=init_noise*um*(two*uz1(i,j,k)-one)
+      !    enddo
+      ! enddo
+      ! enddo    
 
     !a blasius profile is created in ecoule and then duplicated for the all domain
       call nickels_init(u_mean, v_mean)
@@ -295,8 +295,9 @@ contains
          do j=1,xsize(2)
             jdx  = xstart(2) + j -1
             do i=1,xsize(1)
-               ux1(i,j,k)=ux1(i,j,k) + u_mean(i,jdx)
-               uy1(i,j,k)=uy1(i,j,k) + v_mean(i,jdx)
+               ux1(i,j,k)= u_mean(i,jdx)
+               uy1(i,j,k)= v_mean(i,jdx)
+               uz1(i,j,k) = zero
             enddo
          enddo
       enddo
@@ -411,13 +412,13 @@ contains
    real(mytype), intent(in), dimension(xsize(1), xsize(2), xsize(3)) :: ux1, uy1, uz1
    real(mytype), dimension(xsize(1), xsize(2), xsize(3), ntime) :: dux1, duy1, duz1
 
-       ! To update to take into account possible flow in z dir
-   if (itime < spinup_time .and. iin <= 2) then
-      if (nrank==0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime == ilast)) &
-         write(*,*) 'Rotating turbulent boundary layer at speed ',wrotation
-      dux1(:,:,:,1) = dux1(:,:,:,1) - wrotation*uy1(:,:,:)
-      duy1(:,:,:,1) = duy1(:,:,:,1) + wrotation*ux1(:,:,:)
-   endif
+   !     ! To update to take into account possible flow in z dir
+   ! if (itime < spinup_time .and. iin <= 2) then
+   !    if (nrank==0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime == ilast)) &
+   !       write(*,*) 'Rotating turbulent boundary layer at speed ',wrotation
+   !    dux1(:,:,:,1) = dux1(:,:,:,1) - wrotation*uy1(:,:,:)
+   !    duy1(:,:,:,1) = duy1(:,:,:,1) + wrotation*ux1(:,:,:)
+   ! endif
 
    if (iaccel.eq.1) then
       dux1(:,:,:,1) = dux1(:,:,:,1) + source(:,:,:)

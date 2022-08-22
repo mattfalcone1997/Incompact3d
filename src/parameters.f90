@@ -203,7 +203,7 @@ subroutine parameter(input_i3d)
 
   if (itype.eq.itype_tbl_recy) then
       read(10, nml=TBLRecy); rewind(10)
-
+      read(10, nml=Tripping); rewind(10)
       if(iaccel.eq.1) then
          read(10, nml=tanhAccelTBL); rewind(10)
       endif
