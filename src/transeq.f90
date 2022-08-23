@@ -578,7 +578,7 @@ contains
          call tbl_tripping(duy1(:,:,:,1),td1)
          if ((nrank==0).and.(mod(itime,ilist)==0)) write(*,*) 'TRIPPING!!'
       endif
-      if (itype.eq.itype_tbl_recy .and. t < t_recy1) then
+      if (itype.eq.itype_tbl_recy .and. t < t_recy2) then
          call tbl_tripping(duy1(:,:,:,1),td1)
          if ((nrank==0).and.(mod(itime,ilist)==0)) write(*,*) 'TRIPPING!!'
       endif

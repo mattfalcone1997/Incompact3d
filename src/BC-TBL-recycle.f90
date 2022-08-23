@@ -787,12 +787,12 @@ contains
    enddo
 #endif       
    
-   if (t < spinup_time) then
-      factor = fluct_multiply(gamma*u_fluct_inner)
-   else
-      factor = one
-   endif
-
+   ! if (t < spinup_time) then
+   !    factor = fluct_multiply(gamma*u_fluct_inner)
+   ! else
+   !    factor = one
+   ! endif
+   factor = one
    do k = 1, xsize(3)
       do j = 1, xsize(2)
          jdx = xstart(2) + j -1
@@ -1294,7 +1294,7 @@ contains
                         (u_in_local(i,j_upper) - u_in_local(i,j_lower))
                exit
             elseif (k == ny) then
-               u_out(j,i) = u_in_local(i, ny)
+               u_out(j,i) = zero
                exit
 
             endif
