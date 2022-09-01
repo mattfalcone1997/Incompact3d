@@ -17,6 +17,8 @@ module tbl_recy
   real(mytype), allocatable, dimension(:,:,:) :: source
   real(mytype), dimension(:,:), allocatable :: recy_mean_z, recy_mean_t
   real(mytype), dimension(:,:), allocatable :: inlt_mean_z, inlt_mean_t
+  real(mytype), dimension(:), allocatable :: disp_thick, disp_thick_grad
+
   integer :: plane_index
 
   abstract interface 
@@ -30,6 +32,8 @@ end interface
 
 procedure(u_infty_interface), pointer :: u_infty_calc
 
+
+real(mytype), dimension(:,:), allocatable :: avg_fstream
 #ifdef BL_DEBG
    real(mytype), allocatable, dimension(:) :: dbg_u_inner, dbg_u_outer
    real(mytype), allocatable, dimension(:) :: dbg_v_inner, dbg_v_outer
@@ -81,6 +85,8 @@ contains
 
     real(mytype) :: dbg_dv_inlt, dbg_dv_recy
     real(mytype) :: dbg_delta_inlt, dbg_delta_recy
+    integer :: dbg_unit
+    character(len=256) dbg_name
 
     allocate(ux_dbg(xsize(1),xsize(2),xsize(3)))
     allocate(uy_dbg(xsize(1),xsize(2),xsize(3)))
@@ -313,6 +319,9 @@ contains
 
       call accel_source
       call compute_recycle_mean(ux1, uy1, uz1, reset=.true.)
+
+      ! if (iaccel.ne.0) call initialise_avg
+
 #ifdef BL_DEBG
 
       call GetScalings(dbg_dv_inlt, dbg_dv_recy, dbg_delta_inlt, dbg_delta_recy, reset=.true.)
@@ -368,15 +377,20 @@ contains
       integer, intent(in) :: index
       real(mytype), intent(out) :: u_infty, u_infty_grad
       
-      real(mytype) :: x_coord
+      real(mytype) :: x_coord, eps
 
+      if (t<50) then
+         eps = t/fifty
+      else
+         eps = one
+      endif
       x_coord = real(index - 1, mytype) * dx
    
-      u_infty = one +  half *(U_ratio - one)*(&
+      u_infty = one +  eps*half *(U_ratio - one)*(&
                   tanh_prec( alpha_accel*(x_coord - accel_centre )) &
                      + one )
    
-      u_infty_grad = half*alpha_accel*(U_ratio-one)*cosh_prec( alpha_accel*(x_coord &
+      u_infty_grad = eps*half*alpha_accel*(U_ratio-one)*cosh_prec( alpha_accel*(x_coord &
                       - accel_centre ) )**(-two)
    end subroutine
   subroutine accel_source
@@ -405,20 +419,13 @@ contains
 
          write(13,"(I0,*(',',g0))") i, x_coord, u_infty, u_infty_grad, source(i,1,1)
       enddo
+      close(13)
    endif
    end subroutine
 
   subroutine momentum_forcing_tbl_recy(dux1, duy1, duz1, ux1, uy1, uz1)
    real(mytype), intent(in), dimension(xsize(1), xsize(2), xsize(3)) :: ux1, uy1, uz1
    real(mytype), dimension(xsize(1), xsize(2), xsize(3), ntime) :: dux1, duy1, duz1
-
-   !     ! To update to take into account possible flow in z dir
-   ! if (itime < spinup_time .and. iin <= 2) then
-   !    if (nrank==0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime == ilast)) &
-   !       write(*,*) 'Rotating turbulent boundary layer at speed ',wrotation
-   !    dux1(:,:,:,1) = dux1(:,:,:,1) - wrotation*uy1(:,:,:)
-   !    duy1(:,:,:,1) = duy1(:,:,:,1) + wrotation*ux1(:,:,:)
-   ! endif
 
    if (iaccel.eq.1) then
       dux1(:,:,:,1) = dux1(:,:,:,1) + source(:,:,:)
@@ -440,6 +447,8 @@ contains
                                                  v_fluct,&
                                                  w_fluct
 
+    real(mytype), dimension(:,:), allocatable :: v_infty
+
     real(mytype) :: x, y, z, u_infty
     real(mytype) :: udx,udy,udz,uddx,uddy,uddz,cx, dudx
     integer :: i, j, k
@@ -450,6 +459,7 @@ contains
     allocate(u_fluct(xsize(2),xsize(3)))
     allocate(v_fluct(xsize(2),xsize(3)))
     allocate(w_fluct(xsize(2),xsize(3)))
+    allocate(v_infty(xsize(1), xsize(3)))
 
     !INFLOW with an update of bxx1, byy1 and bzz1 at the inlet
     
@@ -511,6 +521,8 @@ contains
         enddo
       enddo
     endif
+
+   !  call v_infty_calc(v_infty)
 
     !! Top Boundary
     if (nclyn == 2) then
@@ -825,6 +837,35 @@ contains
    call output_fluct_flow_recy(trim(fname))
 #endif   
    end subroutine
+
+   ! subroutine v_infty_calc(v_infty)
+   !    use var, only: uy1
+   !    use param
+   !    real(mytype), dimension(:,:) :: v_infty
+   !    integer :: i, k
+   !    real(mytype) :: dudx, u_infty
+            
+   !    if (iaccel.eq.0) then
+   !       do i = 1, xsize(1)
+   !          call u_infty_calc(i, u_infty, dudx)
+   !          do k= 1, xsize(3)
+   !             v_infty(i,k) = uy1(i, xsize(2) - 1, k) - dudx*(yp(ny)- yp(ny - 1))
+   !          enddo
+   !       enddo
+         
+   !    else
+   !       call compute_disp_thick
+   !       do i = 1, xsize(1)
+   !          call u_infty_calc(i, u_infty, dudx)
+   !          do k= 1, xsize(3)
+   !             v_infty(i,k) = u_infty*disp_thick_grad(i) +&
+   !                            (disp_thick(i) - yly)*dudx
+   !          enddo
+   !       enddo
+   !    endif
+
+   ! end subroutine
+
    function recycleWeighting(eta) result(w)
       use dbg_schemes, only : tanh_prec
       real(mytype), intent(in) :: eta
@@ -1309,6 +1350,139 @@ contains
    deallocate(u_in_local)
   end subroutine fluct_interp
 
+   ! subroutine initialise_avg
+   !    use var, only : ux1
+   !    real(mytype), dimension(:,:), allocatable :: avg_z
+
+   !    allocate(avg_z(xsize(1),xsize(2)))
+   !    allocate(avg_fstream(nx,ny))
+   !    allocate(disp_thick(nx),disp_thick_grad(nx))
+
+   !    call compute_avg_z(ux1,avg_z)
+   !    call gather_avg(avg_z,avg_fstream)
+   ! end subroutine
+
+   ! subroutine gather_avg(avg_local, avg)
+   !    use decomp_2d
+   !    use MPI
+   !    real(mytype), dimension(:,:), intent(in) :: avg_local
+   !    real(mytype), dimension(:,:), intent(out) :: avg 
+
+   !    integer :: split_comm_y
+   !    integer :: sendcount, ierr, i
+   !    integer :: color, key
+   !    integer,dimension(:), allocatable :: recv_counts
+   !    integer,dimension(:), allocatable :: displs
+   !    logical :: periods(2)
+   !    integer :: coords(2), dims(2)
+
+   !    call MPI_Cart_get(DECOMP_2D_COMM_CART_X,2,dims,periods,coords,ierr)
+
+   !    color = coords(2)
+   !    key = coords(1)
+   !    call MPI_comm_split(DECOMP_2D_COMM_CART_X,color, key, split_comm_y,ierr)
+
+   !    allocate(recv_counts(dims(1)))
+   !    allocate(displs(dims(1)))
+
+   !    sendcount = xsize(1)*xsize(2)
+
+   !    call MPI_Allgather(sendcount,1,MPI_INTEGER,recv_counts,&
+   !                   1,MPI_INTEGER,split_comm_y,ierr)
+   !    do i = 2, dims(1)
+   !       displs(i) = sum(recv_counts(1:i-1))
+   !    enddo
+   !    displs(1) = 0
+
+   !    call MPI_Allgatherv(avg_local,sendcount,real_type,avg,&
+   !                         recv_counts,displs,real_type,&
+   !                         split_comm_y,ierr)
+
+   !    call MPI_comm_free(split_comm_y,ierr)
+   ! end subroutine
+   ! subroutine compute_avg_z(ux,avg_z)
+   !    use decomp_2d
+   !    use MPI
+
+   !    real(mytype), dimension(:,:,:), intent(in) :: ux
+   !    real(mytype), dimension(:,:), intent(out) :: avg_z
+   !    real(mytype), dimension(:,:), allocatable :: avg_z_local
+   !    integer :: i,j,k
+   !    integer :: color, key, ierr
+   !    integer :: split_comm_z, size
+   !    logical :: periods(2)
+   !    integer :: coords(2), dims(2)
+
+   !    allocate(avg_z_local(xsize(1), xsize(2)))
+
+   !    do i = 1, xsize(1)
+   !       do j = 1, xsize(2)
+   !          avg_z_local(i,j) = zero
+   !          do k = 1, xsize(3)
+   !             avg_z_local(i,j) = avg_z_local(i,j)  + ux(i,j,k)/nz
+   !          enddo
+   !       enddo
+   !    enddo
+      
+   !    call MPI_Cart_get(DECOMP_2D_COMM_CART_X,2,dims,periods,coords,ierr)
+   !    color = coords(1)
+   !    key = coords(2)
+   !    call MPI_comm_split(DECOMP_2D_COMM_CART_X,color, key, split_comm_z,ierr)
+   !    size = xsize(1)*xsize(2)
+   !    call MPI_Allreduce(avg_z_local, avg_z, size, real_type,&
+   !                       MPI_SUM,split_comm_z,ierr)
+
+   !    call MPI_Comm_free(split_comm_z,ierr)
+
+   ! end subroutine
+
+   ! subroutine compute_disp_thick
+   !    use var, only : ux1
+   !    use param
+
+   !    real(mytype), dimension(:,:), allocatable :: avg_z
+   !    real(mytype), dimension(:,:), allocatable :: avg_z_full
+
+   !    real(mytype), dimension(:), allocatable :: u_infty
+   !    real(mytype) :: t_period, integrand, midp, eps
+   !    integer :: i, j
+
+   !    allocate(avg_z_full(nx, ny))
+   !    allocate(avg_z(xsize(1),xsize(2)))
+   !    allocate(u_infty(xsize(1)))
+
+   !    call compute_avg_z(ux1, avg_z)
+   !    call gather_avg(avg_z, avg_z_full)
+
+   !    ! compute time average
+   !    if (t < t_avg_fstream) then
+   !       t_period = ten
+   !    else
+   !       t_period = 100.0_mytype
+   !    endif
+
+   !    eps = dt/t_period
+   !    avg_fstream(:,:) = eps*avg_z_full(:,:) + (one - eps)*avg_fstream(:,:)
+
+   !    ! compute displacement thickness global array
+
+   !    do i = 1, nx
+   !       disp_thick(i) = zero
+   !       do j = 1, ny -1
+   !          midp = zpfive*(avg_fstream(i,j) + avg_fstream(i,j+1))
+   !          integrand =  one - midp/avg_fstream(i,ny)
+   !          dy = yp(j+1) - yp(j)
+   !          disp_thick(i) = disp_thick(i) + integrand*dy
+   !       enddo
+   !    enddo
+
+   !    disp_thick_grad(1) = (disp_thick(2) - disp_thick(1))/dx
+   !    do i = 2, nx -1
+   !       disp_thick_grad(i) = zpfive*(disp_thick(i-1) - disp_thick(i+1))/dx
+   !    enddo
+   !    disp_thick_grad(nx) = (disp_thick(nx) - disp_thick(nx-1))/dx
+   !    if (nrank .eq.0) write(*,*) disp_thick
+   ! end subroutine 
   !############################################################################
   subroutine postprocess_tbl_recy(ux1,uy1,uz1,ep1)
 
@@ -1322,10 +1496,26 @@ contains
     
     real(mytype),intent(in),dimension(xsize(1),xsize(2),xsize(3)) :: ux1, uy1, uz1, ep1
     character(len=30) :: filename
-
+    integer :: nfil, i
     if (nrank.eq.0) then
       ! write averages to file
      endif
+
+! #ifdef BL_DEBG
+!      write(filename,"('disp_thick-rank-',I0,'-',I0,'.csv')") nrank,itime
+!      open(newunit=nfil,file=filename,action='write',status='replace')
+!      write(nfil,*) "x, disp_thick, disp_thick_grad"
+!      do i = 1, xsize(1)
+!       write(nfil,"(g0,*(',',g0))") real(i-1,mytype)*dx, disp_thick(i), disp_thick_grad(i)
+!      enddo
+!      close(nfil)
+
+!      write(filename,"('mean_fstream-',I0,'-',I0,'.D')") nrank,itime
+!      open(newunit=nfil,file=filename,action='write',status='replace')
+!      write(nfil,*) nx, ny, avg_fstream
+!      close(nfil)
+! #endif
+
   end subroutine postprocess_tbl_recy
 
   subroutine visu_tbl_recy_init (visu_initialised)
