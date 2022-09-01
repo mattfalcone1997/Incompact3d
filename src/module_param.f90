@@ -406,6 +406,7 @@ module param
   real(mytype) :: t_avg1, t_avg2
   real(mytype) :: t_recy1, t_recy2
   real(mytype) :: plane_location
+  real(mytype) :: t_avg_fstream
 
   !TBL acceleration params
   real(mytype) :: alpha_accel, U_ratio, accel_centre

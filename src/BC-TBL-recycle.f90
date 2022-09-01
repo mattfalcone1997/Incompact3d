@@ -320,7 +320,7 @@ contains
       call accel_source
       call compute_recycle_mean(ux1, uy1, uz1, reset=.true.)
 
-      ! if (iaccel.ne.0) call initialise_avg
+      if (iaccel.ne.0) call initialise_avg
 
 #ifdef BL_DEBG
 
@@ -522,16 +522,16 @@ contains
       enddo
     endif
 
-   !  call v_infty_calc(v_infty)
+    call v_infty_calc(v_infty)
 
     !! Top Boundary
     if (nclyn == 2) then
        do k = 1, xsize(3)
           do i = 1, xsize(1)
-            call u_infty_calc(i, u_infty, dudx)
+            ! call u_infty_calc(i, u_infty, dudx)
 
              byxn(i, k) = ux(i, xsize(2) - 1, k)
-             byyn(i, k) = uy(i, xsize(2) - 1, k) - dudx*(yp(ny)- yp(ny - 1))
+             byyn(i, k) = v_infty(i,k)
              byzn(i, k) = uz(i, xsize(2) - 1, k)
           enddo
        enddo
@@ -838,33 +838,38 @@ contains
 #endif   
    end subroutine
 
-   ! subroutine v_infty_calc(v_infty)
-   !    use var, only: uy1
-   !    use param
-   !    real(mytype), dimension(:,:) :: v_infty
-   !    integer :: i, k
-   !    real(mytype) :: dudx, u_infty
-            
-   !    if (iaccel.eq.0) then
-   !       do i = 1, xsize(1)
-   !          call u_infty_calc(i, u_infty, dudx)
-   !          do k= 1, xsize(3)
-   !             v_infty(i,k) = uy1(i, xsize(2) - 1, k) - dudx*(yp(ny)- yp(ny - 1))
-   !          enddo
-   !       enddo
-         
-   !    else
-   !       call compute_disp_thick
-   !       do i = 1, xsize(1)
-   !          call u_infty_calc(i, u_infty, dudx)
-   !          do k= 1, xsize(3)
-   !             v_infty(i,k) = u_infty*disp_thick_grad(i) +&
-   !                            (disp_thick(i) - yly)*dudx
-   !          enddo
-   !       enddo
-   !    endif
+   subroutine v_infty_calc(v_infty)
+      use var, only: uy1
+      use param
+      use dbg_schemes, only: tanh_prec
 
-   ! end subroutine
+      real(mytype), dimension(:,:) :: v_infty
+      integer :: i, k
+      real(mytype) :: dudx, u_infty, weight, x
+            
+      if (iaccel.eq.0) then
+         do i = 1, xsize(1)
+            call u_infty_calc(i, u_infty, dudx)
+            do k= 1, xsize(3)
+               v_infty(i,k) = uy1(i, xsize(2) - 1, k) - dudx*(yp(ny)- yp(ny - 1))
+            enddo
+         enddo
+         
+      else
+         call compute_disp_thick
+         do i = 1, xsize(1)
+            x = real(i-1,mytype)*dx
+            weight = zpfive - zpfive*( tanh_prec(three*(x - (xlx - five))))
+
+            call u_infty_calc(i, u_infty, dudx)            
+            do k= 1, xsize(3)
+               v_infty(i,k) = weight*( u_infty*disp_thick_grad(i) &
+                                       + (disp_thick(i) - yly)*dudx)
+            enddo
+         enddo
+      endif
+
+   end subroutine
 
    function recycleWeighting(eta) result(w)
       use dbg_schemes, only : tanh_prec
@@ -1350,139 +1355,139 @@ contains
    deallocate(u_in_local)
   end subroutine fluct_interp
 
-   ! subroutine initialise_avg
-   !    use var, only : ux1
-   !    real(mytype), dimension(:,:), allocatable :: avg_z
+   subroutine initialise_avg
+      use var, only : ux1
+      real(mytype), dimension(:,:), allocatable :: avg_z
 
-   !    allocate(avg_z(xsize(1),xsize(2)))
-   !    allocate(avg_fstream(nx,ny))
-   !    allocate(disp_thick(nx),disp_thick_grad(nx))
+      allocate(avg_z(xsize(1),xsize(2)))
+      allocate(avg_fstream(nx,ny))
+      allocate(disp_thick(nx),disp_thick_grad(nx))
 
-   !    call compute_avg_z(ux1,avg_z)
-   !    call gather_avg(avg_z,avg_fstream)
-   ! end subroutine
+      call compute_avg_z(ux1,avg_z)
+      call gather_avg(avg_z,avg_fstream)
+   end subroutine
 
-   ! subroutine gather_avg(avg_local, avg)
-   !    use decomp_2d
-   !    use MPI
-   !    real(mytype), dimension(:,:), intent(in) :: avg_local
-   !    real(mytype), dimension(:,:), intent(out) :: avg 
+   subroutine gather_avg(avg_local, avg)
+      use decomp_2d
+      use MPI
+      real(mytype), dimension(:,:), intent(in) :: avg_local
+      real(mytype), dimension(:,:), intent(out) :: avg 
 
-   !    integer :: split_comm_y
-   !    integer :: sendcount, ierr, i
-   !    integer :: color, key
-   !    integer,dimension(:), allocatable :: recv_counts
-   !    integer,dimension(:), allocatable :: displs
-   !    logical :: periods(2)
-   !    integer :: coords(2), dims(2)
+      integer :: split_comm_y
+      integer :: sendcount, ierr, i
+      integer :: color, key
+      integer,dimension(:), allocatable :: recv_counts
+      integer,dimension(:), allocatable :: displs
+      logical :: periods(2)
+      integer :: coords(2), dims(2)
 
-   !    call MPI_Cart_get(DECOMP_2D_COMM_CART_X,2,dims,periods,coords,ierr)
+      call MPI_Cart_get(DECOMP_2D_COMM_CART_X,2,dims,periods,coords,ierr)
 
-   !    color = coords(2)
-   !    key = coords(1)
-   !    call MPI_comm_split(DECOMP_2D_COMM_CART_X,color, key, split_comm_y,ierr)
+      color = coords(2)
+      key = coords(1)
+      call MPI_comm_split(DECOMP_2D_COMM_CART_X,color, key, split_comm_y,ierr)
 
-   !    allocate(recv_counts(dims(1)))
-   !    allocate(displs(dims(1)))
+      allocate(recv_counts(dims(1)))
+      allocate(displs(dims(1)))
 
-   !    sendcount = xsize(1)*xsize(2)
+      sendcount = xsize(1)*xsize(2)
 
-   !    call MPI_Allgather(sendcount,1,MPI_INTEGER,recv_counts,&
-   !                   1,MPI_INTEGER,split_comm_y,ierr)
-   !    do i = 2, dims(1)
-   !       displs(i) = sum(recv_counts(1:i-1))
-   !    enddo
-   !    displs(1) = 0
+      call MPI_Allgather(sendcount,1,MPI_INTEGER,recv_counts,&
+                     1,MPI_INTEGER,split_comm_y,ierr)
+      do i = 2, dims(1)
+         displs(i) = sum(recv_counts(1:i-1))
+      enddo
+      displs(1) = 0
 
-   !    call MPI_Allgatherv(avg_local,sendcount,real_type,avg,&
-   !                         recv_counts,displs,real_type,&
-   !                         split_comm_y,ierr)
+      call MPI_Allgatherv(avg_local,sendcount,real_type,avg,&
+                           recv_counts,displs,real_type,&
+                           split_comm_y,ierr)
 
-   !    call MPI_comm_free(split_comm_y,ierr)
-   ! end subroutine
-   ! subroutine compute_avg_z(ux,avg_z)
-   !    use decomp_2d
-   !    use MPI
+      call MPI_comm_free(split_comm_y,ierr)
+   end subroutine
+   subroutine compute_avg_z(ux,avg_z)
+      use decomp_2d
+      use MPI
 
-   !    real(mytype), dimension(:,:,:), intent(in) :: ux
-   !    real(mytype), dimension(:,:), intent(out) :: avg_z
-   !    real(mytype), dimension(:,:), allocatable :: avg_z_local
-   !    integer :: i,j,k
-   !    integer :: color, key, ierr
-   !    integer :: split_comm_z, size
-   !    logical :: periods(2)
-   !    integer :: coords(2), dims(2)
+      real(mytype), dimension(:,:,:), intent(in) :: ux
+      real(mytype), dimension(:,:), intent(out) :: avg_z
+      real(mytype), dimension(:,:), allocatable :: avg_z_local
+      integer :: i,j,k
+      integer :: color, key, ierr
+      integer :: split_comm_z, size
+      logical :: periods(2)
+      integer :: coords(2), dims(2)
 
-   !    allocate(avg_z_local(xsize(1), xsize(2)))
+      allocate(avg_z_local(xsize(1), xsize(2)))
 
-   !    do i = 1, xsize(1)
-   !       do j = 1, xsize(2)
-   !          avg_z_local(i,j) = zero
-   !          do k = 1, xsize(3)
-   !             avg_z_local(i,j) = avg_z_local(i,j)  + ux(i,j,k)/nz
-   !          enddo
-   !       enddo
-   !    enddo
+      do i = 1, xsize(1)
+         do j = 1, xsize(2)
+            avg_z_local(i,j) = zero
+            do k = 1, xsize(3)
+               avg_z_local(i,j) = avg_z_local(i,j)  + ux(i,j,k)/nz
+            enddo
+         enddo
+      enddo
       
-   !    call MPI_Cart_get(DECOMP_2D_COMM_CART_X,2,dims,periods,coords,ierr)
-   !    color = coords(1)
-   !    key = coords(2)
-   !    call MPI_comm_split(DECOMP_2D_COMM_CART_X,color, key, split_comm_z,ierr)
-   !    size = xsize(1)*xsize(2)
-   !    call MPI_Allreduce(avg_z_local, avg_z, size, real_type,&
-   !                       MPI_SUM,split_comm_z,ierr)
+      call MPI_Cart_get(DECOMP_2D_COMM_CART_X,2,dims,periods,coords,ierr)
+      color = coords(1)
+      key = coords(2)
+      call MPI_comm_split(DECOMP_2D_COMM_CART_X,color, key, split_comm_z,ierr)
+      size = xsize(1)*xsize(2)
+      call MPI_Allreduce(avg_z_local, avg_z, size, real_type,&
+                         MPI_SUM,split_comm_z,ierr)
 
-   !    call MPI_Comm_free(split_comm_z,ierr)
+      call MPI_Comm_free(split_comm_z,ierr)
 
-   ! end subroutine
+   end subroutine
 
-   ! subroutine compute_disp_thick
-   !    use var, only : ux1
-   !    use param
+   subroutine compute_disp_thick
+      use var, only : ux1
+      use param
 
-   !    real(mytype), dimension(:,:), allocatable :: avg_z
-   !    real(mytype), dimension(:,:), allocatable :: avg_z_full
+      real(mytype), dimension(:,:), allocatable :: avg_z
+      real(mytype), dimension(:,:), allocatable :: avg_z_full
 
-   !    real(mytype), dimension(:), allocatable :: u_infty
-   !    real(mytype) :: t_period, integrand, midp, eps
-   !    integer :: i, j
+      real(mytype), dimension(:), allocatable :: u_infty
+      real(mytype) :: t_period, integrand, midp, eps
+      integer :: i, j
 
-   !    allocate(avg_z_full(nx, ny))
-   !    allocate(avg_z(xsize(1),xsize(2)))
-   !    allocate(u_infty(xsize(1)))
+      allocate(avg_z_full(nx, ny))
+      allocate(avg_z(xsize(1),xsize(2)))
+      allocate(u_infty(xsize(1)))
 
-   !    call compute_avg_z(ux1, avg_z)
-   !    call gather_avg(avg_z, avg_z_full)
+      call compute_avg_z(ux1, avg_z)
+      call gather_avg(avg_z, avg_z_full)
 
-   !    ! compute time average
-   !    if (t < t_avg_fstream) then
-   !       t_period = ten
-   !    else
-   !       t_period = 100.0_mytype
-   !    endif
+      ! compute time average
+      if (t < t_avg_fstream) then
+         t_period = ten
+      else
+         t_period = 100.0_mytype
+      endif
 
-   !    eps = dt/t_period
-   !    avg_fstream(:,:) = eps*avg_z_full(:,:) + (one - eps)*avg_fstream(:,:)
+      eps = dt/t_period
+      avg_fstream(:,:) = eps*avg_z_full(:,:) + (one - eps)*avg_fstream(:,:)
 
-   !    ! compute displacement thickness global array
+      ! compute displacement thickness global array
 
-   !    do i = 1, nx
-   !       disp_thick(i) = zero
-   !       do j = 1, ny -1
-   !          midp = zpfive*(avg_fstream(i,j) + avg_fstream(i,j+1))
-   !          integrand =  one - midp/avg_fstream(i,ny)
-   !          dy = yp(j+1) - yp(j)
-   !          disp_thick(i) = disp_thick(i) + integrand*dy
-   !       enddo
-   !    enddo
+      do i = 1, nx
+         disp_thick(i) = zero
+         do j = 1, ny -1
+            midp = zpfive*(avg_fstream(i,j) + avg_fstream(i,j+1))
+            integrand =  one - midp/avg_fstream(i,ny)
+            dy = yp(j+1) - yp(j)
+            disp_thick(i) = disp_thick(i) + integrand*dy
+         enddo
+      enddo
 
-   !    disp_thick_grad(1) = (disp_thick(2) - disp_thick(1))/dx
-   !    do i = 2, nx -1
-   !       disp_thick_grad(i) = zpfive*(disp_thick(i-1) - disp_thick(i+1))/dx
-   !    enddo
-   !    disp_thick_grad(nx) = (disp_thick(nx) - disp_thick(nx-1))/dx
-   !    if (nrank .eq.0) write(*,*) disp_thick
-   ! end subroutine 
+      disp_thick_grad(1) = (disp_thick(2) - disp_thick(1))/dx
+      do i = 2, nx -1
+         disp_thick_grad(i) = zpfive*(disp_thick(i-1) - disp_thick(i+1))/dx
+      enddo
+      disp_thick_grad(nx) = (disp_thick(nx) - disp_thick(nx-1))/dx
+      if (nrank .eq.0) write(*,*) disp_thick
+   end subroutine 
   !############################################################################
   subroutine postprocess_tbl_recy(ux1,uy1,uz1,ep1)
 
@@ -1501,20 +1506,20 @@ contains
       ! write averages to file
      endif
 
-! #ifdef BL_DEBG
-!      write(filename,"('disp_thick-rank-',I0,'-',I0,'.csv')") nrank,itime
-!      open(newunit=nfil,file=filename,action='write',status='replace')
-!      write(nfil,*) "x, disp_thick, disp_thick_grad"
-!      do i = 1, xsize(1)
-!       write(nfil,"(g0,*(',',g0))") real(i-1,mytype)*dx, disp_thick(i), disp_thick_grad(i)
-!      enddo
-!      close(nfil)
+#ifdef BL_DEBG
+     write(filename,"('disp_thick-rank-',I0,'-',I0,'.csv')") nrank,itime
+     open(newunit=nfil,file=filename,action='write',status='replace')
+     write(nfil,*) "x, disp_thick, disp_thick_grad"
+     do i = 1, xsize(1)
+      write(nfil,"(g0,*(',',g0))") real(i-1,mytype)*dx, disp_thick(i), disp_thick_grad(i)
+     enddo
+     close(nfil)
 
-!      write(filename,"('mean_fstream-',I0,'-',I0,'.D')") nrank,itime
-!      open(newunit=nfil,file=filename,action='write',status='replace')
-!      write(nfil,*) nx, ny, avg_fstream
-!      close(nfil)
-! #endif
+     write(filename,"('mean_fstream-',I0,'-',I0,'.D')") nrank,itime
+     open(newunit=nfil,file=filename,action='write',status='replace')
+     write(nfil,*) nx, ny, avg_fstream
+     close(nfil)
+#endif
 
   end subroutine postprocess_tbl_recy
 

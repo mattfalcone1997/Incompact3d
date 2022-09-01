@@ -72,7 +72,7 @@ subroutine parameter(input_i3d)
   NAMELIST/ALMParam/iturboutput,NTurbines,TurbinesPath,NActuatorlines,ActuatorlinesPath,eps_factor,rho_air
   NAMELIST/ADMParam/Ndiscs,ADMcoords,C_T,aind,iturboutput,rho_air
   NAMELIST/TBLRecy/plane_location, t_avg1,t_avg2, t_recy1, t_recy2, iaccel
-  NAMELIST/tanhAccelTBL/U_ratio, accel_centre, alpha_accel
+  NAMELIST/tanhAccelTBL/U_ratio, accel_centre, alpha_accel, t_avg_fstream
   
 #ifdef DEBG
   if (nrank == 0) write(*,*) '# parameter start'
