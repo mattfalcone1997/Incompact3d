@@ -578,8 +578,16 @@ contains
          call tbl_tripping(duy1(:,:,:,1),td1)
          if ((nrank==0).and.(mod(itime,ilist)==0)) write(*,*) 'TRIPPING!!'
       endif
-      if (itype.eq.itype_tbl_recy .and. t < t_recy2) then
-         call tbl_tripping(duy1(:,:,:,1),td1)
+      if (itype.eq.itype_tbl_recy .and. t < t_recy1) then
+         ! Use mutliple tripping locations for recycling method
+         x_tr_tbl_tmp = x0_tr_tbl
+         do i = 0, int(mod(two*xlx,t_recy1))
+            x0_tr_tbl = x_tr_tbl_tmp + real(i,mytype)*zpfive*t_recy1
+            
+            if (x0_tr_tbl > xlx) exit
+            call tbl_tripping(duy1(:,:,:,1),td1)
+         enddo
+         x0_tr_tbl = x_tr_tbl_tmp
          if ((nrank==0).and.(mod(itime,ilist)==0)) write(*,*) 'TRIPPING!!'
       endif
     endif
