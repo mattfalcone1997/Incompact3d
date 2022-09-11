@@ -333,3 +333,84 @@ subroutine check_transients()
   if (nrank == 0) write(*,*)'## Main duz1 ', avg_param
   
 end subroutine check_transients
+
+
+
+subroutine write_params_json
+   use param
+   use variables
+   use decomp_2d, only : nrank
+   use tbl_recy, only : u_infty_calc
+   implicit none
+
+   real(mytype), dimension(nx) :: xcoords, u_infty
+   real(mytype), dimension(nz) :: zcoords
+   real(mytype) :: u_infty_grad
+   character(80) :: xfmt, zfmt,yfmt
+   integer :: fl, i
+   ! itype
+   ! mesh
+   ! geometry
+   ! re
+   ! optionals
+   ! acceleration
+   ! tbl_recy
+
+   if (nrank .ne. 0) return
+
+   do i =1, nx
+      xcoords(i) = real(i-1,kind=mytype)*dx
+   enddo
+   if (istret.eq.0) then
+      do i = 1, ny
+         yp(i) = real(i-1,kind=mytype)*dy
+      enddo
+   endif
+   do i =1, nz
+      zcoords(i) = real(i-1,kind=mytype)*dz
+   enddo
+
+   open(newunit=fl,file='parameters.json',status='replace',action='write')
+
+   write(fl,'(A)') "{"
+   write(fl,"(A ,':',I0,',')") '  "itype"',itype
+
+   write(fl,"(A ,' : {')") '  "geometry"'
+   write(fl,"(A ,': ',g0,',')") '    "xlx"',xlx
+   write(fl,"(A ,' : ',g0,',')") '    "yly"', yly
+   write(fl,"(A ,': ',g0)") '    "zlz"', zlz
+   write(fl,*) "  },"
+
+   write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nx-1,"(',',g0),'],')"
+   write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ny-1,"(',',g0),'],')"
+   write(zfmt,'(A,I0,A)') "( A, ': [',g0,",nz-1,"(',',g0),']')"
+
+   write(*,*) xfmt
+   write(*,*) yfmt
+   write(*,*) zfmt
+
+   write(fl,"(A ,': {')") '  "mesh"'
+   write(fl,"(A ,': [',I0,',',I0,',',I0,'],')") '    "sizes"',nx, ny, nz
+   write(fl,xfmt) '    "xcoords"',xcoords
+   write(fl,yfmt) '    "ycoords"',yp
+   write(fl,zfmt) '    "zcoords"',zcoords
+   write(fl,'(A)') "  },"
+
+   write(fl,"(A ,':',g0)") '  "re"',re
+
+   if (itype .eq. itype_tbl_recy) then
+      do i =1, nx
+         call u_infty_calc(i,u_infty(i),u_infty_grad)
+      enddo
+      write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nx-1,"(',',g0),']')"
+      
+      write(fl,"(A ,': {')") '  "tbl_recy"'
+      write(fl,xfmt) '    "u_infty"',u_infty
+      write(fl,'(A)') "  },"
+
+
+   endif
+   write(fl,'(A)') "}"
+
+   close(fl)
+end subroutine
