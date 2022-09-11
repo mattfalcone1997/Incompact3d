@@ -3,14 +3,24 @@
 !SPDX-License-Identifier: BSD 3-Clause
 
 module stats
-
+  use param, only : mytype
+  use decomp_2d, only : DECOMP_INFO
   implicit none
 
   character(len=*), parameter :: io_statistics = "statistics-io", &
        stat_dir = "statistics"
 
   integer :: stats_time
-  
+
+  real(mytype), dimension(:,:,:), allocatable ::  pmean
+  real(mytype), dimension(:,:,:), allocatable ::  umean, uumean
+  real(mytype), dimension(:,:,:), allocatable ::  vmean, vvmean
+  real(mytype), dimension(:,:,:), allocatable ::  wmean, wwmean
+  real(mytype), dimension(:,:,:), allocatable ::  uvmean, uwmean
+  real(mytype), dimension(:,:,:), allocatable ::  vwmean
+  real(mytype), dimension(:,:,:), allocatable ::  phimean, phiphimean
+  type(DECOMP_INFO) :: dstat_plane
+
   private
   public overall_statistic
 
@@ -33,25 +43,25 @@ contains
     if (.not. initialised) then
        call decomp_2d_init_io(io_statistics)
     
-       call decomp_2d_register_variable(io_statistics, "umean", 1, 1, 0, mytype)
-       call decomp_2d_register_variable(io_statistics, "vmean", 1, 1, 0, mytype)
-       call decomp_2d_register_variable(io_statistics, "wmean", 1, 1, 0, mytype)
+       call decomp_2d_register_variable(io_statistics, "umean", 3, 1, 3, mytype, opt_nplanes=1)
+       call decomp_2d_register_variable(io_statistics, "vmean", 3, 1, 3, mytype, opt_nplanes=1)
+       call decomp_2d_register_variable(io_statistics, "wmean", 3, 1, 3, mytype, opt_nplanes=1)
        
-       call decomp_2d_register_variable(io_statistics, "pmean", 1, 1, 0, mytype)
+       call decomp_2d_register_variable(io_statistics, "pmean", 3, 1, 3, mytype, opt_nplanes=1)
        
-       call decomp_2d_register_variable(io_statistics, "uumean", 1, 1, 0, mytype)
-       call decomp_2d_register_variable(io_statistics, "vvmean", 1, 1, 0, mytype)
-       call decomp_2d_register_variable(io_statistics, "wwmean", 1, 1, 0, mytype)
+       call decomp_2d_register_variable(io_statistics, "uumean", 3, 1, 3, mytype, opt_nplanes=1)
+       call decomp_2d_register_variable(io_statistics, "vvmean", 3, 1, 3, mytype, opt_nplanes=1)
+       call decomp_2d_register_variable(io_statistics, "wwmean", 3, 1, 3, mytype, opt_nplanes=1)
 
-       call decomp_2d_register_variable(io_statistics, "uvmean", 1, 1, 0, mytype)
-       call decomp_2d_register_variable(io_statistics, "uwmean", 1, 1, 0, mytype)
-       call decomp_2d_register_variable(io_statistics, "vwmean", 1, 1, 0, mytype)
+       call decomp_2d_register_variable(io_statistics, "uvmean", 3, 1, 3, mytype, opt_nplanes=1)
+       call decomp_2d_register_variable(io_statistics, "uwmean", 3, 1, 3, mytype, opt_nplanes=1)
+       call decomp_2d_register_variable(io_statistics, "vwmean", 3, 1, 3, mytype, opt_nplanes=1)
 
        do is=1, numscalar
           write(varname,"('phi',I2.2)") is
-          call decomp_2d_register_variable(io_statistics, varname, 1, 1, 0, mytype)
+          call decomp_2d_register_variable(io_statistics, varname, 3, 1, 3, mytype, opt_nplanes=1)
           write(varname,"('phiphi',I2.2)") is
-          call decomp_2d_register_variable(io_statistics, varname, 1, 1, 0, mytype)
+          call decomp_2d_register_variable(io_statistics, varname, 3, 1, 3, mytype, opt_nplanes=1)
        enddo
 
        initialised = .true.
@@ -65,18 +75,26 @@ contains
   subroutine init_statistic
 
     use param, only : zero, iscalar
-    use var, only : tmean
-    use var, only : pmean
-    use var, only : umean, uumean
-    use var, only : vmean, vvmean
-    use var, only : wmean, wwmean
-    use var, only : uvmean, uwmean
-    use var, only : vwmean
-    use var, only : phimean, phiphimean
+    use variables, only : nx, ny, nz
+    use decomp_2d, only : zsize, decomp_info_init
+    
 
     implicit none
 
-    tmean = zero
+    allocate(umean(zsize(1),zsize(2),1))
+    allocate(vmean(zsize(1),zsize(2),1))
+    allocate(wmean(zsize(1),zsize(2),1))
+    allocate(pmean(zsize(1),zsize(2),1))
+    allocate(uumean(zsize(1),zsize(2),1))
+    allocate(vvmean(zsize(1),zsize(2),1))
+    allocate(wwmean(zsize(1),zsize(2),1))
+    allocate(uvmean(zsize(1),zsize(2),1))
+    allocate(uwmean(zsize(1),zsize(2),1))
+    allocate(vwmean(zsize(1),zsize(2),1))
+    allocate(phimean(zsize(1),zsize(2),1))
+    allocate(phiphimean(zsize(1),zsize(2),1))
+
+    
     pmean = zero
     umean = zero
     uumean = zero
@@ -87,11 +105,12 @@ contains
     uvmean = zero
     uwmean = zero
     vwmean = zero
-    if (iscalar==1) then
-      phimean = zero
-      phiphimean = zero
-    endif
 
+    call decomp_info_init(nx, ny, 1,dstat_plane)
+
+    write(*,*) dstat_plane%xsz
+    write(*,*) dstat_plane%ysz
+    write(*,*) dstat_plane%zsz
     call init_statistic_adios2
 
   end subroutine init_statistic
@@ -240,7 +259,7 @@ contains
   !
   subroutine read_or_write_one_stat(flag_read, filename, array)
 
-    use decomp_2d, only : mytype, xstS, xenS
+    use decomp_2d, only : mytype, xstS, xenS, zsize
     use decomp_2d_io, only : decomp_2d_read_one, decomp_2d_write_one
 
     implicit none
@@ -248,14 +267,14 @@ contains
     ! Arguments
     logical, intent(in) :: flag_read
     character(len=*), intent(in) :: filename
-    real(mytype), dimension(xstS(1):xenS(1),xstS(2):xenS(2),xstS(3):xenS(3)), intent(inout) :: array
+    real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: array
     integer :: ierror
 
     if (flag_read) then
        ! There was a check for nvisu = 1 before
-       call decomp_2d_read_one(1, array, stat_dir, filename, io_statistics, reduce_prec=.false.)
+       call decomp_2d_read_one(3, array, stat_dir, filename, io_statistics, reduce_prec=.false.,opt_decomp=dstat_plane)
     else
-       call decomp_2d_write_one(1, array, stat_dir, filename, 1, io_statistics, reduce_prec=.false.)
+       call decomp_2d_write_one(3, array, stat_dir, filename, 0, io_statistics, reduce_prec=.false.,opt_decomp=dstat_plane)
     endif
 
   end subroutine read_or_write_one_stat
@@ -318,6 +337,7 @@ contains
          nxmsize,xsize(1),xsize(2),xsize(3),1)
     ! Convert to physical pressure
     call rescale_pressure(ta1)
+
     call update_average_scalar(pmean, ta1, ep1)
 
     !! Mean velocity
@@ -327,17 +347,6 @@ contains
     !! Second-order velocity moments
     call update_variance_vector(uumean, vvmean, wwmean, uvmean, uwmean, vwmean, &
                                 ux1, uy1, uz1, ep1)
-
-    !! Scalar statistics
-    if (iscalar==1) then
-       do is=1, numscalar
-          !pmean=phi1
-          call update_average_scalar(phimean(:,:,:,is), phi1(:,:,:,is), ep1)
-
-          !phiphimean=phi1*phi1
-          call update_average_scalar(phiphimean(:,:,:,is), phi1(:,:,:,is)*phi1(:,:,:,is), ep1)
-       enddo
-    endif
 
     ! Write all statistics
     if (mod(itime,icheckpoint)==0) then
@@ -372,22 +381,50 @@ contains
   !
   subroutine update_average_scalar(um, ux, ep)
 
-    use decomp_2d, only : mytype, xsize, xstS, xenS, fine_to_coarseS
+    use decomp_2d, only : mytype, xsize, zsize
     use param, only : itime, initstat
     use var, only : di1, tmean
 
     implicit none
 
     ! inputs
-    real(mytype), dimension(xstS(1):xenS(1),xstS(2):xenS(2),xstS(3):xenS(3)), intent(inout) :: um
+    real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: um
     real(mytype), dimension(xsize(1),xsize(2),xsize(3)), intent(in) :: ux, ep
 
-    di1 = one_minus_ep1(ux, ep)
-    call fine_to_coarseS(1, di1, tmean)
-    um = um + (tmean - um) / real(itime-initstat+1, kind=mytype)
+    real(mytype), dimension(zsize(1), zsize(2), 1) :: stat_z
+
+    call average_z(ux, stat_z)
+    um = um + (stat_z - um) / real(itime-initstat+1, kind=mytype)
 
   end subroutine update_average_scalar
 
+  subroutine average_z(array, stat_xz)
+    use decomp_2d
+    use param, only : zero
+
+    real(mytype), dimension(xsize(1), xsize(2), xsize(3)) :: array
+    real(mytype), dimension(zsize(1),zsize(2),1) :: stat_xz
+
+    real(mytype), dimension(:,:,:), allocatable :: array_ypencil
+    real(mytype), dimension(:,:,:), allocatable :: array_zpencil
+    integer :: i, j, k
+    allocate(array_ypencil(ysize(1),ysize(2),ysize(3)))
+    allocate(array_zpencil(zsize(1),zsize(2),zsize(3)))
+
+    call transpose_x_to_y(array, array_ypencil)
+    call transpose_y_to_z(array_ypencil, array_zpencil)
+
+    stat_xz(:,:,:) = zero
+    do i = 1, zsize(1)
+      do j = 1, zsize(2)
+        do k = 1, zsize(3)
+          stat_xz(i,j,1) = stat_xz(i,j,1) + array_zpencil(i,j,k)/zsize(3)
+        enddo
+      enddo
+    enddo
+
+
+   end subroutine
   !
   ! Update (um, vm, wm), the average of (ux, uy, uz)
   !

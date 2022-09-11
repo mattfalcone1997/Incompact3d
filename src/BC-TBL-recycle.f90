@@ -51,7 +51,8 @@ real(mytype), dimension(:,:), allocatable :: avg_fstream
   PRIVATE ! All functions/subroutines private by default
   PUBLIC :: init_tbl_recy, boundary_conditions_tbl_recy,&
             postprocess_tbl_recy, visu_tbl_recy, &
-            visu_tbl_recy_init, momentum_forcing_tbl_recy
+            visu_tbl_recy_init, momentum_forcing_tbl_recy,&
+            u_infty_calc
 
 contains
 

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.0.2)                        
 cmake_policy(SET CMP0048 NEW)
 
-project(xcompact3d LANGUAGES Fortran)
+project(xcompact3d LANGUAGES Fortran C CXX)
 
 set(AUTHOR "Stefano Rolfo;Charles Moulinec")
 set(AUTHOR_DETAILS "stefano.rolfo@stfc.ac.uk;charles.moulinec@stfc.ac.uk")

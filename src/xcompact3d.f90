@@ -267,6 +267,8 @@ subroutine init_xcompact3d()
      endif
   endif
 
+  call write_params_json
+
 endsubroutine init_xcompact3d
 !########################################################################
 !########################################################################
