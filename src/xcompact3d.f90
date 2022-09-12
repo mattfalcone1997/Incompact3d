@@ -397,6 +397,7 @@ subroutine write_params_json
    write(fl,'(A)') "  },"
 
    write(fl,"(A ,':',g0)") '  "re"',re
+   write(fl,"(A ,':',g0)") '  "dt"',dt
 
    if (itype .eq. itype_tbl_recy) then
       do i =1, nx
