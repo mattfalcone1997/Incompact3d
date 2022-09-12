@@ -396,9 +396,6 @@ subroutine write_params_json
    write(fl,zfmt) '    "zcoords"',zcoords
    write(fl,'(A)') "  },"
 
-   write(fl,"(A ,':',g0)") '  "re"',re
-   write(fl,"(A ,':',g0)") '  "dt"',dt
-
    if (itype .eq. itype_tbl_recy) then
       do i =1, nx
          call u_infty_calc(i,u_infty(i),u_infty_grad)
@@ -408,9 +405,11 @@ subroutine write_params_json
       write(fl,"(A ,': {')") '  "tbl_recy"'
       write(fl,xfmt) '    "u_infty"',u_infty
       write(fl,'(A)') "  },"
-
-
    endif
+
+   write(fl,"(A ,':',g0,',')") '  "re"',re
+   write(fl,"(A ,':',g0)") '  "dt"',dt
+
    write(fl,'(A)') "}"
 
    close(fl)
