@@ -1,0 +1,170 @@
+! -*- mode: f90 -*-
+
+!===================
+&BasicParam
+!===================
+
+! Flow type (1=Lock-exchange, 2=TGV, 3=Channel, 4=Periodic hill, 5=Cylinder, 6=dbg-schemes, 9=Turbulent-Boundary-Layer)
+itype = 13
+
+! Domain decomposition
+p_row=0               ! Row partition
+p_col=0               ! Column partition
+
+! Mesh
+nx=150                ! X-direction nodes
+ny=161                ! Y-direction nodes
+nz=128                 ! Z-direction nodes
+istret = 3            ! y mesh refinement (0:no, 1:center, 2:both sides, 3:bottom)
+beta = 0.7            ! Refinement parameter (beta)
+
+! Domain
+xlx = 100             ! Lx (Size of the box in x-direction)
+yly = 30.             ! Ly (Size of the box in y-direction)
+zlz = 20.              ! Lz (Size of the box in z-direction)
+
+! Flow parameters
+re  = 700.           ! nu=1/re (Kinematic Viscosity)
+
+! Time stepping
+dt = 0.01             ! Time step
+ifirst = 1            ! First iteration
+ilast = 100000         ! Last iteration
+
+! Enable modelling tools
+ilesmod=0             ! if 0 then DNS
+numscalar = 0         ! How many scalars? (Set to zero to disable scalars)
+iibm=0                ! Flag for immersed boundary method
+
+! Boundary and initial conditions
+iin = 1               ! Inflow conditions (1: classic, 2: turbinit)
+u1  = 1.              ! u1 (max velocity) (for inflow condition)
+u2  = 1.              ! u2 (min velocity) (for inflow condition)
+init_noise = 0.0    ! Turbulence intensity (1=100%) !! Initial condition
+inflow_noise = 0.0    ! Turbulence intensity (1=100%) !! Inflow condition
+
+nclx1 = 2
+nclxn = 2
+ncly1 = 2
+nclyn = 2
+nclz1 = 0
+nclzn = 0
+/End
+
+!====================
+&NumOptions
+!====================
+
+! Spatial derivatives
+ifirstder = 4         ! (1->2nd central, 2->4th central, 3->4th compact, 4-> 6th compact)
+isecondder = 4        ! (1->2nd central, 2->4th central, 3->4th compact, 4-> 6th compact, 5->hyperviscous 6th)
+ipinter = 1           ! interpolation scheme (1: classic, 2: optimized, 3: optimized agressive)
+
+! Time scheme
+iimplicit = 2
+itimescheme = 3
+
+! Dissipation control
+nu0nu = 4.0             ! Ratio between hyperviscosity/viscosity at nu
+cnu = 0.33               ! Ratio between hypervisvosity at k_m=2/3pi and k_c= pi
+
+/End
+
+!=================
+&InOutParam
+!=================
+
+! Basic I/O
+irestart = 0          ! Read initial flow field ?
+icheckpoint = 5000     ! Frequency for writing backup file
+ioutput = 5000         ! Frequency for visualization
+ilist = 1            ! Frequency for writing to screen        
+nvisu = 1             ! Size for visualisation collection
+
+/End
+
+!=================
+&Statistics
+!=================
+
+wrotation = 0.012      ! rotation speed to trigger turbulence
+spinup_time = 30       ! number of time steps with a rotation to trigger turbulence
+nstat = 1             ! Size arrays for statistic collection
+initstat = 50000      ! Time steps after which statistics are collected 
+
+/End
+
+!########################
+! OPTIONAL PARAMETERS
+!#######################
+
+!================
+&ScalarParam
+!================
+
+Sc(1) = 1.0           ! Schmidt number
+
+nclxS1 = 2
+nclxSn = 2
+nclyS1 = 2
+nclySn = 2
+nclzS1 = 0
+nclzSn = 0
+
+/End
+
+!================
+&LESModel
+!================
+
+jles = 4              ! LES Model (1: Phys Smag, 2: Phys WALE, 3: Phys dyn. Smag, 4: iSVV, 5: dyn SEV)
+smagcst = 0.14        ! Smagorinsky constant
+walecst = 0.5         ! WALES Model Coefficient
+iwall = 0             ! Enable wall modeling
+
+/End
+
+!================
+&WallModel
+!================
+
+SmagWallDamp = 1      ! Smagorinsky damping function for ABL if 1
+
+/End
+
+
+!================
+&Tripping
+!================
+itrip=1               !1 to activate the tripping for TBL, 0 otherwise for LBL 
+A_tr = 0.9       !to be use with care, value is mesh-dependent
+!xs_tr_tbl=1.402033       
+ys_tr_tbl=3       
+!ts_tr_tbl=1.402033
+!x0_tr_tbl=3.505082
+y0_tr_tbl=0.4
+
+/End
+!=============================
+&TBLRecy
+!=========
+plane_location = 50.0
+t_avg1=100
+t_avg2=600
+t_recy1=100
+t_recy2=300
+iaccel=0
+
+/End
+
+!===========================
+&accelTBL
+!===========================
+U_ratio=1.5
+accel_centre = 300
+alpha_accel = 0.02
+
+/End
+
+&CASE
+/End
