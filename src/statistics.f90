@@ -108,9 +108,6 @@ contains
 
     call decomp_info_init(nx, ny, 1,dstat_plane)
 
-    write(*,*) dstat_plane%xsz
-    write(*,*) dstat_plane%ysz
-    write(*,*) dstat_plane%zsz
     call init_statistic_adios2
 
   end subroutine init_statistic

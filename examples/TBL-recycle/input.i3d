@@ -12,14 +12,14 @@ p_row=0               ! Row partition
 p_col=0               ! Column partition
 
 ! Mesh
-nx=150                ! X-direction nodes
-ny=161                ! Y-direction nodes
-nz=128                 ! Z-direction nodes
+nx=301                ! X-direction nodes
+ny=129                ! Y-direction nodes
+nz=96                 ! Z-direction nodes
 istret = 3            ! y mesh refinement (0:no, 1:center, 2:both sides, 3:bottom)
 beta = 0.7            ! Refinement parameter (beta)
 
 ! Domain
-xlx = 100             ! Lx (Size of the box in x-direction)
+xlx = 240             ! Lx (Size of the box in x-direction)
 yly = 30.             ! Ly (Size of the box in y-direction)
 zlz = 20.              ! Lz (Size of the box in z-direction)
 
@@ -32,7 +32,7 @@ ifirst = 1            ! First iteration
 ilast = 100000         ! Last iteration
 
 ! Enable modelling tools
-ilesmod=0             ! if 0 then DNS
+ilesmod=1             ! if 0 then DNS
 numscalar = 0         ! How many scalars? (Set to zero to disable scalars)
 iibm=0                ! Flag for immersed boundary method
 
@@ -57,7 +57,7 @@ nclzn = 0
 
 ! Spatial derivatives
 ifirstder = 4         ! (1->2nd central, 2->4th central, 3->4th compact, 4-> 6th compact)
-isecondder = 4        ! (1->2nd central, 2->4th central, 3->4th compact, 4-> 6th compact, 5->hyperviscous 6th)
+isecondder = 5        ! (1->2nd central, 2->4th central, 3->4th compact, 4-> 6th compact, 5->hyperviscous 6th)
 ipinter = 1           ! interpolation scheme (1: classic, 2: optimized, 3: optimized agressive)
 
 ! Time scheme
@@ -148,7 +148,7 @@ y0_tr_tbl=0.4
 !=============================
 &TBLRecy
 !=========
-plane_location = 50.0
+plane_location = 200.0
 t_avg1=100
 t_avg2=600
 t_recy1=100
