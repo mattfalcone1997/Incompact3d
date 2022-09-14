@@ -1169,7 +1169,7 @@ contains
    real(mytype) :: dyy, u_infty_recy, u_infty_inlt, u_thresh
    real(mytype) :: theta_inlt, theta_recy, int_inlt
    real(mytype) :: int_recy, mid_u, u_tau
-   real(mytype), parameter :: alp = 0.1
+   real(mytype), parameter :: alp = 0.3
    integer :: j
    logical :: reset_local
 
@@ -1226,7 +1226,7 @@ contains
       delta_inlt = delta_inlt_old + alp*( one - theta_inlt)*delta_inlt_old
 
       if (abs_prec(delta_inlt - delta_meas) > zpone) then
-         delta_inlt = delta_meas + sign(zpfive,delta_inlt - delta_meas)
+         delta_inlt = delta_meas + sign(one,delta_inlt - delta_meas)
       endif
       c_time = itime
    endif
