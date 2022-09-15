@@ -95,7 +95,7 @@ wrotation = 0.12      ! rotation speed to trigger turbulence
 spinup_time = 5000    ! number of time steps with a rotation to trigger turbulence
 nstat = 1             ! Size arrays for statistic collection
 initstat = 40000      ! Time steps after which statistics are collected
-
+istatcalc =5
 /End
 
 !=================
