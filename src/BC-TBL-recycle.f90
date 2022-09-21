@@ -18,9 +18,13 @@ module tbl_recy
   real(mytype), dimension(:,:), allocatable :: recy_mean_z, recy_mean_t
   real(mytype), dimension(:,:), allocatable :: inlt_mean_z, inlt_mean_t
   real(mytype), dimension(:), allocatable :: disp_thick, disp_thick_grad
+  real(mytype) :: delta_inlt_old
+  real(mytype) :: dv_inlt, dv_recy
+  real(mytype) :: delta_inlt, delta_recy
 
   integer :: plane_index
-
+  logical, parameter :: write_logs = .true.
+  
   abstract interface 
   subroutine u_infty_interface(index,u_infty, u_infty_grad)
      import mytype
@@ -28,12 +32,12 @@ module tbl_recy
      real(mytype), intent(out) :: u_infty, u_infty_grad
 
   end subroutine
-end interface
+   end interface
 
-procedure(u_infty_interface), pointer :: u_infty_calc
+   procedure(u_infty_interface), pointer :: u_infty_calc
 
 
-real(mytype), dimension(:,:), allocatable :: avg_fstream
+   real(mytype), dimension(:,:), allocatable :: avg_fstream
 #ifdef BL_DEBG
    real(mytype), allocatable, dimension(:) :: dbg_u_inner, dbg_u_outer
    real(mytype), allocatable, dimension(:) :: dbg_v_inner, dbg_v_outer
@@ -52,7 +56,7 @@ real(mytype), dimension(:,:), allocatable :: avg_fstream
   PUBLIC :: init_tbl_recy, boundary_conditions_tbl_recy,&
             postprocess_tbl_recy, visu_tbl_recy, &
             visu_tbl_recy_init, momentum_forcing_tbl_recy,&
-            u_infty_calc
+            u_infty_calc, restart_tbl_recy
 
 contains
 
@@ -92,65 +96,18 @@ contains
     allocate(ux_dbg(xsize(1),xsize(2),xsize(3)))
     allocate(uy_dbg(xsize(1),xsize(2),xsize(3)))
     allocate(uz_dbg(xsize(1),xsize(2),xsize(3)))
-    
-    allocate(dbg_u_inner(xsize(2)), dbg_v_inner(xsize(2)))
-    allocate(dbg_u_outer(xsize(2)), dbg_v_outer(xsize(2)))
-    allocate(dbg_w_inner(xsize(2)), dbg_w_outer(xsize(2)))
 
-    allocate(dbg_u(xsize(2)), dbg_v(xsize(2)), dbg_w(xsize(2)))
     allocate(fluct_in(xsize(2), xsize(3)))
     allocate(fluct_out(xsize(2), xsize(3)))
-
-    allocate(dbg_u_fluct_in(xsize(2)))
-    allocate(dbg_v_fluct_in(xsize(2)))
-    allocate(dbg_w_fluct_in(xsize(2)))
-
-    allocate(dbg_u_fluct(xsize(2), xsize(3)))
-    allocate(dbg_v_fluct(xsize(2), xsize(3)))
-    allocate(dbg_w_fluct(xsize(2), xsize(3)))
-
-    allocate(dbg_y_plus_inlt(ny))
-    allocate(dbg_y_plus_recy(ny))
-    allocate(dbg_eta_inlt(ny))
-    allocate(dbg_eta_recy(ny))
-
     allocate(y_vals(ny))
 
     allocate(y_in(ny), y_out(ny))
     allocate(u_out(xsize(2)), u_in(ny))
-
 #endif
 
     allocate(u_mean(nx,ny), v_mean(nx,ny))
-    allocate(um_inlt_ini(xsize(2)), vm_inlt_ini(xsize(2)))
 
-    allocate(recy_mean_t(3,ny))
-    allocate(recy_mean_z(3,ny))
-    allocate(inlt_mean_t(3,ny))
-    allocate(inlt_mean_z(3,ny))
-    
-    if (plane_location.gt.xlx.and. nrank.eq.0) then
-      write(*,*) "Plane location must be less than domain size"
-      call MPI_Abort(MPI_COMM_WORLD,1,ierror)
-    endif
-
-    if (plane_location.le.0.and. nrank.eq.0) then
-      write(*,*) "Plane location must be more than 0"
-      call MPI_Abort(MPI_COMM_WORLD,1,ierror)
-    endif
-
-    do i = 1, nx
-      x = real(i-1,mytype)*dx
-      if (x.gt.plane_location) then
-         xdiff = x-plane_location
-         if (abs_prec(xdiff).gt.abs_prec(xdiff-dx)) then
-            plane_index = i - 1
-
-         else
-            plane_index = i
-         endif
-      endif
-    enddo
+    call setup_tbl_recy
 
     if (iscalar==1) then
 
@@ -260,36 +217,8 @@ contains
    call check_fluct_interp('w_fluct',dbg_w_fluct, three*y_in)
 
 #endif
-   if (irestart.ne.1) then
-         ! initialise fluctuations using random numbers
-      ! ux1=zero
-      ! uy1=zero
-      ! uz1=zero
-      ! byx1=zero;byy1=zero;byz1=zero
 
-      ! call system_clock(count=code)    
-      ! call random_seed(size = ii)
-      ! call random_seed(put = code+63946*(nrank+1)*(/ (i - 1, i = 1, ii) /))
-
-      ! call random_number(ux1)
-      ! call random_number(uy1)
-      ! call random_number(uz1)
-
-      ! c = two * log_prec(ten) / yly
-      ! do k=1,xsize(3)
-      ! do j=1,xsize(2)
-      !    if (istret==0) y=real(j+xstart(2)-1,mytype)*dy
-      !    if (istret/=0) y=yp(j+xstart(2)-1)
-      !    um = exp_prec(-c*y)
-      !    do i=1,xsize(1)
-      !          ux1(i,j,k)=init_noise*um*(two*ux1(i,j,k)-one)
-      !          uy1(i,j,k)=init_noise*um*(two*uy1(i,j,k)-one)
-      !          uz1(i,j,k)=init_noise*um*(two*uz1(i,j,k)-one)
-      !    enddo
-      ! enddo
-      ! enddo    
-
-    !a blasius profile is created in ecoule and then duplicated for the all domain
+   if (irestart.ne.1) then       
       call nickels_init(u_mean, v_mean)
       
       do j = 1, xsize(2)
@@ -309,19 +238,7 @@ contains
          enddo
       enddo
 
-      if (iaccel.eq.0) then
-         u_infty_calc => zpg_BL
-      else if (iaccel.eq.1) then
-         u_infty_calc => tanh_BL
-      else
-         write(*,*) "Invalid iaccel value"
-         call MPI_Abort(MPI_COMM_WORLD, 1,ierror)
-      endif
-
-      call accel_source
       call compute_recycle_mean(ux1, uy1, uz1, reset=.true.)
-
-      ! if (iaccel.ne.0) call initialise_avg
 
 #ifdef BL_DEBG
 
@@ -344,7 +261,6 @@ contains
 
 #endif
     else
-      ! restart average
     endif
 
 
@@ -356,6 +272,160 @@ contains
     deallocate(u_mean, v_mean)
     return
   end subroutine init_tbl_recy
+
+  subroutine setup_tbl_recy
+   use MPI
+   use dbg_schemes, only : abs_prec
+
+   real(mytype) :: x, xdiff
+   integer :: i, ierror
+
+   allocate(recy_mean_t(3,ny))
+   allocate(recy_mean_z(3,ny))
+   allocate(inlt_mean_t(3,ny))
+   allocate(inlt_mean_z(3,ny))
+
+   allocate(um_inlt_ini(xsize(2)), vm_inlt_ini(xsize(2)))
+
+   if (plane_location.gt.xlx.and. nrank.eq.0) then
+      write(*,*) "Plane location must be less than domain size"
+      call MPI_Abort(MPI_COMM_WORLD,1,ierror)
+    endif
+
+    if (plane_location.le.0.and. nrank.eq.0) then
+      write(*,*) "Plane location must be more than 0"
+      call MPI_Abort(MPI_COMM_WORLD,1,ierror)
+    endif
+
+    do i = 1, nx
+      x = real(i-1,mytype)*dx
+      if (x.gt.plane_location) then
+         xdiff = x-plane_location
+         if (abs_prec(xdiff).gt.abs_prec(xdiff-dx)) then
+            plane_index = i - 1
+
+         else
+            plane_index = i
+         endif
+      endif
+    enddo
+
+    if (iaccel.eq.0) then
+      u_infty_calc => zpg_BL
+   else if (iaccel.eq.1) then
+      u_infty_calc => tanh_BL
+   else
+      write(*,*) "Invalid iaccel value"
+      call MPI_Abort(MPI_COMM_WORLD, 1,ierror)
+   endif
+
+   call accel_source
+
+#ifdef BL_DEBG   
+  
+   allocate(dbg_u_inner(xsize(2)), dbg_v_inner(xsize(2)))
+   allocate(dbg_u_outer(xsize(2)), dbg_v_outer(xsize(2)))
+   allocate(dbg_w_inner(xsize(2)), dbg_w_outer(xsize(2)))
+
+   allocate(dbg_u(xsize(2)), dbg_v(xsize(2)), dbg_w(xsize(2)))
+
+   allocate(dbg_u_fluct_in(xsize(2)))
+   allocate(dbg_v_fluct_in(xsize(2)))
+   allocate(dbg_w_fluct_in(xsize(2)))
+
+   allocate(dbg_u_fluct(xsize(2), xsize(3)))
+   allocate(dbg_v_fluct(xsize(2), xsize(3)))
+   allocate(dbg_w_fluct(xsize(2), xsize(3)))
+
+   allocate(dbg_y_plus_inlt(ny))
+   allocate(dbg_y_plus_recy(ny))
+   allocate(dbg_eta_inlt(ny))
+   allocate(dbg_eta_recy(ny))
+#endif   
+  end subroutine
+
+  subroutine restart_tbl_recy(it)
+   integer, intent(in) :: it
+   integer :: unit
+   character(len=80) :: fn
+
+   real(mytype), dimension(ny) :: u_inlt, v_inlt
+   call setup_tbl_recy
+
+   write(fn,'(A,I7.7)') 'tbl_recy/restart-',it
+
+   open(newunit=unit,file=fn,status='old',action='read',access='stream')
+   read(unit) recy_mean_t, inlt_mean_t, u_inlt, v_inlt,delta_inlt_old
+
+   um_inlt_ini(:) = u_inlt(xstart(2):xend(2))
+   vm_inlt_ini(:) = v_inlt(xstart(2):xend(2))
+   
+   if(nrank.eq.0) write(*,*) "Reading tbl_recy restart information"
+  end subroutine
+
+  subroutine write_restart_tbl_recy(it, force_write)
+   use MPI
+   integer, intent(in) :: it
+   logical, intent(in), optional :: force_write
+
+
+   integer :: unit
+   integer, dimension(2) :: dims, coords
+   logical, dimension(2) :: periods 
+   integer :: split_comm, color, key, ierr
+   character(len=80) :: fn
+   integer, allocatable, dimension(:) :: ldispl,displs, recvcounts
+   real(mytype), dimension(ny) :: inlt_v, inlt_u
+   logical :: force_local
+
+   if (.not.present(force_write)) then
+      force_local = .false.
+   else
+      force_local = force_write
+   endif
+
+   if (mod(it,icheckpoint).ne.0 .and..not.force_local) return
+
+   call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, ierr)
+
+   allocate(displs(dims(1)), recvcounts(dims(1)))
+   allocate(ldispl(dims(1)))
+   
+   key = coords(1)
+   color = coords(2)
+
+
+   call MPI_Comm_split(DECOMP_2D_COMM_CART_X,color, key,split_comm,ierr)
+   if (color.ne.0) then
+      call MPI_Comm_free(split_comm,ierr)
+      return
+   endif
+
+   call MPI_Allgather(xstart(2), 1, MPI_INTEGER, ldispl,&
+   1, MPI_INTEGER,split_comm,ierr)
+
+   displs = ldispl - 1
+   call MPI_Allgather(xsize(2), 1, MPI_INTEGER, recvcounts,&
+   1, MPI_INTEGER,split_comm,ierr) 
+
+   call MPI_Gatherv(um_inlt_ini,xsize(2),real_type,inlt_u,recvcounts,&
+                  displs,real_type,0,split_comm,ierr)
+
+   call MPI_Gatherv(vm_inlt_ini,xsize(2),real_type,inlt_v,recvcounts,&
+                  displs,real_type,0,split_comm,ierr)
+                  
+   if(nrank .eq.0) then
+      write(*,*) "Writing tbl_recy restart file"
+      write(fn,'(A,I7.7)') 'tbl_recy/restart-',it
+
+      call system('mkdir -p tbl_recy')
+      open(newunit=unit,file=fn,status='replace',action='write',access='stream')
+      write(unit) recy_mean_t, inlt_mean_t, inlt_u, inlt_v, delta_inlt_old
+
+   endif
+   call MPI_Comm_free(split_comm,ierr)
+
+  end subroutine
 
   subroutine zpg_BL(index,u_infty, u_infty_grad)
    use param
@@ -465,6 +535,8 @@ contains
     !INFLOW with an update of bxx1, byy1 and bzz1 at the inlet
     
     call compute_recycle_mean(ux, uy, uz)
+    call GetScalings(dv_inlt, dv_recy, delta_inlt, delta_recy)
+
     call mean_flow_inlt_calc(u_mean, v_mean)
     call fluct_flow_inlt_calc(ux, uy, uz, u_fluct, v_fluct, w_fluct)
 
@@ -573,9 +645,6 @@ contains
    real(mytype), dimension(:), allocatable :: eta_inlt
    real(mytype), dimension(:), allocatable :: eta_recy
 
-   real(mytype) :: dv_inlt, dv_recy
-   real(mytype) :: delta_inlt, delta_recy
-
    real(mytype) :: u_tmp, eps, y
    real(mytype) :: gamma, w, u_infty
    integer :: j, jdx
@@ -592,8 +661,6 @@ contains
 
    allocate(v_inner(xsize(2)))
    allocate(v_outer(xsize(2)))
-
-   call GetScalings(dv_inlt, dv_recy, delta_inlt, delta_recy)
 
    gamma = dv_recy / dv_inlt ! u_tau_inlt / u_tau_recy
    u_infty = recy_mean_t(1,ny)
@@ -695,9 +762,6 @@ contains
    real(mytype), dimension(:,:), intent(out) :: v_fluct
    real(mytype), dimension(:,:), intent(out) :: w_fluct
 
-   real(mytype) :: dv_inlt, dv_recy
-   real(mytype) :: delta_inlt, delta_recy
-
    real(mytype), dimension(:,:), allocatable :: u_fluct_in
    real(mytype), dimension(:,:), allocatable :: v_fluct_in
    real(mytype), dimension(:,:), allocatable :: w_fluct_in
@@ -740,8 +804,6 @@ contains
    allocate(y_plus_recy(ny))
    allocate(eta_inlt(ny))
    allocate(eta_recy(ny))
-
-   call GetScalings(dv_inlt, dv_recy, delta_inlt, delta_recy)
 
    gamma = dv_recy / dv_inlt
    
@@ -1156,21 +1218,19 @@ contains
    deallocate(displs,recvcounts,ldispl)
   end subroutine
 
-  subroutine GetScalings(delta_v_inlt, delta_v_recy, delta_inlt, delta_recy, reset)
+  subroutine GetScalings(delta_v_inlt, delta_v_recy, delta_i, delta_r, reset)
    use dbg_schemes
-
-   real(mytype), intent(out) :: delta_v_inlt, delta_v_recy, delta_inlt, delta_recy
+   use param, only : irestart
+   real(mytype), intent(out) :: delta_v_inlt, delta_v_recy, delta_i, delta_r
    logical, intent(in), optional :: reset
    real(mytype) :: delta_meas
 
    logical, save :: first_call = .true.
-   real(mytype), save :: delta_inlt_old
-   integer, save :: c_time
    real(mytype) :: dyy, u_infty_recy, u_infty_inlt, u_thresh
    real(mytype) :: theta_inlt, theta_recy, int_inlt
    real(mytype) :: int_recy, mid_u, u_tau
    real(mytype), parameter :: alp = 0.3
-   integer :: j
+   integer :: i,j, unit, pos, nreads
    logical :: reset_local
 
    ! compute theta
@@ -1195,7 +1255,7 @@ contains
    do j = 1, ny
       u_thresh = 0.99_mytype*u_infty_recy
       if (recy_mean_t(1,j) .gt. u_thresh) then
-         delta_recy = yp(j-1) + (yp(j) - yp(j-1))*(u_thresh - recy_mean_t(1,j-1))
+         delta_r = yp(j-1) + (yp(j) - yp(j-1))*(u_thresh - recy_mean_t(1,j-1))
          exit
       endif
    enddo
@@ -1208,9 +1268,9 @@ contains
       endif
    enddo
 
-
+   if (irestart.ne.0) first_call = .false.
    if (first_call) then
-      delta_inlt = delta_meas
+      delta_i = delta_meas
       
       if (.not. present(reset)) reset_local = .false.
       if (present(reset)) reset_local = reset
@@ -1220,19 +1280,15 @@ contains
       else
          first_call = .false.
       endif
-   else if (c_time .eq.itime) then
-      delta_inlt = delta_inlt_old
-   else
-      delta_inlt = delta_inlt_old + alp*( one - theta_inlt)*delta_inlt_old
-
-      if (abs_prec(delta_inlt - delta_meas) > zpone) then
-         delta_inlt = delta_meas + sign(one,delta_inlt - delta_meas)
+   else if (itr .eq. 1) then
+      delta_i = delta_inlt_old + alp*( one - theta_inlt)*delta_inlt_old
+      if (abs_prec(delta_i - delta_meas) > one) then
+         delta_i = delta_meas + sign(one,delta_i - delta_meas)
       endif
-      c_time = itime
+   else 
+      delta_i = delta_inlt_old
    endif
-
-   delta_inlt_old = delta_inlt
-
+   
    ! compute friction velocity
    if (istret==0) dyy = dy
    if (istret/=0) dyy = yp(2) - yp(1)
@@ -1242,6 +1298,33 @@ contains
    u_tau = u_tau * (theta_recy / theta_inlt)** 0.125_mytype
    delta_v_inlt = one / (re*u_tau)
 
+   if (write_logs.and.nrank.eq.0) then
+      if ((mod(itime,ilist)==0.or.itime==1) .and. itr.eq.1) then
+         if (itime==1) then
+            open(newunit=unit,file='tbl_recy.log',status='replace',action='readwrite')
+            write(unit,"(A,*(',',A))") "itime","theta_inlt", "theta_recy",&
+                                    "delta_r","delta_meas","delta_old","delta_i",&
+                                    "u_tau_inlt","delta_v_recy","delta_v_inlt"
+         else
+            open(newunit=unit,file='tbl_recy.log',status='old',action='readwrite')
+            rewind(unit)
+            nreads = itime/ilist + 1
+            if (ilist==1) nreads = itime/ilist - 1
+            do i = 1, nreads
+               read(unit,*)
+            enddo
+         endif
+         
+         write(unit,"(I0,*(',',g0))") itime,theta_inlt,theta_recy,delta_r,&
+                                  delta_meas,delta_inlt_old, delta_i, u_tau, delta_v_recy,&
+                                  delta_v_inlt
+
+         close(unit)
+          
+      endif
+   endif
+
+   delta_inlt_old = delta_i
   end subroutine
 
   subroutine mean_interp(y_in, y_out, u_in, u_out)
@@ -1498,24 +1581,8 @@ contains
     real(mytype),intent(in),dimension(xsize(1),xsize(2),xsize(3)) :: ux1, uy1, uz1, ep1
     character(len=30) :: filename
     integer :: nfil, i
-    if (nrank.eq.0) then
-      ! write averages to file
-     endif
 
-! #ifdef BL_DEBG
-!      write(filename,"('disp_thick-rank-',I0,'-',I0,'.csv')") nrank,itime
-!      open(newunit=nfil,file=filename,action='write',status='replace')
-!      write(nfil,*) "x, disp_thick, disp_thick_grad"
-!      do i = 1, xsize(1)
-!       write(nfil,"(g0,*(',',g0))") real(i-1,mytype)*dx, disp_thick(i), disp_thick_grad(i)
-!      enddo
-!      close(nfil)
-
-!      write(filename,"('mean_fstream-',I0,'-',I0,'.D')") nrank,itime
-!      open(newunit=nfil,file=filename,action='write',status='replace')
-!      write(nfil,*) nx, ny, avg_fstream
-!      close(nfil)
-! #endif
+   call write_restart_tbl_recy(itime)
 
   end subroutine postprocess_tbl_recy
 

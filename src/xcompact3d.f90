@@ -124,7 +124,7 @@ subroutine init_xcompact3d()
   use ibm, only : body
 
   use probes, only : init_probes
-
+   use tbl_recy, only : restart_tbl_recy
   implicit none
 
   integer :: ierr
@@ -225,6 +225,10 @@ subroutine init_xcompact3d()
      if (itype == itype_sandbox) then
         call init_sandbox(ux1,uy1,uz1,ep1,phi1,1)
      end if
+
+     if (itype == itype_tbl_recy) then
+      call restart_tbl_recy(ifirst-1)
+     endif
      call restart(ux1,uy1,uz1,dux1,duy1,duz1,ep1,pp3(:,:,:,1),phi1,dphi1,px1,py1,pz1,rho1,drho1,mu1,0)
   endif
   
@@ -384,10 +388,6 @@ subroutine write_params_json
    write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nx-1,"(',',g0),'],')"
    write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ny-1,"(',',g0),'],')"
    write(zfmt,'(A,I0,A)') "( A, ': [',g0,",nz-1,"(',',g0),']')"
-
-   write(*,*) xfmt
-   write(*,*) yfmt
-   write(*,*) zfmt
 
    write(fl,"(A ,': {')") '  "mesh"'
    write(fl,"(A ,': [',I0,',',I0,',',I0,'],')") '    "sizes"',nx, ny, nz

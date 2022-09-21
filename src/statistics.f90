@@ -285,8 +285,9 @@ contains
     implicit none
 
     ! No reading for statistics when nstat > 1 or no restart
+    call init_statistic()
+
     if (nstat.gt.1 .or. irestart.eq.0) then
-       call init_statistic()
        initstat = ifirst
        return
     else
