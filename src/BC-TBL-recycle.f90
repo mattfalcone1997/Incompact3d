@@ -301,12 +301,13 @@ contains
       x = real(i-1,mytype)*dx
       if (x.gt.plane_location) then
          xdiff = x-plane_location
-         if (abs_prec(xdiff).gt.abs_prec(xdiff-dx)) then
+         if (abs_prec(xdiff).gt.zpfive*dx) then
             plane_index = i - 1
 
          else
             plane_index = i
          endif
+         exit
       endif
     enddo
 
@@ -1293,6 +1294,7 @@ contains
    ! compute friction velocity
    if (istret==0) dyy = dy
    if (istret/=0) dyy = yp(2) - yp(1)
+
    u_tau = sqrt_prec((recy_mean_t(1,2) - recy_mean_t(1,1))/dyy/re)
    delta_v_recy = one / (re*u_tau)
 
