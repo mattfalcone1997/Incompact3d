@@ -419,9 +419,10 @@ contains
       write(fn,'(A,I7.7)') 'tbl_recy/restart-',it
 
       call system('mkdir -p tbl_recy')
+
       open(newunit=unit,file=fn,status='replace',action='write',access='stream')
       write(unit) recy_mean_t, inlt_mean_t, inlt_u, inlt_v, delta_inlt_old
-
+      close(unit)
    endif
    call MPI_Comm_free(split_comm,ierr)
 

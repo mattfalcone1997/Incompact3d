@@ -626,7 +626,7 @@ contains
   subroutine update_average_scalar(um, ux, ep)
 
     use decomp_2d, only : mytype, xsize, zsize
-    use param, only : itime, initstat
+    use param, only : itime, initstat, istatcalc
     use var, only : di1, tmean
 
     implicit none
@@ -637,9 +637,12 @@ contains
     real(mytype), dimension(xsize(1),xsize(2),xsize(3)), intent(in) :: ep
 
     real(mytype), dimension(zsize(1), zsize(2), 1) :: stat_z
+    real(mytype) :: stat_inc
 
     call average_z(ux, stat_z)
-    um = um + (stat_z - um) / real(itime-initstat+1, kind=mytype)
+
+    stat_inc = real((itime-initstat)/istatcalc+1, kind=mytype)
+    um = um + (stat_z - um) / stat_inc
 
   end subroutine update_average_scalar
 

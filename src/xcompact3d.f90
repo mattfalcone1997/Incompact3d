@@ -378,6 +378,9 @@ subroutine write_params_json
 
    write(fl,'(A)') "{"
    write(fl,"(A ,':',I0,',')") '  "itype"',itype
+   write(fl,"(A ,':',I0,',')") '  "istatcalc"',istatcalc
+   write(fl,"(A ,':',I0,',')") '  "initstat"',initstat
+
 
    write(fl,"(A ,' : {')") '  "geometry"'
    write(fl,"(A ,': ',g0,',')") '    "xlx"',xlx
