@@ -1192,13 +1192,13 @@ contains
    else
 
       if (itime .lt. t_avg1.and.itime.lt. t_avg2) then
-         T_period = 100.0
+         T_period = 5
 
       elseif (itime.lt. t_avg2) then
-         T_period = 1000.0
+         T_period = 400
 
       else
-         T_period = 1000.0 + itime - t_avg2
+         T_period =400 + itime - t_avg2
 
       endif
 
