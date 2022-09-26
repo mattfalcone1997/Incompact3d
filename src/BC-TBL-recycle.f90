@@ -357,7 +357,7 @@ contains
 
    open(newunit=unit,file=fn,status='old',action='read',access='stream')
    read(unit) recy_mean_t, inlt_mean_t, u_inlt, v_inlt,delta_inlt_old
-
+   close(unit)
    um_inlt_ini(:) = u_inlt(xstart(2):xend(2))
    vm_inlt_ini(:) = v_inlt(xstart(2):xend(2))
    
@@ -1192,13 +1192,13 @@ contains
    else
 
       if (itime .lt. t_avg1.and.itime.lt. t_avg2) then
-         T_period = 5
+         T_period = 1
 
       elseif (itime.lt. t_avg2) then
-         T_period = 400
+         T_period = 50
 
       else
-         T_period =400 + itime - t_avg2
+         T_period =50 + itime - t_avg2
 
       endif
 
@@ -1232,7 +1232,7 @@ contains
    real(mytype) :: theta_inlt, theta_recy, int_inlt
    real(mytype) :: int_recy, mid_u, u_tau
    real(mytype), parameter :: alp = 0.3
-   integer :: i,j, unit, pos, nreads
+   integer :: i,j, unit=13, pos, nreads
    logical :: reset_local
 
    ! compute theta
@@ -1304,25 +1304,29 @@ contains
    if (write_logs.and.nrank.eq.0) then
       if ((mod(itime,ilist)==0.or.itime==1) .and. itr.eq.1) then
          if (itime==1) then
-            open(newunit=unit,file='tbl_recy.log',status='replace',action='readwrite')
+            open(unit=unit,file='tbl_recy.log',status='replace',action='readwrite')
             write(unit,"(A,*(',',A))") "itime","theta_inlt", "theta_recy",&
                                     "delta_r","delta_meas","delta_old","delta_i",&
                                     "u_tau_inlt","delta_v_recy","delta_v_inlt"
+            write(unit,"(I0,*(',',g0))") itime,theta_inlt,theta_recy,delta_r,&
+                                    delta_meas,delta_inlt_old, delta_i, u_tau, delta_v_recy,&
+                                    delta_v_inlt
+           close(unit)                          
+                     
          else
-            open(newunit=unit,file='tbl_recy.log',status='old',action='readwrite')
+            open(unit=unit,file='tbl_recy.log',status='old',action='readwrite')
             rewind(unit)
             nreads = itime/ilist + 1
             if (ilist==1) nreads = itime/ilist - 1
             do i = 1, nreads
                read(unit,*)
             enddo
-         endif
-         
-         write(unit,"(I0,*(',',g0))") itime,theta_inlt,theta_recy,delta_r,&
-                                  delta_meas,delta_inlt_old, delta_i, u_tau, delta_v_recy,&
-                                  delta_v_inlt
 
+            write(unit,"(I0,*(',',g0))") itime,theta_inlt,theta_recy,delta_r,&
+            delta_meas,delta_inlt_old, delta_i, u_tau, delta_v_recy,&
+            delta_v_inlt
          close(unit)
+         endif
           
       endif
    endif

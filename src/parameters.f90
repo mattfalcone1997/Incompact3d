@@ -35,7 +35,7 @@ subroutine parameter(input_i3d)
 
   character(len=80), intent(in) :: input_i3d
   real(mytype) :: theta, cfl,cf2
-  integer :: longueur ,impi,j, is, total
+  integer :: longueur ,impi,j, is, total, iostat
 
   NAMELIST /BasicParam/ p_row, p_col, nx, ny, nz, istret, beta, xlx, yly, zlz, &
        itype, iin, re, u1, u2, init_noise, inflow_noise, &
@@ -73,7 +73,9 @@ subroutine parameter(input_i3d)
   NAMELIST/ADMParam/Ndiscs,ADMcoords,C_T,aind,iturboutput,rho_air
   NAMELIST/TBLRecy/plane_location, t_avg1,t_avg2, t_recy1, t_recy2, iaccel
   NAMELIST/tanhAccelTBL/U_ratio, accel_centre, alpha_accel
-  
+  NAMELIST/bodyForce/ibodyforces,ibftype
+  NAMELIST/linearBodyF/linear_amp,linear_ext
+
 #ifdef DEBG
   if (nrank == 0) write(*,*) '# parameter start'
 #endif
@@ -210,6 +212,16 @@ subroutine parameter(input_i3d)
 
    endif
 
+  if(itype==itype_channel) then
+   read(10,nml=bodyForce,iostat=iostat); rewind(10)
+   if (iostat ==0.and.ibodyforces.eq.1) then
+      if (ibftype.eq.1) then
+         read(10,nml=linearBodyF); rewind(10)
+      endif
+   else
+      ibodyforces = 1
+   endif
+  endif
   if (itype.eq.itype_abl) then
      read(10, nml=ABL); rewind(10)
   endif
@@ -561,8 +573,18 @@ subroutine parameter(input_i3d)
          write(*,*) "TBL doesn't have spatial acceleration."
 
       endif
-
      endif
+     if (ibodyforces.eq.1) then
+      write(*,*) "Streamwise body forces activated:"
+      if (ibftype.eq.1) then
+         write(*,*) "Linear body force selected"
+         write(*,"(' Body force amplitude   : ',F17.8)") linear_amp
+         write(*,"(' Body force extent   : ',F17.8)") linear_ext
+      endif
+      write(*,*) '==========================================================='
+   else if (itype==itype_channel) then
+      write(*,*) "No streamwise body forces"
+   endif
   endif
   
   if (iibm.eq.3) then ! This is only for the Cubic Spline Reconstruction
@@ -723,4 +745,8 @@ subroutine parameter_defaults()
 
   iaccel = 0
   U_ratio = one
+
+  ibodyforces = 0
+  linear_amp = zero
+  linear_ext = zero
 end subroutine parameter_defaults

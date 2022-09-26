@@ -345,6 +345,7 @@ subroutine write_params_json
    use variables
    use decomp_2d, only : nrank
    use tbl_recy, only : u_infty_calc
+   use channel, only : body_force
    implicit none
 
    real(mytype), dimension(nx) :: xcoords, u_infty
@@ -410,6 +411,13 @@ subroutine write_params_json
       write(fl,'(A)') "  },"
    endif
 
+   if (ibodyforces.eq.1) then
+      write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ny-1,"(',',g0),']')"
+      
+      write(fl,"(A ,': {')") '  "bodyforces"'
+      write(fl,yfmt) '    "bf_array"', body_force
+      write(fl,'(A)') "  },"
+   endif
    write(fl,"(A ,':',g0,',')") '  "re"',re
    write(fl,"(A ,':',g0)") '  "dt"',dt
 

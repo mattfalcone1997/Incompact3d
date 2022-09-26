@@ -13,11 +13,11 @@ module channel
   integer :: FS
   character(len=100) :: fileformat
   character(len=1),parameter :: NL=char(10) !new line character
-
+  real(mytype), dimension(:), allocatable :: body_force
   PRIVATE ! All functions/subroutines private by default
   PUBLIC :: init_channel, boundary_conditions_channel, postprocess_channel, &
             visu_channel, visu_channel_init, momentum_forcing_channel, &
-            geomcomplex_channel
+            geomcomplex_channel, body_force
 
 contains
   !############################################################################
@@ -140,7 +140,7 @@ contains
              um=exp_prec(-zptwo*y*y)
              do i=1,xsize(1)
                 if (idir_stream == 1) then
-                   ux1(i,j,k)=init_noise*um*(two*ux1(i,j,k)-one)+one-y*y
+                   ux1(i,j,k)=init_noise*um*(two*ux1(i,j,k)-one)+onepfive*(one-y*y)
                    uy1(i,j,k)=init_noise*um*(two*uy1(i,j,k)-one)
                    uz1(i,j,k)=init_noise*um*(two*uz1(i,j,k)-one)
                 else
@@ -250,6 +250,8 @@ contains
        enddo
     enddo
 
+    call body_forces_init
+
 #ifdef DEBG
     avg_param = zero
     call avg3d (ux1, avg_param)
@@ -279,11 +281,11 @@ contains
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux,uy,uz
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
 
-    if (.not. cpg ) then ! if not constant pressure gradient
+    if (.not. cpg .and. ibodyforces.eq.0) then ! if not constant pressure gradient
        if (idir_stream == 1) then
-          call channel_cfr(ux,two/three)
+          call channel_cfr(ux,one)
        else
-          call channel_cfr(uz,two/three)
+          call channel_cfr(uz,one)
        endif
     end if
 
@@ -475,6 +477,7 @@ contains
 
     real(mytype), intent(in), dimension(xsize(1), xsize(2), xsize(3)) :: ux1, uy1, uz1
     real(mytype), dimension(xsize(1), xsize(2), xsize(3), ntime) :: dux1, duy1, duz1
+    integer :: j, jloc
 
     if (cpg) then
         !! fcpg: add constant pressure gradient in streamwise direction
@@ -493,7 +496,74 @@ contains
        duy1(:,:,:,1) = duy1(:,:,:,1) + wrotation*ux1(:,:,:)
     endif
 
+    if (ibodyforces.eq.1) then
+      if (idir_stream == 1) then
+         do j = 1,xsize(2)
+            jloc = j + xstart(2) -1
+            dux1(:,j,:,1) = dux1(:,j,:,1) + body_force(jloc)
+         enddo
+
+         call mass_flow_conserve(dux1)
+      else
+         do j = 1,xsize(2)
+            jloc = j + xstart(2) -1
+            duz1(:,j,:,1) = duz1(:,j,:,1) + body_force(jloc)
+         enddo
+         call mass_flow_conserve(duz1)
+      endif
+
+
+    endif
   end subroutine momentum_forcing_channel
+
+  subroutine mass_flow_conserve(du1)
+   use MPI
+   real(mytype), intent(inout), dimension(xsize(1), xsize(2), xsize(3),ntime) :: du1
+   real(mytype) :: dvol, int_du, coeff, int_du_all
+   integer :: jloc, i, j, k, code
+
+   coeff = dy / (yly * real(xsize(1) * zsize(3), kind=mytype))
+
+   int_du = zero
+   do k = 1, xsize(3)
+      do jloc = 1, xsize(2)
+         j = jloc + xstart(2) - 1
+         do i = 1, xsize(1)
+            int_du = int_du + du1(i,jloc,k,1) / ppy(j)
+         enddo
+      enddo
+   enddo
+
+   int_du = int_du*coeff
+   call MPI_ALLREDUCE(int_du,int_du_all,1,real_type,MPI_SUM,MPI_COMM_WORLD,code)
+
+   du1(:,:,:,1) = du1(:,:,:,1) - int_du_all
+
+  end subroutine
+  subroutine body_forces_init
+   use dbg_schemes, only : abs_prec
+   integer :: j
+   real(mytype) :: lim, y
+   if (ibodyforces.eq.1) then
+
+      allocate(body_force(ny))
+      body_force = zero
+
+      if (ibftype.eq.1) then
+         lim = one - linear_ext
+         do j = 1, ny
+            if (istret==0) y=real(j+xstart(2)-1-1,mytype)*dy-yly*half
+            if (istret/=0) y=yp(j+xstart(2)-1)-yly*half
+            
+            if (abs_prec(y)>lim) then
+               body_force(j) = linear_amp*(abs_prec(y)-lim)/linear_ext
+            endif
+         enddo
+      endif
+   endif
+
+   
+  end subroutine
   !############################################################################
   !############################################################################
   subroutine geomcomplex_channel(epsi,nxi,nxf,ny,nyi,nyf,nzi,nzf,yp,remp)
