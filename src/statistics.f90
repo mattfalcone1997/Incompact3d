@@ -687,7 +687,7 @@ contains
 
     real(mytype), dimension(zsize(1), zsize(2)) :: stat_z
     real(mytype) :: stat_inc
-
+    integer :: i, j
     if (present(mask)) then
       stat_z = sum(ux,dim=3,mask=mask) / real(zsize(3),kind=mytype)
 
