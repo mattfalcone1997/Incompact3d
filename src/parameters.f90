@@ -51,7 +51,8 @@ subroutine parameter(input_i3d)
        nu0nu, cnu, ipinter
   NAMELIST /InOutParam/ irestart, icheckpoint, ioutput, nvisu, ilist, iprocessing, &
        ninflows, ntimesteps, inflowpath, ioutflow, output2D, nprobes
-  NAMELIST /Statistics/ wrotation,spinup_time, nstat, initstat, istatcalc
+  NAMELIST /Statistics/ wrotation,spinup_time, nstat, initstat, &
+            istatcalc, istatbudget,istatpstrain, initstat2
   NAMELIST /ProbesParam/ flag_all_digits, flag_extra_probes, xyzprobes
   NAMELIST /ScalarParam/ sc, ri, uset, cp, &
        nclxS1, nclxSn, nclyS1, nclySn, nclzS1, nclzSn, &
@@ -71,7 +72,7 @@ subroutine parameter(input_i3d)
   NAMELIST /CASE/ tgv_twod, pfront
   NAMELIST/ALMParam/iturboutput,NTurbines,TurbinesPath,NActuatorlines,ActuatorlinesPath,eps_factor,rho_air
   NAMELIST/ADMParam/Ndiscs,ADMcoords,C_T,aind,iturboutput,rho_air
-  NAMELIST/TBLRecy/plane_location, t_avg1,t_avg2, t_recy1, t_recy2, iaccel
+  NAMELIST/TBLRecy/plane_location, t_avg1,t_avg2, t_recy1, t_recy2, iaccel,t_trip
   NAMELIST/tanhAccelTBL/U_ratio, accel_centre, alpha_accel
   NAMELIST/bodyForce/ibodyforces,ibftype
   NAMELIST/linearBodyF/linear_amp,linear_ext
@@ -219,7 +220,7 @@ subroutine parameter(input_i3d)
          read(10,nml=linearBodyF); rewind(10)
       endif
    else
-      ibodyforces = 1
+      ibodyforces = 0
    endif
   endif
   if (itype.eq.itype_abl) then
@@ -749,4 +750,7 @@ subroutine parameter_defaults()
   ibodyforces = 0
   linear_amp = zero
   linear_ext = zero
+
+  istatbudget = .true.
+  istatpstrain = .false.
 end subroutine parameter_defaults

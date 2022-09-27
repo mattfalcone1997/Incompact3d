@@ -281,7 +281,7 @@ contains
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux,uy,uz
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
 
-    if (.not. cpg .and. ibodyforces.eq.0) then ! if not constant pressure gradient
+    if (.not. cpg) then ! if not constant pressure gradient
        if (idir_stream == 1) then
           call channel_cfr(ux,one)
        else
@@ -503,13 +503,11 @@ contains
             dux1(:,j,:,1) = dux1(:,j,:,1) + body_force(jloc)
          enddo
 
-         call mass_flow_conserve(dux1)
       else
          do j = 1,xsize(2)
             jloc = j + xstart(2) -1
             duz1(:,j,:,1) = duz1(:,j,:,1) + body_force(jloc)
          enddo
-         call mass_flow_conserve(duz1)
       endif
 
 
@@ -552,8 +550,8 @@ contains
       if (ibftype.eq.1) then
          lim = one - linear_ext
          do j = 1, ny
-            if (istret==0) y=real(j+xstart(2)-1-1,mytype)*dy-yly*half
-            if (istret/=0) y=yp(j+xstart(2)-1)-yly*half
+            if (istret==0) y=real(j,mytype)*dy-yly*half
+            if (istret/=0) y=yp(j)-yly*half
             
             if (abs_prec(y)>lim) then
                body_force(j) = linear_amp*(abs_prec(y)-lim)/linear_ext

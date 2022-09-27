@@ -295,7 +295,8 @@ module param
   integer :: itime0
   integer :: iscalar,nxboite,istat,iread,iadvance_time,irotation,iibm
   integer :: npif,izap,ianal
-  integer :: ivisu, ipost, initstat,istatcalc
+  integer :: ivisu, ipost, initstat,initstat2,istatcalc
+  logical :: istatbudget, istatpstrain
   integer :: ifilter
   real(mytype) :: xlx,yly,zlz,dx,dy,dz,dx2,dy2,dz2,t,xxk1,xxk2,t0
   real(mytype) :: dt,re,xnu,init_noise,inflow_noise,u1,u2,angle,anglex,angley
@@ -405,6 +406,7 @@ module param
   integer :: iaccel
   real(mytype) :: t_avg1, t_avg2
   real(mytype) :: t_recy1, t_recy2
+  real(mytype) :: t_trip
   real(mytype) :: plane_location
 
   !TBL acceleration params
