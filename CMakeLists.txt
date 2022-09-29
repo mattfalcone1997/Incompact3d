@@ -137,6 +137,16 @@ else(ADIOS_FOUND)
   message(STATUS "ADIOS2 not found")
 endif()
 
+option(USE_LAPACK "For computation of lambda 2 in statistics" OFF)
+if(USE_LAPACK)
+  find_package(LAPACK)
+endif()
+if(LAPACK_FOUND)
+  add_definitions("-DHAVE_LAPACK")
+  message(STATUS "LAPACK found")
+else()
+  message(STATUS "LAPACK not found")
+endif()
 # Create a static library for the fft
 add_subdirectory(decomp2d)
 

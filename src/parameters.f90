@@ -52,7 +52,7 @@ subroutine parameter(input_i3d)
   NAMELIST /InOutParam/ irestart, icheckpoint, ioutput, nvisu, ilist, iprocessing, &
        ninflows, ntimesteps, inflowpath, ioutflow, output2D, nprobes
   NAMELIST /Statistics/ wrotation,spinup_time, nstat, initstat, &
-            istatcalc, istatbudget,istatpstrain, initstat2
+            istatcalc, istatbudget,istatpstrain,istatlambda2, initstat2
   NAMELIST /ProbesParam/ flag_all_digits, flag_extra_probes, xyzprobes
   NAMELIST /ScalarParam/ sc, ri, uset, cp, &
        nclxS1, nclxSn, nclyS1, nclySn, nclzS1, nclzSn, &
@@ -753,4 +753,5 @@ subroutine parameter_defaults()
 
   istatbudget = .true.
   istatpstrain = .false.
+  istatlambda2 = .false.
 end subroutine parameter_defaults

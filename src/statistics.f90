@@ -44,6 +44,9 @@ module stats
   real(mytype), dimension(:,:,:), allocatable :: pdvdy_q1mean, pdvdy_q2mean
   real(mytype), dimension(:,:,:), allocatable :: pdvdy_q3mean, pdvdy_q4mean
 
+  real(mytype), dimension(:,:,:), allocatable :: lambda2mean, lambda22mean
+
+  
   real(mytype), dimension(:,:), allocatable :: coefy
   real(mytype) :: coefy_bc1(3), coefy_bcn(3)
   real(mytype) :: coefx_bc1(3), coefx_bcn(3)
@@ -63,7 +66,7 @@ contains
 
     use decomp_2d, only : mytype
     use decomp_2d_io, only : decomp_2d_register_variable, decomp_2d_init_io
-    use param, only : istatbudget, istatpstrain
+    use param, only : istatbudget, istatpstrain, istatlambda2
     use var, only : numscalar
     
     implicit none
@@ -141,6 +144,11 @@ contains
         call decomp_2d_register_variable(io_statistics, "pdvdy_q3mean", 3, 1, 3, mytype, opt_nplanes=1)
         call decomp_2d_register_variable(io_statistics, "pdvdy_q4mean", 3, 1, 3, mytype, opt_nplanes=1)
        endif
+
+       if (istatlambda2) then
+        call decomp_2d_register_variable(io_statistics, "lambda2mean", 3, 1, 3, mytype, opt_nplanes=1)
+        call decomp_2d_register_variable(io_statistics, "lambda22mean", 3, 1, 3, mytype, opt_nplanes=1)
+       endif
        do is=1, numscalar
           write(varname,"('phi',I2.2)") is
           call decomp_2d_register_variable(io_statistics, varname, 3, 1, 3, mytype, opt_nplanes=1)
@@ -158,7 +166,7 @@ contains
   !
   subroutine init_statistic
 
-    use param, only : zero, iscalar, istatbudget, istatpstrain
+    use param, only : zero, iscalar, istatbudget, istatpstrain, istatlambda2
     use variables, only : nx, ny, nz
     use decomp_2d, only : zsize, decomp_info_init
     use MPI
@@ -295,6 +303,20 @@ contains
       pdvdy_q3mean = zero
       pdvdy_q4mean = zero
     endif
+
+    if (istatlambda2) then
+#ifndef HAVE_LAPACK 
+      write(*,*) "Cannot calaculate mean lambda2 without LAPACK"
+      call MPI_Abort(MPI_COMM_WORLD,1,code)
+#endif  
+
+      allocate(lambda2mean(zsize(1),zsize(2),1))
+      allocate(lambda22mean(zsize(1),zsize(2),1))
+
+      lambda2mean = zero
+      lambda22mean = zero
+    endif
+  
     call decomp_info_init(nx, ny, 1,dstat_plane)
 
     call init_statistic_adios2
@@ -353,7 +375,7 @@ contains
   !
   subroutine read_or_write_all_stats(flag_read)
 
-    use param, only : iscalar, itime, istatbudget, istatpstrain, initstat2
+    use param, only : iscalar, itime, istatbudget, istatpstrain, initstat2, istatlambda2
     use variables, only : numscalar
     use decomp_2d, only : nrank
     use decomp_2d_io, only : decomp_2d_write_mode, decomp_2d_read_mode, &
@@ -463,6 +485,10 @@ contains
       call read_or_write_one_stat(flag_read, gen_statname("pdvdy_q4mean"), pdvdy_q4mean)
     endif
 
+    if (istatlambda2 .and. itime > initstat2) then
+      call read_or_write_one_stat(flag_read, gen_statname("lambda2mean"), lambda2mean)
+      call read_or_write_one_stat(flag_read, gen_statname("lambda22mean"), lambda22mean)
+    endif
 #ifdef ADIOS2
     call decomp_2d_end_io(io_statistics, stat_dir)
     call decomp_2d_close_io(io_statistics, stat_dir)
@@ -635,9 +661,15 @@ contains
     endif                             
 
     if (istatpstrain .and. itime>initstat2) then
-      call update_pstrain_cond_avg(pdvdy_q1mean,pdvdy_q1mean,&
-                                  pdvdy_q1mean,pdvdy_q1mean,&
+      call update_pstrain_cond_avg(pdvdy_q1mean,pdvdy_q2mean,&
+                                  pdvdy_q3mean,pdvdy_q4mean,&
                                   td3,dvdy,pmean,dvdymean,td3)
+    endif
+
+    if (istatlambda2 .and. itime>initstat2) then
+      call update_lambda2_avg(lambda2mean,lambda22mean,&
+                                dudx,dudy,ta3,dvdx,dvdy,&
+                                tb3,dwdx,dwdy,tc3,td3)
     endif
 
     ! Write all statistics
@@ -864,7 +896,7 @@ contains
                                      pdvdy_q3m,pdvdy_q4m,&
                                      p,dvdy, pm, dvdym,ep)
     use decomp_2d, only : mytype, xsize, zsize
-    use param, only : zero
+    use param, only : zero, zpfive
     real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: pdvdy_q1m, pdvdy_q2m
     real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: pdvdy_q3m, pdvdy_q4m
     real(mytype), dimension(zsize(1),zsize(2),1), intent(in) :: pm, dvdym
@@ -893,6 +925,85 @@ contains
     call update_average_scalar(pdvdy_q4m, p_fluct*dvdy_fluct, ep, mask=mask4)
 
   end subroutine update_pstrain_cond_avg
+
+  subroutine update_lambda2_avg(lambda2m,lambda22m,&
+                              dudx,dudy,dudz,dvdx,dvdy,dvdz,&
+                              dwdx,dwdy,dwdz,ep)
+    use decomp_2d, only : mytype, xsize, zsize
+    use MPI
+    use param
+
+    real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: lambda2m,lambda22m
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: dudx, dudy, dudz
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: dvdx, dvdy, dvdz
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: dwdx, dwdy, dwdz, ep
+
+    real(mytype), dimension(3,3) :: S, Omega, S2O2, U_mat
+    integer :: lwork, info, info_sum, nb
+    real(mytype), dimension(3) :: lambda
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: lambda2
+    real(mytype), dimension(:), allocatable :: work
+    integer :: i,j,k,code
+
+    interface
+      integer function ilaenv(ISPEC,NAME,OPTS, N1, N2, N3, N4)
+        integer :: ispec
+        character(*) :: NAME, OPTS
+        integer :: N1, N2, N3, N4
+      end function ilaenv
+    end interface
+
+    nb = ilaenv(1,'DSYTRD','NU',3,3,-1,-1)
+    lwork = (nb+2)*3
+    allocate(work(lwork))
+
+    info_sum = 0
+    do k = 1, zsize(3)
+      do j = 1, zsize(2)
+        do i = 1, zsize(1)
+          S(1,1) = dudx(i,j,k)
+          S(2,2) = dvdy(i,j,k)
+          S(3,3) = dwdz(i,j,k)
+
+          S(1,2) = zpfive* ( dudy(i,j,k) + dvdx(i,j,k))
+          S(2,1) = S(1,2)
+
+          S(1,3) = zpfive* ( dudz(i,j,k) + dwdx(i,j,k))
+          S(3,1) = S(1,3)
+
+          S(3,2) = zpfive* ( dwdy(i,j,k) + dvdz(i,j,k))
+          S(2,3) = S(3,2)
+
+          Omega(1,1) = zero
+          Omega(2,2) = zero
+          Omega(3,3) = zero
+
+          Omega(1,2) = zpfive* ( dudy(i,j,k) - dvdx(i,j,k))
+          Omega(2,1) = -Omega(1,2)
+
+          Omega(1,3) = zpfive* ( dudz(i,j,k) - dwdx(i,j,k))
+          Omega(3,1) = -Omega(1,3)
+
+          Omega(3,2) = zpfive* ( dwdy(i,j,k) - dvdz(i,j,k))
+          Omega(2,3) = -Omega(3,2)
+
+          S2O2 = matmul(S,S) + matmul(Omega,Omega)
+
+          call dsyev('N','U',3,S2O2,U_mat,lambda,work,lwork,info)
+          lambda2(i,j,k) = lambda(2)
+          info_sum = info_sum + info
+        enddo
+      enddo
+    enddo
+
+    if (info_sum/=0) then
+      write(*,*) "Problems calculating eigenvalules"
+      call MPI_Abort(MPI_COMM_WORLD,1,code)
+    endif
+
+    call update_average_scalar(lambda2m, lambda2, ep)
+    call update_average_scalar(lambda22m, lambda2*lambda2, ep)
+  end subroutine                                                         
   subroutine grad_init
     use param, only : zpfive, one, three,onepfive, two
     use var, only : yp, ny, dx, dz

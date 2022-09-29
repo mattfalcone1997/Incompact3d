@@ -65,6 +65,10 @@ if(ADIOS2_FOUND)
   target_link_libraries(xcompact3d PRIVATE adios2::fortran_mpi)
 endif()
 
+if(LAPACK_FOUND)
+  target_link_libraries(xcompact3d PRIVATE LAPACK::LAPACK)
+endif()
+
 install(TARGETS xcompact3d
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
