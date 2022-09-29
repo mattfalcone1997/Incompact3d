@@ -945,6 +945,7 @@ contains
     real(mytype), dimension(:), allocatable :: work
     integer :: i,j,k,code
 
+#ifdef HAVE_LAPACK
     interface
       integer function ilaenv(ISPEC,NAME,OPTS, N1, N2, N3, N4)
         integer :: ispec
@@ -1003,6 +1004,8 @@ contains
 
     call update_average_scalar(lambda2m, lambda2, ep)
     call update_average_scalar(lambda22m, lambda2*lambda2, ep)
+
+#endif    
   end subroutine                                                         
   subroutine grad_init
     use param, only : zpfive, one, three,onepfive, two
