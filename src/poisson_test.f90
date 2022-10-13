@@ -18,10 +18,15 @@ module poisson_mod
         use var
         use decomp_2d_poisson
         use decomp_2d_io
+        use dbg_schemes, only : abs_prec, sqrt_prec
         implicit none
 
-        integer :: ierr, i, i_loc
-        real(mytype) :: x
+        integer :: ierr, i, i_loc, j
+        integer :: x_ind1, y_ind1, x_ind2, y_ind2
+        real(mytype) :: eps1x, eps1y, eps2x, eps2y, eps1, eps2
+        real(mytype) :: p1(2), p2(2)
+
+        real(mytype) :: x,y
     
         call MPI_INIT(ierr)
         call MPI_COMM_RANK(MPI_COMM_WORLD,nrank,ierr)
@@ -54,10 +59,59 @@ module poisson_mod
         allocate(rhs(ph1%zst(1):ph1%zen(1), ph1%zst(2):ph1%zen(2), nzmsize))
 
         if (isource.eq.1) then
+            ! do j = ph1%zst(1),ph1%zen(1)
+            !     x = (real(j,kind=mytype) - zpfive)*dx
+            !     source(j,:,:) = a*x + b
+            ! enddo
+            do j = ph1%zst(2),ph1%zen(2)
+                x = (real(j,kind=mytype) - zpfive)*dy
+                source(:,j,:) = a*x + b
+            enddo
+        elseif (isource.eq.2) then
+            p1 = [0.4,0.7]
+            p2 = [0.6,0.7]
+
+            source = zero
+            eps1x=1e20
+            eps1y=1e20
+            eps2x=1e20
+            eps2y=1e20
+            
             do i = ph1%zst(1),ph1%zen(1)
                 x = (real(i,kind=mytype) - zpfive)*dx
-                source(i,:,:) = a*x + b
+                eps1 = abs_prec(x - p1(1))
+                if (eps1<eps1x) then
+                    eps1x = eps1
+                    x_ind1 = i
+                endif
+                eps2 = abs_prec(x - p2(1))
+                if (eps2<eps2x) then
+                    eps2x = eps2
+                    x_ind2 = i
+                endif
             enddo
+
+            do j = ph1%zst(2),ph1%zen(2)
+                y = 0.5*(yp(j) + yp(j+1))
+                eps1 = abs_prec(y - p1(2))
+                if (eps1<eps1y) then
+                    eps1y = eps1
+                    y_ind1 = j
+                endif
+                eps2 = abs_prec(y - p2(2))
+                if (eps2<eps2y) then
+                    eps2y = eps2
+                    y_ind2 = j
+                endif
+            enddo
+
+            eps1 = sqrt_prec(eps1x*eps1x + eps1y*eps1y)
+            call MPI_Allreduce(eps1,eps1x,1,real_type,MPI_MIN,DECOMP_2D_COMM_CART_Z,ierr)
+            if (eps1x == eps1) source(x_ind1,y_ind1,:) = -one
+
+            eps2 = sqrt_prec(eps2x*eps2x + eps2y*eps2y)
+            call MPI_Allreduce(eps2,eps2x,1,real_type,MPI_MIN,DECOMP_2D_COMM_CART_Z,ierr)
+            if (eps2x == eps2) source(x_ind2,y_ind2,:) = one
         else
             write(*,*) "problems pal"
             call MPI_Abort(MPI_COMM_WORLD,1,ierr)
@@ -84,6 +138,7 @@ module poisson_mod
         use decomp_2d
         use variables
         use param
+        use decomp_2d_poisson
 
         implicit none
         integer :: unit
@@ -91,7 +146,7 @@ module poisson_mod
                              istret, beta, xlx, yly, zlz,&
                              isource
         namelist/boundaries/nclx1, nclxn, ncly1, nclyn, nclz1, nclzn
-        namelist/poisson/ a,b
+        namelist/poissonlist/ a,b,bcx,bcy,bcz
         NAMELIST/NumOptions/ ifirstder, isecondder, itimescheme, iimplicit, &
                                 nu0nu, cnu, ipinter
         
@@ -100,8 +155,8 @@ module poisson_mod
         read(unit,nml=basic_params) ; rewind(unit)
         read(unit,nml=boundaries) ; rewind(unit)
         read(unit,nml=NumOptions) ; rewind(unit)
-        if (isource .eq.1) &
-            read(unit,nml=poisson) ; rewind(unit)
+        if (isource .eq.1.or.isource .eq.2) &
+            read(unit,nml=poissonlist) ; rewind(unit)
 
         close(unit)
 
@@ -235,6 +290,7 @@ module poisson_mod
     use variables, only : nvisu, yp
     use param, only : dx,dy,dz,istret,zpfive
     use decomp_2d, only : mytype, nrank, xszV, yszV, zszV, ystV
+    use variables, only : nx, ny, nz, nxm, nym, nzm
 
     implicit none
 
@@ -243,7 +299,7 @@ module poisson_mod
 
     ! Local variables
     integer :: i,k,j
-    real(mytype) :: xc(xszV(1)-1), zc(zszV(3)-1), yc(yszV(2)-1)
+    real(mytype) :: xc(nxm), zc(nzm), yc(nym)
 
     if (nrank.eq.0) then
       OPEN(newunit=ioxdmf,file="./data/"//gen_snapshotname(pathname, filename, "xdmf"))
@@ -253,36 +309,36 @@ module poisson_mod
       write(ioxdmf,*)'<Xdmf xmlns:xi="http://www.w3.org/2001/XInclude" Version="2.0">'
       write(ioxdmf,*)'<Domain>'
       if (istret.ne.0) then
-        do i=1,xszV(1)-1
+        do i=1,nxm
           xc(i) = (real(i-1,mytype) + zpfive)*dx*nvisu
         enddo
-        do k=1,zszV(3)-1
+        do k=1,nzm
           zc(k) = (real(k-1,mytype) + zpfive)*dz*nvisu
         enddo
-        do j=1,yszV(2)-1,nvisu
+        do j=1,nym,nvisu
             yc(k) = zpfive*(yp(j) + yp(j+1))
         enddo
 
         write(ioxdmf,*)'    <Topology name="topo" TopologyType="3DRectMesh"'
-        write(ioxdmf,*)'        Dimensions="',zszV(3)-1,yszV(2)-1,xszV(1)-1,'">'
+        write(ioxdmf,*)'        Dimensions="',nzm,nym,nxm,'">'
         write(ioxdmf,*)'    </Topology>'
         write(ioxdmf,*)'    <Geometry name="geo" Type="VXVYVZ">'
-          write(ioxdmf,*)'        <DataItem Dimensions="',xszV(1)-1,'" NumberType="Float" Precision="4" Format="XML">'
+          write(ioxdmf,*)'        <DataItem Dimensions="',nxm,'" NumberType="Float" Precision="4" Format="XML">'
           write(ioxdmf,*)'        ',xc(:)
 
         write(ioxdmf,*)'        </DataItem>'
-        write(ioxdmf,*)'        <DataItem Dimensions="',yszV(2)-1,'" NumberType="Float" Precision="4" Format="XML">'
+        write(ioxdmf,*)'        <DataItem Dimensions="',nym,'" NumberType="Float" Precision="4" Format="XML">'
         write(ioxdmf,*)'        ',yc(:)
 
         write(ioxdmf,*)'        </DataItem>'
-        write(ioxdmf,*)'        <DataItem Dimensions="',zszV(3)-1,'" NumberType="Float" Precision="4" Format="XML">'
+        write(ioxdmf,*)'        <DataItem Dimensions="',nzm,'" NumberType="Float" Precision="4" Format="XML">'
         write(ioxdmf,*)'        ',zc(:)
 
         write(ioxdmf,*)'        </DataItem>'
         write(ioxdmf,*)'    </Geometry>'
       else
         write(ioxdmf,*)'    <Topology name="topo" TopologyType="3DCoRectMesh"'
-        write(ioxdmf,*)'        Dimensions="',zszV(3)-1,yszV(2)-1,xszV(1)-1,'">'
+        write(ioxdmf,*)'        Dimensions="',nzm,nym,nxm,'">'
         
         write(ioxdmf,*)'    </Topology>'
         write(ioxdmf,*)'    <Geometry name="geo" Type="ORIGIN_DXDYDZ">'
@@ -337,6 +393,7 @@ module poisson_mod
     use decomp_2d, only : mytype, xsize, xszV, yszV, zszV, ph1
     use decomp_2d, only : nrank, fine_to_coarseV
     use decomp_2d_io, only : decomp_2d_write_one, decomp_2d_write_plane
+    use variables, only : nx, ny, nz, nxm, nym, nzm
 
     implicit none
 
@@ -380,7 +437,7 @@ module poisson_mod
 #else
         write(ioxdmf,*)'            DataType="Float" Precision="4" Endian="little" Seek="0"'
 #endif
-        write(ioxdmf,*)'            Dimensions="',zszV(3)-1,yszV(2)-1,xszV(1)-1,'">'
+        write(ioxdmf,*)'            Dimensions="',nzm,nym,nxm,'">'
         write(ioxdmf,*)'              '//gen_h5path(gen_filename(pathname, filename, 'bin'), '1')
         write(ioxdmf,*)'           </DataItem>'
         write(ioxdmf,*)'        </Attribute>'

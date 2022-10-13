@@ -2,11 +2,13 @@ file(GLOB files_decomp decomp_2d.f90
                        glassman.f90
 		       io.f90)
 include_directories(${CMAKE_SOURCE_DIR}/decomp2d)
-if(${FFT_Choice} MATCHES "generic")
+if(${FFT_Choice} STREQUAL "generic")
   file(GLOB files_fft fft_generic.f90)
-elseif(${FFT_Choice} MATCHES "fftw3")
+elseif(${FFT_Choice} STREQUAL "fftw3")
   file(GLOB files_fft fft_fftw3.f90)
-endif(${FFT_Choice} MATCHES "generic")
+elseif(${FFT_Choice} STREQUAL "cosine_fftw3")
+  file(GLOB files_fft fft_fftw3_cosine.f90)
+endif()
 
 set(SRCFILES ${files_decomp} ${files_fft})
 
@@ -17,7 +19,7 @@ endif (MPI_FOUND)
 if(ADIOS2_FOUND)
   target_link_libraries(decomp2d PRIVATE adios2::fortran_mpi)
 endif()
-if(${FFT_Choice} MATCHES "fftw3")
+if(${FFT_Choice} STREQUAL "fftw3" OR ${FFT_Choice} STREQUAL "cosine_fftw3" )
   # target_link_libraries(decomp2d PRIVATE fftw3)
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(FFTW REQUIRED IMPORTED_TARGET fftw3)
@@ -25,6 +27,9 @@ if(${FFT_Choice} MATCHES "fftw3")
   target_link_libraries(decomp2d PUBLIC ${FFTW_LIBRARIES})
   target_include_directories(decomp2d PUBLIC ${FFTW_INCLUDE_DIRS})
 
+  if (${FFT_Choice} STREQUAL "cosine_fftw3")
+    add_definitions("-DHAVE_FFTW")
+  endif()
 endif()
 
 

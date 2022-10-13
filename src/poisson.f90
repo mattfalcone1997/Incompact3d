@@ -23,7 +23,7 @@ module decomp_2d_poisson
 #endif
 
   ! boundary conditions
-  integer, save :: bcx, bcy, bcz
+  integer, save, public :: bcx=-1, bcy=-1, bcz=-1
 
   ! decomposition object for physical space
   type(DECOMP_INFO), save :: ph
@@ -74,35 +74,35 @@ contains
     real(mytype) :: rl, iy
     external  rl, iy
 
-    if (nclx) then
-       bcx=0
-    else
-       bcx=1
-    endif
-    if (ncly) then
-       bcy=0
-    else
-       bcy=1
-    endif
-    if (nclz) then
-       bcz=0
-    else
-       bcz=1
-    endif
+   !  if (nclx) then
+   !     bcx=0
+   !  else
+   !     bcx=1
+   !  endif
+   !  if (ncly) then
+   !     bcy=0
+   !  else
+   !     bcy=1
+   !  endif
+   !  if (nclz) then
+   !     bcz=0
+   !  else
+   !     bcz=1
+   !  endif
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Top level wrapper
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if (bcx==0 .and. bcy==0 .and. bcz==0) then
        poisson => poisson_000
-    else if (bcx==1 .and. bcy==0 .and. bcz==0) then
-       poisson => poisson_100
-    else if (bcx==0 .and. bcy==1 .and. bcz==0) then
-       poisson => poisson_010
-    else if (bcx==1 .and. bcy==1) then   ! 110 & 111
-       poisson => poisson_11x
+    else if ((bcx==1 .or. bcx==2) .and. bcy==0 .and. bcz==0) then
+       poisson => poisson_100_new
+    else if (bcx==0 .and. (bcy==1.or.bcy==2) .and. bcz==0) then
+       poisson => poisson_010_new
+    else if ((bcx==1 .or. bcx==2) .and. (bcy==1.or.bcy==2)) then   ! 110 & 111
+       poisson => poisson_11x_new
     else
-       stop 'boundary condition not supported'
+       stop 'boundary condition not supported or set'
     end if
 
     nx = nx_global
@@ -143,7 +143,7 @@ contains
        allocate(a(sp%yst(1):sp%yen(1),ny/2,sp%yst(3):sp%yen(3),5))
        allocate(a2(sp%yst(1):sp%yen(1),ny/2,sp%yst(3):sp%yen(3),5))
        allocate(a3(sp%yst(1):sp%yen(1),ny,sp%yst(3):sp%yen(3),5))
-    else if (bcx==1 .and. bcy==0 .and. bcz==0) then
+    else if ((bcx==1.or.bcx==2) .and. bcy==0 .and. bcz==0) then
        allocate(cw1(sp%xst(1):sp%xen(1),sp%xst(2):sp%xen(2), &
             sp%xst(3):sp%xen(3)))
        allocate(cw1b(sp%xst(1):sp%xen(1),sp%xst(2):sp%xen(2), &
@@ -159,7 +159,7 @@ contains
        allocate(a(sp%yst(1):sp%yen(1),ny/2,sp%yst(3):sp%yen(3),5))
        allocate(a2(sp%yst(1):sp%yen(1),ny/2,sp%yst(3):sp%yen(3),5))
        allocate(a3(sp%yst(1):sp%yen(1),ny,sp%yst(3):sp%yen(3),5))
-    else if (bcx==0 .and. bcy==1 .and. bcz==0) then
+    else if (bcx==0 .and. (bcy==1.or.bcy==2) .and. bcz==0) then
        allocate(rw2(ph%yst(1):ph%yen(1),ph%yst(2):ph%yen(2), &
             ph%yst(3):ph%yen(3)))
        allocate(rw2b(ph%yst(1):ph%yen(1),ph%yst(2):ph%yen(2), &
@@ -179,7 +179,7 @@ contains
        allocate(a(sp%yst(1):sp%yen(1),ny/2,sp%yst(3):sp%yen(3),5))
        allocate(a2(sp%yst(1):sp%yen(1),ny/2,sp%yst(3):sp%yen(3),5))
        allocate(a3(sp%yst(1):sp%yen(1),ny,sp%yst(3):sp%yen(3),5))
-    else if (bcx==1 .and. bcy==1) then
+    else if ((bcx==1.or.bcx==2) .and. (bcy==1.or.bcy==2)) then
        allocate(cw1(sp%xst(1):sp%xen(1),sp%xst(2):sp%xen(2), &
             sp%xst(3):sp%xen(3)))
        allocate(cw1b(sp%xst(1):sp%xen(1),sp%xst(2):sp%xen(2), &
@@ -667,10 +667,185 @@ contains
     return
   end subroutine poisson_100
 
+  subroutine poisson_100_new(rhs)
 
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ! Solving 3D Poisson equation: Neumann in Y; periodic in X & Z
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    use dbg_schemes, only: abs_prec
+
+    implicit none
+
+    real(mytype), dimension(:,:,:), intent(INOUT) :: rhs
+
+    complex(mytype) :: xyzk
+    real(mytype) :: tmp1, tmp2, tmp3, tmp4
+    real(mytype) :: xx1,xx2,xx3,xx4,xx5,xx6,xx7,xx8
+
+    integer :: nx,ny,nz, i,j,k, itmp
+
+    complex(mytype) :: cx
+    real(mytype) :: rl, iy
+    external cx, rl, iy
+
+100 format(1x,a8,3I4,2F12.6)
+
+    nx = nx_global - 1
+    ny = ny_global
+    nz = nz_global
+
+    write(*,*) 'Poisson_100'
+
+    if (.not. fft_initialised) then
+       call decomp_2d_fft_init(PHYSICAL_IN_Z,nx,ny,nz,bcx,bcy,bcz)
+       fft_initialised = .true.
+    end if
+
+    ! compute r2c transform 
+    call decomp_2d_fft_3d(rhs,cw1)
+
+    ! normalisation
+    cw1 = half*cw1 / real(nx, kind=mytype) /real(ny, kind=mytype) &
+         / real(nz, kind=mytype)
+#ifdef DEBUG
+    do k = sp%xst(3), sp%xen(3)
+       do j = sp%xst(2), sp%xen(2)
+          do i = sp%xst(1), sp%xen(1)
+             if (abs_prec(cw1(i,j,k)) > 1.0e-4) then
+                write(*,100) 'START', i, j, k, cw1(i,j,k)
+             end if
+          end do
+       end do
+    end do
+#endif
+
+    ! post-processing in spectral space
+
+    ! POST PROCESSING IN Z
+    do k = sp%xst(3), sp%xen(3)
+       do j = sp%xst(2), sp%xen(2)
+          do i = sp%xst(1), sp%xen(1)
+             tmp1 = rl(cw1(i,j,k))
+             tmp2 = iy(cw1(i,j,k))
+             cw1(i,j,k) = cx(tmp1 * bz(k) + tmp2 * az(k), &
+                             tmp2 * bz(k) - tmp1 * az(k))
+#ifdef DEBUG
+             if (abs_prec(cw1(i,j,k)) > 1.0e-4) &
+                  write(*,100) 'after z',i,j,k,cw1(i,j,k)
+#endif
+          end do
+       end do
+    end do
+
+    ! POST PROCESSING IN Y
+    do k = sp%xst(3), sp%xen(3)
+       do j = sp%xst(2), sp%xen(2)
+          do i = sp%xst(1), sp%xen(1)
+             tmp1 = rl(cw1(i,j,k))
+             tmp2 = iy(cw1(i,j,k))
+             cw1(i,j,k) = cx(tmp1 * by(j) + tmp2 * ay(j), &
+                             tmp2 * by(j) - tmp1 * ay(j))
+             if (j > (ny/2+1)) cw1(i,j,k) = -cw1(i,j,k)
+#ifdef DEBUG
+             if (abs_prec(cw1(i,j,k)) > 1.0e-4) &
+                  write(*,100) 'after y',i,j,k,cw1(i,j,k)
+#endif
+          end do
+       end do
+    end do
+
+#ifdef DEBUG
+    do k = sp%xst(3), sp%xen(3)
+       do j = sp%xst(2), sp%xen(2)
+          do i = sp%xst(1), sp%xen(1)
+             if (abs_prec(cw1(i,j,k)) > 1.0e-4) then
+                write(*,100) 'after x',i,j,k,cw1(i,j,k)
+             end if
+          end do
+       end do
+    end do
+#endif
+
+    ! Solve Poisson
+    do k = sp%xst(3), sp%xen(3)
+       do j = sp%xst(2), sp%xen(2)
+          do i = sp%xst(1), sp%xen(1)
+             tmp1 = rl(kxyz(i,j,k))
+             tmp2 = iy(kxyz(i,j,k))
+             ! CANNOT DO A DIVISION BY ZERO
+             if ((abs_prec(tmp1) < epsilon).and.(abs_prec(tmp2) < epsilon)) then    
+                cw1(i,j,k)=cx(zero, zero)
+             end if
+             if ((abs_prec(tmp1) < epsilon).and.(abs_prec(tmp2) >= epsilon)) then
+                cw1(i,j,k)=cx(zero, iy(cw1(i,j,k)) / (-tmp2))
+             end if
+             if ((abs_prec(tmp1) >= epsilon).and.(abs_prec(tmp2) < epsilon)) then    
+                cw1(i,j,k)=cx(rl(cw1(i,j,k)) / (-tmp1), zero)
+             end if
+             if ((abs_prec(tmp1) >= epsilon).and.(abs_prec(tmp2) >= epsilon)) then
+                cw1(i,j,k)=cx(rl(cw1(i,j,k)) / (-tmp1), iy(cw1(i,j,k)) / (-tmp2))
+             end if
+#ifdef DEBUG
+             if (abs_prec(cw1(i,j,k)) > 1.0e-4) &
+                  write(*,100) 'AFTER',i,j,k,cw1(i,j,k)
+#endif
+          end do
+       end do
+    end do
+
+    ! post-processing backward
+
+#ifdef DEBUG
+    do k = sp%xst(3),sp%xen(3)
+       do j = sp%xst(2),sp%xen(2)
+          do i = sp%xst(1),sp%xen(1)
+             if (abs_prec(cw1(i,j,k)) > 1.0e-4) then
+                write(*,100) 'AFTER X',i,j,k,cw1(i,j,k)
+             end if
+          end do
+       end do
+    end do
+#endif
+
+    ! POST PROCESSING IN Y
+    do k = sp%xst(3), sp%xen(3)
+       do j = sp%xst(2), sp%xen(2)
+          do i = sp%xst(1), sp%xen(1)
+             tmp1 = rl(cw1(i,j,k))
+             tmp2 = iy(cw1(i,j,k))
+             cw1(i,j,k) = cx(tmp1 * by(j) - tmp2 * ay(j), &
+                             tmp2 * by(j) + tmp1 * ay(j))
+             if (j > (ny/2+1)) cw1(i,j,k) = -cw1(i,j,k)
+#ifdef DEBUG
+             if (abs_prec(cw1(i,j,k)) > 1.0e-4) &
+                  write(*,100) 'AFTER Y',i,j,k,cw1(i,j,k)
+#endif
+          end do
+       end do
+    end do
+
+    ! POST PROCESSING IN Z
+    do k = sp%xst(3), sp%xen(3)
+       do j = sp%xst(2), sp%xen(2)
+          do i = sp%xst(1), sp%xen(1)
+             tmp1 = rl(cw1(i,j,k))
+             tmp2 = iy(cw1(i,j,k))
+             cw1(i,j,k) = cx(tmp1 * bz(k) - tmp2 * az(k), &
+                             tmp2 * bz(k) + tmp1 * az(k))
+#ifdef DEBUG
+             if (abs_prec(cw1(i,j,k)) > 1.0e-4) &
+                  write(*,100) 'END',i,j,k,cw1(i,j,k)
+#endif
+          end do
+       end do
+    end do
+
+    ! compute c2r transform
+    call decomp_2d_fft_3d(cw1,rhs)
+
+    !  call decomp_2d_fft_finalize
+
+    return
+  end subroutine poisson_100_new
+
+
   subroutine poisson_010(rhs)
 
     use dbg_schemes, only: abs_prec
@@ -1026,8 +1201,295 @@ contains
 
     !  call decomp_2d_fft_finalize
 
+   return
+ end subroutine poisson_010
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! Solving 3D Poisson equation: Neumann in Y; periodic in X & Z
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine poisson_010_new(rhs)
+
+    use dbg_schemes, only: abs_prec
+
+    implicit none
+
+    real(mytype), dimension(:,:,:), intent(INOUT) :: rhs
+
+    complex(mytype) :: xyzk
+    real(mytype) :: tmp1, tmp2, tmp3, tmp4
+    real(mytype) :: xx1,xx2,xx3,xx4,xx5,xx6,xx7,xx8
+
+    integer :: nx,ny,nz, i,j,k
+
+    complex(mytype) :: cx
+    real(mytype) :: rl, iy
+    external cx, rl, iy
+
+    real(mytype) :: avg_param
+
+100 format(1x,a8,3I4,2F12.6)
+
+    nx = nx_global
+    ny = ny_global - 1
+    nz = nz_global
+
+    write(*,*) "Poisson 010"
+#ifdef DEBG
+    if (nrank .eq. 0) write(*,*)'# Poisoon_010 Init'
+#endif
+
+    if (.not. fft_initialised) then
+       call decomp_2d_fft_init(PHYSICAL_IN_Z,nx,ny,nz,bcx,bcy,bcz)
+       fft_initialised = .true.
+    end if
+    ! compute r2c transform 
+    call decomp_2d_fft_3d(rhs,cw1)
+
+    ! normalisation
+    cw1 = half * cw1 / real(nx, kind=mytype) /real(ny, kind=mytype) &
+         / real(nz, kind=mytype)
+#ifdef DEBUG
+    do k = sp%xst(3), sp%xen(3)
+       do j = sp%xst(2), sp%xen(2)
+          do i = sp%xst(1), sp%xen(1)
+             if (abs_prec(cw1(i,j,k)) > 1.0e-4) then
+                write(*,100) 'START',i,j,k,cw1(i,j,k)
+             end if
+          end do
+       end do
+    end do
+#endif
+
+    ! post-processing in spectral space
+
+    ! POST PROCESSING IN Z
+    do k = sp%xst(3), sp%xen(3)
+       do j = sp%xst(2), sp%xen(2)
+          do i = sp%xst(1), sp%xen(1)
+             tmp1 = rl(cw1(i,j,k))
+             tmp2 = iy(cw1(i,j,k))
+             cw1(i,j,k) = cx(tmp1 * bz(k) + tmp2 * az(k), &
+                             tmp2 * bz(k) - tmp1 * az(k))
+#ifdef DEBUG
+             if (abs_prec(cw1(i,j,k)) > 1.0e-4) &
+                  write(*,100) 'after z',i,j,k,cw1(i,j,k)
+#endif
+          end do
+       end do
+    end do
+
+    ! POST PROCESSING IN X
+    do k = sp%xst(3), sp%xen(3)
+       do j = sp%xst(2), sp%xen(2)
+          do i = sp%xst(1), sp%xen(1)
+             tmp1 = rl(cw1(i,j,k))
+             tmp2 = iy(cw1(i,j,k))
+             cw1(i,j,k) = cx(tmp1 * bx(i) + tmp2 * ax(i), &
+                             tmp2 * bx(i) - tmp1 * ax(i))
+             if (i.gt.(nx/2+1)) cw1(i,j,k)=-cw1(i,j,k)
+#ifdef DEBUG
+             if (abs_prec(cw1(i,j,k)) > 1.0e-4) &
+                  write(*,100) 'after x',i,j,k,cw1(i,j,k)
+#endif
+          end do
+       end do
+    end do
+
+    call transpose_x_to_y(cw1,cw2b,sp)
+
+#ifdef DEBUG
+    do k = sp%yst(3), sp%yen(3)
+       do j = sp%yst(2), sp%yen(2)
+          do i = sp%yst(1), sp%yen(1)
+             if (abs_prec(cw2b(i,j,k)) > 1.0e-4) then
+                write(*,100) 'after y',i,j,k,cw2b(i,j,k)
+                write(*,*)kxyz(i,j,k)
+             end if
+          end do
+       end do
+    end do
+#endif
+
+    if (istret == 0) then 
+
+       ! Solve Poisson
+       ! doing wave number division in Y-pencil
+       do k = sp%yst(3), sp%yen(3)
+          do j = sp%yst(2), sp%yen(2)
+             do i = sp%yst(1), sp%yen(1)
+                tmp1 = rl(kxyz(i,j,k))
+                tmp2 = iy(kxyz(i,j,k))
+                !CANNOT DO A DIVISION BY ZERO
+                if ((abs_prec(tmp1) < epsilon).and.(abs_prec(tmp2) < epsilon)) then    
+                   cw2b(i,j,k) = cx(zero, zero)
+                end if
+                if ((abs_prec(tmp1) < epsilon).and.(abs_prec(tmp2) >= epsilon)) then
+                   cw2b(i,j,k) = cx(zero, iy(cw2b(i,j,k)) / (-tmp2))
+                end if
+                if ((abs_prec(tmp1) >= epsilon).and.(abs_prec(tmp2) < epsilon)) then    
+                   cw2b(i,j,k) = cx(rl(cw2b(i,j,k)) / (-tmp1), zero)
+                end if
+                if ((abs_prec(tmp1) >= epsilon).and.(abs_prec(tmp2) >= epsilon)) then
+                   cw2b(i,j,k) = cx(rl(cw2b(i,j,k)) / (-tmp1), iy(cw2b(i,j,k)) / (-tmp2))
+                end if
+             end do
+          end do
+       end do
+
+    else
+       !call matrice_refinement()
+       !write(*,*) 'PO_010 ii1 A rl ', rl(a(1,1,1,1)),rl(a(1,1,1,2)),rl(a(1,1,1,3)),&
+       !                              rl(a(1,1,1,4)),rl(a(1,1,1,5))
+       !write(*,*) 'PO_010 ii1 A iy ', iy(a(1,1,1,1)),iy(a(1,1,1,2)),iy(a(1,1,1,3)),&
+       !                              iy(a(1,1,1,4)),iy(a(1,1,1,5))
+       !!                 
+       !write(*,*) 'PO_010 ii5 A rl ', rl(a(5,5,5,1)),rl(a(5,5,5,2)),rl(a(5,5,5,3)),&
+       !                              rl(a(5,5,5,4)),rl(a(5,5,5,5))
+       !write(*,*) 'PO_010 ii5 A iy ', iy(a(5,5,5,1)),iy(a(5,5,5,2)),iy(a(5,5,5,3)),&
+       !                              iy(a(5,5,5,4)),iy(a(5,5,5,5))
+       !!
+       !write(*,*) 'PO_010 ii1 A2 rl ', rl(a2(1,1,1,1)),rl(a2(1,1,1,2)),rl(a2(1,1,1,3)),&
+       !                               rl(a2(1,1,1,4)),rl(a2(1,1,1,5))
+       !write(*,*) 'PO_010 ii1 A2 iy ', iy(a2(1,1,1,1)),iy(a2(1,1,1,2)),iy(a2(1,1,1,3)),&
+       !                               iy(a2(1,1,1,4)),iy(a2(1,1,1,5))
+       !!                 
+       !write(*,*) 'PO_010 ii5 A2 rl ', rl(a2(5,5,5,1)),rl(a2(5,5,5,2)),rl(a2(5,5,5,3)),&
+       !                               rl(a2(5,5,5,4)),rl(a2(5,5,5,5))
+       !write(*,*) 'PO_010 ii5 A2 iy ', iy(a2(5,5,5,1)),iy(a2(5,5,5,2)),iy(a2(5,5,5,3)),&
+       !                               iy(a2(5,5,5,4)),iy(a2(5,5,5,5))
+       !!!
+       !!!
+       !write(*,*) 'PO_010 ii1 A3 rl ', rl(a3(1,1,1,1)),rl(a3(1,1,1,2)),rl(a3(1,1,1,3)),&
+       !                          rl(a3(1,1,1,4)),rl(a3(1,1,1,5))
+       !write(*,*) 'PO_010 ii1 A3 iy ', iy(a3(1,1,1,1)),iy(a3(1,1,1,2)),iy(a3(1,1,1,3)),&
+       !                          iy(a3(1,1,1,4)),iy(a3(1,1,1,5))
+       !!
+       !write(*,*) 'PO_010 ii5 A3 rl ', rl(a3(5,5,5,1)),rl(a3(5,5,5,2)),rl(a3(5,5,5,3)),&
+       !                             rl(a3(5,5,5,4)),rl(a3(5,5,5,5))
+       !write(*,*) 'PO_010 ii5 A3 iy ', iy(a3(5,5,5,1)),iy(a3(5,5,5,2)),iy(a3(5,5,5,3)),&
+       !                             iy(a3(5,5,5,4)),iy(a3(5,5,5,5))
+       if (istret /= 3) then
+          cw2 = zero
+          cw2c = zero
+          do k = sp%yst(3), sp%yen(3)
+             do j = 1, ny/2
+                do i = sp%yst(1), sp%yen(1)
+                   cw2(i,j,k) = cw2b(i,2*j-1,k) 
+                   cw2c(i,j,k) = cw2b(i,2*j,k)
+                enddo
+             enddo
+          enddo
+
+          call inversion5_v1(a,cw2,sp)
+          call inversion5_v1(a2,cw2c,sp)
+
+          cw2b = zero
+          do k = sp%yst(3), sp%yen(3)
+             do j = 1, ny-1,2
+                do i = sp%yst(1), sp%yen(1)
+                   cw2b(i,j,k) = cw2(i,(j+1)/2,k)
+                enddo
+             enddo
+             do j = 2, ny, 2
+                do i=sp%yst(1), sp%yen(1)
+                   cw2b(i,j,k) = cw2c(i,j/2,k)
+                enddo
+             enddo
+          enddo
+       else
+          do k = sp%yst(3), sp%yen(3)
+             do j = 1, ny
+                do i = sp%yst(1), sp%yen(1)
+                   cw2(i,j,k) = cw2b(i,j,k) 
+                enddo
+             enddo
+          enddo
+          call inversion5_v2(a3,cw2,sp)
+          do k = sp%yst(3), sp%yen(3)
+             do j = 1, ny
+                do i = sp%yst(1), sp%yen(1)
+                   cw2b(i,j,k) = cw2(i,j,k) 
+                enddo
+             enddo
+          enddo
+       endif
+
+    endif
+
+    !we are in Y pencil
+    do k = sp%yst(3), sp%yen(3)  
+       do i = sp%yst(1), sp%yen(1)
+          if ((i == nx/2+1).and.(k == nz/2+1)) then
+             cw2b(i,:,k) = zero
+          endif
+       enddo
+    enddo
+#ifdef DEBUG
+    do k = sp%yst(3), sp%yen(3)
+       do j = sp%yst(2), sp%yen(2)
+          do i = sp%yst(1), sp%yen(1)
+             if (abs_prec(cw2b(i,j,k)) > 1.0e-4) then
+                write(*,100) 'AFTER',i,j,k,cw2b(i,j,k)
+                write(*,*)kxyz(i,j,k)
+             end if
+          end do
+       end do
+    end do
+#endif
+
+    ! Back to X-pencil
+    call transpose_y_to_x(cw2b,cw1,sp)
+#ifdef DEBUG
+    do k = sp%xst(3),sp%xen(3)
+       do j = sp%xst(2),sp%xen(2)
+          do i = sp%xst(1),sp%xen(1)
+             if (abs_prec(cw1(i,j,k)) > 1.0e-4) then
+                write(*,100) 'AFTER Y',i,j,k,cw1(i,j,k)
+             end if
+          end do
+       end do
+    end do
+#endif
+
+    ! POST PROCESSING IN X
+    do k = sp%xst(3), sp%xen(3)
+       do j = sp%xst(2), sp%xen(2)
+          do i = sp%xst(1), sp%xen(1)
+             tmp1 = rl(cw1(i,j,k))
+             tmp2 = iy(cw1(i,j,k))
+             cw1(i,j,k) = cx(tmp1 * bx(i) - tmp2 * ax(i), &
+                             tmp2 * bx(i) + tmp1 * ax(i))
+             if (i > (nx/2 + 1)) cw1(i,j,k) = -cw1(i,j,k)
+#ifdef DEBUG
+             if (abs_prec(cw1(i,j,k)) > 1.0e-4) &
+                  write(*,100) 'AFTER X',i,j,k,cw1(i,j,k)
+#endif
+          end do
+       end do
+    end do
+
+    ! POST PROCESSING IN Z
+    do k = sp%xst(3), sp%xen(3)
+       do j = sp%xst(2), sp%xen(2)
+          do i = sp%xst(1), sp%xen(1)
+             tmp1 = rl(cw1(i,j,k))
+             tmp2 = iy(cw1(i,j,k))
+             cw1(i,j,k) = cx(tmp1 * bz(k) - tmp2 * az(k), &
+                             tmp2 * bz(k) + tmp1 * az(k))
+#ifdef DEBUG
+             if (abs_prec(cw1(i,j,k)) > 1.0e-4) &
+                  write(*,100) 'END',i,j,k,cw1(i,j,k)
+#endif
+          end do
+       end do
+    end do
+
+    ! compute c2r transform, back to physical space
+    call decomp_2d_fft_3d(cw1,rhs)
+
+    !  call decomp_2d_fft_finalize
+
     return
-  end subroutine poisson_010
+  end subroutine poisson_010_new
 
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1553,6 +2015,301 @@ contains
 
 
 
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! Solving 3D Poisson equation: Neumann in X, Y; Neumann/periodic in Z
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine poisson_11x_new(rhs)
+
+   use dbg_schemes, only: abs_prec
+   
+
+   implicit none
+
+   real(mytype), dimension(:,:,:), intent(INOUT) :: rhs
+
+   complex(mytype) :: xyzk
+   real(mytype) :: tmp1, tmp2, tmp3, tmp4
+   real(mytype) :: xx1,xx2,xx3,xx4,xx5,xx6,xx7,xx8
+
+   integer :: nx,ny,nz, i,j,k
+
+   complex(mytype) :: cx
+   real(mytype) :: rl, iy
+   external cx, rl, iy
+#ifdef DEBG
+   real(mytype) avg_param
+#endif
+
+100 format(1x,a8,3I4,2F12.6)
+
+   nx = nx_global - 1
+   ny = ny_global - 1
+   !write(*,*) 'Poisson_11x'
+   if (bcz == 1) then
+      nz = nz_global - 1
+   else if (bcz == 0) then
+      nz = nz_global
+   end if
+
+   if (bcz == 1) then  
+      do j = 1, ph%zsz(2)
+         do i = 1, ph%zsz(1)
+            do k = 1, nz/2
+               rw3(i,j,k) = rhs(i,j,2*(k-1)+1)
+            end do
+            do k = nz/2 + 1, nz
+               rw3(i,j,k) = rhs(i,j,2*nz-2*k+2)
+            end do
+         end do
+      end do
+   end if
+
+
+
+   if (.not. fft_initialised) then
+      call decomp_2d_fft_init(PHYSICAL_IN_Z,nx,ny,nz,bcx,bcy,0)
+      fft_initialised = .true.
+   end if
+
+   ! compute r2c transform 
+
+   call decomp_2d_fft_3d(rhs,cw1)
+
+   ! normalisation
+   cw1 = zptwofive*cw1 / real(nx, kind=mytype) /real(ny, kind=mytype) &
+        / real(nz, kind=mytype)
+#ifdef DEBUG
+   do k = sp%xst(3),sp%xen(3)
+      do j = sp%xst(2),sp%xen(2)
+         do i = sp%xst(1),sp%xen(1)
+            if (abs_prec(cw1(i,j,k)) > 1.0e-4) then
+               write(*,100) 'START',i,j,k,cw1(i,j,k)
+            end if
+         end do
+      end do
+   end do
+#endif
+
+   ! post-processing in spectral space
+
+   ! POST PROCESSING IN Z
+   do k = sp%xst(3), sp%xen(3)
+      do j = sp%xst(2), sp%xen(2)
+         do i = sp%xst(1), sp%xen(1)
+            tmp1 = rl(cw1(i,j,k))
+            tmp2 = iy(cw1(i,j,k))
+            cw1(i,j,k) = cx(tmp1 * bz(k) + tmp2 * az(k), &
+                            tmp2 * bz(k) - tmp1 * az(k))
+#ifdef DEBUG
+            if (abs_prec(cw1(i,j,k)) > 1.0e-4) &
+                 write(*,100) 'after z',i,j,k,cw1(i,j,k)
+#endif
+         end do
+      end do
+   end do
+#ifdef DEBG
+   avg_param = zero
+   call avg3d (abs(cw1), avg_param)
+   if (nrank == 0) write(*,*)'## Poisson11X Post in Z cw1 ', avg_param
+#endif
+
+   if (istret == 0) then
+
+      ! Solve Poisson
+      do k = sp%xst(3), sp%xen(3)
+         do j = sp%xst(2), sp%xen(2)
+            do i = sp%xst(1), sp%xen(1)
+               tmp1 = rl(kxyz(i,j,k))
+               tmp2 = iy(kxyz(i,j,k))
+               !CANNOT DO A DIVISION BY ZERO
+               if ((abs_prec(tmp1) < epsilon).and.(abs_prec(tmp2) < epsilon)) then    
+                  cw1(i,j,k) = cx(zero, zero)
+               end if
+               if ((abs_prec(tmp1) < epsilon).and.(abs_prec(tmp2) >= epsilon)) then
+                  cw1(i,j,k) = cx(zero, iy(cw1(i,j,k)) / (-tmp2))
+               end if
+               if ((abs_prec(tmp1) >= epsilon).and.(abs_prec(tmp2) < epsilon)) then    
+                  cw1(i,j,k) = cx(rl(cw1(i,j,k)) / (-tmp1), zero)
+               end if
+               if ((abs_prec(tmp1) >= epsilon).and.(abs_prec(tmp2) >= epsilon)) then
+                  cw1(i,j,k) = cx(real(cw1(i,j,k)) / (-tmp1), iy(cw1(i,j,k)) / (-tmp2))
+               end if
+            end do
+         end do
+      end do
+#ifdef DEBUG
+      avg_param = zero
+      call avg3d (cw1b, avg_param)
+      if (nrank == 0) write(*,*)'## Poisson11X Solve Pois istret 0 ', avg_param
+#endif
+
+   else
+      call matrice_refinement()
+      !write(*,*) 'PO_11X ii1 arl ', rl(a(1,1,1,1)),rl(a(1,1,1,2)),rl(a(1,1,1,3)),&
+      !                              rl(a(1,1,1,4)),rl(a(1,1,1,5))
+      !write(*,*) 'PO_11X ii1 aiy ', iy(a(1,1,1,1)),iy(a(1,1,1,2)),iy(a(1,1,1,3)),&
+      !                              iy(a(1,1,1,4)),iy(a(1,1,1,5))
+      !!                 
+      !write(*,*) 'PO_11X ii5 arl ', rl(a(5,5,5,1)),rl(a(5,5,5,2)),rl(a(5,5,5,3)),&
+      !                              rl(a(5,5,5,4)),rl(a(5,5,5,5))
+      !write(*,*) 'PO_11X ii5 aiy ', iy(a(5,5,5,1)),iy(a(5,5,5,2)),iy(a(5,5,5,3)),&
+      !                              iy(a(5,5,5,4)),iy(a(5,5,5,5))
+      !!
+      !write(*,*) 'PO_11X ii1 a2rl ', rl(a2(1,1,1,1)),rl(a2(1,1,1,2)),rl(a2(1,1,1,3)),&
+      !                               rl(a2(1,1,1,4)),rl(a2(1,1,1,5))
+      !write(*,*) 'PO_11X ii1 a2iy ', iy(a2(1,1,1,1)),iy(a2(1,1,1,2)),iy(a2(1,1,1,3)),&
+      !                               iy(a2(1,1,1,4)),iy(a2(1,1,1,5))
+      !!                 
+      !write(*,*) 'PO_11X ii5 a2rl ', rl(a2(5,5,5,1)),rl(a2(5,5,5,2)),rl(a2(5,5,5,3)),&
+      !                               rl(a2(5,5,5,4)),rl(a2(5,5,5,5))
+      !write(*,*) 'PO_11X ii5 a2iy ', iy(a2(5,5,5,1)),iy(a2(5,5,5,2)),iy(a2(5,5,5,3)),&
+      !                               iy(a2(5,5,5,4)),iy(a2(5,5,5,5))
+      !!!
+      !write(*,*) 'PO_11X ii1 rl ', rl(a3(1,1,1,1)),rl(a3(1,1,1,2)),rl(a3(1,1,1,3)),&
+      !                             rl(a3(1,1,1,4)),rl(a3(1,1,1,5))
+      !write(*,*) 'PO_11X ii1 iy ', iy(a3(1,1,1,1)),iy(a3(1,1,1,2)),iy(a3(1,1,1,3)),&
+      !                             iy(a3(1,1,1,4)),iy(a3(1,1,1,5))
+      !!
+      !write(*,*) 'PO_11X ii1 rl ', rl(a3(5,5,5,1)),rl(a3(5,5,5,2)),rl(a3(5,5,5,3)),&
+      !                             rl(a3(5,5,5,4)),rl(a3(5,5,5,5))
+      !write(*,*) 'PO_11X ii1 iy ', iy(a3(5,5,5,1)),iy(a3(5,5,5,2)),iy(a3(5,5,5,3)),&
+      !                             iy(a3(5,5,5,4)),iy(a3(5,5,5,5))
+      ! the stretching is only working in Y pencils
+
+      call transpose_x_to_y(cw1,cw2b,sp)
+
+      !we are now in Y pencil
+
+      if (istret /= 3) then
+         cw2 = zero
+         cw2c = zero
+         do k = sp%yst(3), sp%yen(3)
+            do j = 1, ny/2
+               do i = sp%yst(1), sp%yen(1)
+                  cw2(i,j,k) = cw2b(i,2*j-1,k) 
+                  cw2c(i,j,k) = cw2b(i,2*j,k)
+               enddo
+            enddo
+         enddo
+
+         call inversion5_v1(a,cw2,sp)
+         call inversion5_v1(a2,cw2c,sp)
+
+         cw2b = zero
+         do k = sp%yst(3), sp%yen(3)
+            do j = 1, ny-1, 2
+               do i=sp%yst(1), sp%yen(1)
+                  cw2b(i,j,k) = cw2(i,(j+1)/2,k)
+               enddo
+            enddo
+            do j = 2, ny, 2
+               do i = sp%yst(1), sp%yen(1)
+                  cw2b(i,j,k) = cw2c(i,j/2,k)
+               enddo
+            enddo
+         enddo
+#ifdef DEBUG
+         avg_param = zero
+         call avg3d (cw2b, avg_param)
+         if (nrank == 0) write(*,*)'## Poisson11X Solve Pois istret < 3 ', avg_param
+#endif
+      else
+         cw2 = zero
+         do k = sp%yst(3), sp%yen(3)
+            do j = sp%yst(2), sp%yen(2)
+               do i = sp%yst(1), sp%yen(1)
+                  cw2(i,j,k) = cw2b(i,j,k) 
+               enddo
+            enddo
+         enddo
+
+         call inversion5_v2(a3,cw2,sp)
+
+         do k = sp%yst(3), sp%yen(3)
+            do j = sp%yst(2), sp%yen(2)
+               do i = sp%yst(1), sp%yen(1)
+                  cw2b(i,j,k) = cw2(i,j,k) 
+               enddo
+            enddo
+         enddo
+      endif
+#ifdef DEBUG
+         avg_param = zero
+         call avg3d (cw2b, avg_param)
+         if (nrank == 0) write(*,*)'## Poisson11X Solve Pois istret = 3 ', avg_param
+#endif
+      !we have to go back in X pencils
+      call transpose_y_to_x(cw2b,cw1,sp)
+   endif
+
+#ifdef DEBUG
+   do k = sp%xst(3),sp%xen(3)
+      do j = sp%xst(2),sp%xen(2)
+         do i = sp%xst(1),sp%xen(1)
+            if (abs_prec(cw1(i,j,k)) > 1.0e-6) then
+               write(*,*) 'AFTER',i,j,k,cw1(i,j,k)
+            end if
+         end do
+      end do
+   end do
+   avg_param = zero
+   call avg3d (cw1, avg_param)
+   if (nrank == 0) write(*,*)'## Poisson11X Solve Pois AFTER ', avg_param
+#endif
+   !stop
+   ! post-processing backward
+
+   ! POST PROCESSING IN Z
+   do k = sp%xst(3), sp%xen(3)
+      do j = sp%xst(2), sp%xen(2)
+         do i = sp%xst(1), sp%xen(1)
+            tmp1 = rl(cw1(i,j,k))
+            tmp2 = iy(cw1(i,j,k))
+            cw1(i,j,k) = cx(tmp1 * bz(k) - tmp2 * az(k), &
+                            tmp2 * bz(k) + tmp1 * az(k))
+#ifdef DEBUG
+            if (abs_prec(cw1(i,j,k)) > 1.0e-4) &
+                 write(*,100) 'END',i,j,k,cw1(i,j,k)
+#endif
+         end do
+      end do
+   end do
+#ifdef DEBUG
+   avg_param = zero
+   call avg3d (cw1, avg_param)
+   if (nrank == 0) write(*,*)'## Poisson11X Solve Pois POSTPR Z ', avg_param
+#endif
+
+   ! compute c2r transform, back to physical space
+   call decomp_2d_fft_3d(cw1,rhs)
+#ifdef DEBUG
+   avg_param = zero
+   call avg3d (rhs, avg_param)
+   if (nrank == 0) write(*,*)'## Poisson11X Solve Pois Back Phy RHS ', avg_param
+#endif
+
+   if (bcz == 1) then 
+      do j = 1, ph%zsz(2)
+         do i = 1, ph%zsz(1)
+            do k = 1, nz/2
+               rw3(i,j,2*k-1) = rhs(i,j,k)
+            end do
+            do k = 1, nz/2
+               rw3(i,j,2*k) = rhs(i,j,nz-k+1)
+            end do
+         end do
+      end do
+   endif 
+
+
+   !  call decomp_2d_fft_finalize
+
+   return
+ end subroutine poisson_11x_new
+
+
+
   subroutine abxyz(ax,ay,az,bx,by,bz,nx,ny,nz,bcx,bcy,bcz)
 
     use param
@@ -1672,7 +2429,7 @@ contains
           exs(i) = exs(nx-i+2)
           xk2(i) = xk2(nx-i+2)
        enddo
-    else
+    else if (bcx == 1) then
        do i = 1, nx
           w = twopi * half * (i-1) / nxm
           wp = acix6 * two * dx * sin_prec(w * half) +(bcix6 * two * dx) * sin_prec(three * half * w)
@@ -1686,6 +2443,17 @@ contains
        xkx(1) = zero
        exs(1) = zero
        xk2(1) = zero
+
+    else
+      do i = 1, nx
+         w = twopi * half*(i - half)/nxm
+         wp = acix6 * two * dx * sin_prec(w * half) +(bcix6 * two * dx) * sin_prec(three * half * w)
+         wp = wp / (one + two * alcaix6 * cos_prec(w))
+
+         xkx(i) = cx_one_one * nxm * wp / xlx
+         exs(i) = cx_one_one * nxm * w / xlx
+         xk2(i) = cx_one_one * (nxm * wp / xlx)**2
+      enddo
     endif
 !
     !WAVE NUMBER IN Y
@@ -1706,7 +2474,7 @@ contains
           eys(j) = eys(ny-j+2)
           yk2(j) = yk2(ny-j+2)
        enddo
-    else
+    else if (bcy == 1) then
        do j = 1, ny
           w = twopi * half * (j-1) / nym
           wp = aciy6 * two * dy * sin_prec(w * half) +(bciy6 * two *dy) * sin_prec(three * half * w)
@@ -1721,6 +2489,18 @@ contains
        yky(1) = zero
        eys(1) = zero
        yk2(1) = zero
+      else
+         do j = 1,ny
+            w = twopi * half*(j - half)/nym
+            wp = aciy6 * two * dy * sin_prec(w * half) +(bciy6 * two *dy) * sin_prec(three * half * w)
+            wp = wp / (one + two * alcaiy6 * cos_prec(w))
+!
+            if (istret == 0) yky(j) = cx_one_one * (nym * wp / yly)
+            if (istret /= 0) yky(j) = cx_one_one * (nym * wp)
+            eys(j)=cx_one_one * (nym * w / yly)
+            yk2(j)=cx_one_one * (nym * wp / yly)**2
+
+         enddo
     endif
 
     !WAVE NUMBER IN Z
