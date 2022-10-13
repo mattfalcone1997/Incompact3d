@@ -691,7 +691,7 @@ contains
     ny = ny_global
     nz = nz_global
 
-    write(*,*) 'Poisson_100'
+   !  write(*,*) 'Poisson_100'
 
     if (.not. fft_initialised) then
        call decomp_2d_fft_init(PHYSICAL_IN_Z,nx,ny,nz,bcx,bcy,bcz)
@@ -1232,7 +1232,7 @@ contains
     ny = ny_global - 1
     nz = nz_global
 
-    write(*,*) "Poisson 010"
+   !  write(*,*) "Poisson 010"
 #ifdef DEBG
     if (nrank .eq. 0) write(*,*)'# Poisoon_010 Init'
 #endif

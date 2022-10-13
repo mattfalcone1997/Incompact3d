@@ -30,6 +30,7 @@ subroutine parameter(input_i3d)
   use probes, only : nprobes, setup_probes, flag_all_digits, flag_extra_probes, xyzprobes
   use visu, only : output2D
   use forces, only : iforces, nvol, xld, xrd, yld, yud!, zld, zrd
+  use decomp_2d_poisson, only : bcx, bcy, bcz
 
   implicit none
 
@@ -43,6 +44,7 @@ subroutine parameter(input_i3d)
        numscalar, iibm, ilmn, &
        ilesmod, iscalar, &
        nclx1, nclxn, ncly1, nclyn, nclz1, nclzn, &
+       bcx, bcy, bcz,&
        ivisu, ipost, &
        gravx, gravy, gravz, &
        cpg, idir_stream, &
@@ -240,23 +242,29 @@ subroutine parameter(input_i3d)
   if (nclx1.eq.0.and.nclxn.eq.0) then
      nclx=.true.
      nxm=nx
+     if (bcx < 0) bcx = 0
   else
      nclx=.false.
      nxm=nx-1
+     if (bcx < 0) bcx = 1
   endif
   if (ncly1.eq.0.and.nclyn.eq.0) then
      ncly=.true.
      nym=ny
+     if (bcy < 0) bcy = 0
   else
      ncly=.false.
      nym=ny-1
+     if (bcy < 0) bcy = 1
   endif
   if (nclz1.eq.0.and.nclzn.eq.0) then
      nclz=.true.
      nzm=nz
+     if (bcz < 0) bcz = 0
   else
      nclz=.false.
      nzm=nz-1
+     if (bcz < 0) bcz = 1
   endif
 
   dx=xlx/real(nxm,mytype)
