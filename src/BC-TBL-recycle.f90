@@ -1049,7 +1049,7 @@ contains
       real(mytype), dimension(:), allocatable :: Cf, delta_plus
       real(mytype), dimension(:), allocatable :: y_plus, u_plus
 
-      real(mytype) :: u_tau , delta_v
+      real(mytype) :: u_tau , delta_v, u_infty, dudx
       integer(4) :: i,j
 
       allocate(Cf(nx), delta_plus(nx))
@@ -1059,7 +1059,7 @@ contains
       call Cf_correlation(re, Cf)
 
       do i = 1, nx
-
+          call u_infty_calc(i,u_infty,dudx)
           call initWallUnitCalc(Cf(i), u_tau, delta_v)
 
           y_plus(:) = yp(:)/delta_v 
@@ -1067,7 +1067,7 @@ contains
           call uplus_nickels(delta_plus(i), u_tau, y_plus, u_plus)
           
           do j =1, ny
-              u_mean(i,j) = u_plus(j)*u_tau
+              u_mean(i,j) = u_plus(j)*u_infty*u_tau
           enddo
           
       enddo
