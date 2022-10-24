@@ -1253,7 +1253,7 @@ end subroutine
    logical, dimension(2) :: periods 
    integer, allocatable, dimension(:) :: ldispl,displs, recvcounts
    logical :: reset_local
-   real(mytype) :: T_period, dtdivT
+   real(mytype) :: T_period, dtdivT, u_infty, dudx
 
    allocate(recy_mean_z_local(3, xsize(2)))
    allocate(inlt_mean_z_local(3, xsize(2)))
@@ -1339,6 +1339,10 @@ end subroutine
       recy_mean_t(:,:) = (dtdivT) *  recy_mean_z(:,:) + &
                            ( one - dtdivT )*recy_mean_t(:,:)                           
    endif
+
+   call u_infty_calc(1,u_infty,dudx)
+   inlt_mean_t(1,:) = inlt_mean_t(1,:)*u_infty/inlt_mean_t(1,ny)
+
 
    call MPI_Comm_free(split_comm_y,ierr)
    call MPI_Comm_free(split_comm_z,ierr)
