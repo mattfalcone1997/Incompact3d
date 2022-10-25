@@ -569,7 +569,11 @@ contains
     elseif (itime.eq.initstat) then
        call init_statistic()
     elseif (itime.eq.ifirst) then
-       call restart_statistic()
+       if (itempaccel.eq.1) then
+          call init_statistic()
+       else
+          call restart_statistic()
+       endif
     endif
     
     if (mod(itime,istatcalc) /= 0) return
@@ -706,7 +710,7 @@ contains
   subroutine update_average_scalar(um, ux, ep,mask)
 
     use decomp_2d, only : mytype, xsize, zsize
-    use param, only : itime, initstat, istatcalc
+    use param, only : itime, initstat, istatcalc, itempaccel
     use var, only : di1, tmean
 
     implicit none
@@ -725,6 +729,11 @@ contains
 
     else
       stat_z = sum(ux,dim=3) / real(zsize(3),kind=mytype)
+    endif
+
+    if (itempaccel==1) then
+      um(:,:,1) = stat_z(:,:)
+      return
     endif
 
     stat_inc = real((itime-initstat)/istatcalc+1, kind=mytype)

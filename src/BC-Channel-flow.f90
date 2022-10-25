@@ -15,9 +15,10 @@ module channel
   character(len=1),parameter :: NL=char(10) !new line character
   real(mytype), dimension(:), allocatable :: body_force
   PRIVATE ! All functions/subroutines private by default
+  procedure(real(mytype)), pointer :: temp_accel_calc
   PUBLIC :: init_channel, boundary_conditions_channel, postprocess_channel, &
             visu_channel, visu_channel_init, momentum_forcing_channel, &
-            geomcomplex_channel, body_force
+            geomcomplex_channel, body_force, temp_accel_init, body_forces_init
 
 contains
   !############################################################################
@@ -250,8 +251,6 @@ contains
        enddo
     enddo
 
-    call body_forces_init
-
 #ifdef DEBG
     avg_param = zero
     call avg3d (ux1, avg_param)
@@ -280,12 +279,15 @@ contains
 
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux,uy,uz
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
-
+    real(mytype) :: u_b
+    u_b = one
     if (.not. cpg) then ! if not constant pressure gradient
+       if (itempaccel==1) u_b = temp_accel_calc(t) 
+       
        if (idir_stream == 1) then
-          call channel_cfr(ux,one)
+          call channel_cfr(ux,u_b)
        else
-          call channel_cfr(uz,one)
+          call channel_cfr(uz,u_b)
        endif
     end if
 
@@ -362,6 +364,25 @@ contains
     enddo
 
   end subroutine channel_cfr
+
+  !! calculation of temporal acceleration
+
+  real(mytype) function linear_temp(temp)
+   real(mytype), intent(in) :: temp
+
+   if (temp > t_end) then
+      linear_temp = Re_ratio
+   else if (temp > t_start) then
+      linear_temp = one + (temp - t_start)&
+                        * (Re_ratio - one)&
+                        / (t_end - t_start)
+   else
+      linear_temp = one
+   endif
+
+  end function
+
+
   !############################################################################
   !############################################################################
   subroutine postprocess_channel(ux1,uy1,uz1,pp3,phi1,ep1)
@@ -537,6 +558,17 @@ contains
 
    du1(:,:,:,1) = du1(:,:,:,1) - int_du_all
 
+  end subroutine
+  subroutine temp_accel_init
+
+   use param, only : iacceltype
+   if (itempaccel == 1) then
+      if (iacceltype == 1) then
+         temp_accel_calc => linear_temp
+      else
+         write(*,*) "Invalid temporal acceleration profile"
+      endif
+   endif
   end subroutine
   subroutine body_forces_init
    use dbg_schemes, only : abs_prec

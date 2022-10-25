@@ -125,6 +125,8 @@ subroutine init_xcompact3d()
 
   use probes, only : init_probes
    use tbl_recy, only : restart_tbl_recy
+
+   use channel, only : body_forces_init, temp_accel_init
   implicit none
 
   integer :: ierr
@@ -205,6 +207,10 @@ subroutine init_xcompact3d()
      endif
   endif
 
+  if (itype == itype_channel) then
+   call body_forces_init
+   call temp_accel_init
+  endif
   !####################################################################
   ! initialise visu
   if (ivisu.ne.0) then

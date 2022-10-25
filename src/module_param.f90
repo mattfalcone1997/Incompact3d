@@ -415,6 +415,10 @@ module param
   !channel body forces
   integer :: ibodyforces, ibftype
   real(mytype) :: linear_amp, linear_ext 
+
+  !channel temporal acceleration
+  integer :: itempaccel, iacceltype
+  real(mytype) :: Re_ratio, t_start, t_end
   !numbers
 
   real(mytype),parameter :: zpone=0.1_mytype

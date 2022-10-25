@@ -22,7 +22,7 @@ module tbl_recy
   real(mytype) :: dv_inlt, dv_recy
   real(mytype) :: delta_inlt, delta_recy
 
-  integer :: plane_index
+  integer :: plane_index, tbl_recy_log
   logical, parameter :: write_logs = .true.
   
   abstract interface 
@@ -544,6 +544,9 @@ contains
     call mean_flow_inlt_calc(u_mean, v_mean)
     call fluct_flow_inlt_calc(ux, uy, uz, u_fluct, v_fluct, w_fluct)
 
+    if (itr.eq.1) then
+      call u_avg_t_calc(ux)
+   endif
     do k = 1,xsize(3)
       do j = 1, xsize(2)
          bxx1(j, k) = u_mean(j) + u_fluct(j,k)
@@ -1436,33 +1439,28 @@ end subroutine
    delta_v_inlt = one / (re*u_tau)
 
    if (write_logs.and.nrank.eq.0) then
-      if ((mod(itime,ilist)==0.or.itime==1) .and. itr.eq.1) then
-         if (itime==1) then
-            open(newunit=unit,file='tbl_recy.log',status='replace',action='readwrite')
-            write(unit,"(A,*(',',A))") "itime","theta_inlt", "theta_recy",&
-                                    "delta_r","delta_meas","delta_old","delta_i",&
-                                    "u_tau_inlt","delta_v_recy","delta_v_inlt"
-            write(unit,"(I0,*(',',g0))") itime,theta_inlt,theta_recy,delta_r,&
-                                    delta_meas,delta_inlt_old, delta_i, u_tau, delta_v_recy,&
-                                    delta_v_inlt
-           close(unit)                          
-                     
-         else
-            open(newunit=unit,file='tbl_recy.log',status='old',action='readwrite')
-            rewind(unit)
-            nreads = itime/ilist + 1
-            if (ilist==1) nreads = itime/ilist - 1
-            do i = 1, nreads
-               read(unit,*)
-            enddo
+      if (itime==1) then
+         open(newunit=tbl_recy_log,file='tbl_recy.log',status='replace',action='write')
+         write(tbl_recy_log,"(A,*(',',A))") "itime","theta_inlt", "theta_recy",&
+                                 "delta_r","delta_meas","delta_old","delta_i",&
+                                 "u_tau_inlt","delta_v_recy","delta_v_inlt"
+      
+      else if (itime == ifirst) then
+         open(newunit=tbl_recy_log,file='tbl_recy.log',status='old',action='readwrite')
+         rewind(tbl_recy_log)
+         nreads = itime/ilist + 1
+         if (ilist==1) nreads = itime/ilist - 1
+         do i = 1, nreads
+            read(tbl_recy_log,*)
+         enddo
+      endif
 
-            write(unit,"(I0,*(',',g0))") itime,theta_inlt,theta_recy,delta_r,&
+      if ((mod(itime,ilist)==0.or.itime==1) .and. itr.eq.1) then
+            write(tbl_recy_log,"(I0,*(',',g0))") itime,theta_inlt,theta_recy,delta_r,&
             delta_meas,delta_inlt_old, delta_i, u_tau, delta_v_recy,&
             delta_v_inlt
-            close(unit) 
-         endif
-          
       endif
+      if (itime == ilast) close(tbl_recy_log)
    endif
 
    delta_inlt_old = delta_i

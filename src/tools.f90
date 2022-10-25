@@ -132,6 +132,11 @@ contains
          stop
        endif
 
+       if (isnan(uxmax1).or.isnan(uymax1).or.isnan(uzmax1)) then
+         write(*,*) 'NaN detected! SIMULATION IS STOPPED!'
+         call MPI_ABORT(MPI_COMM_WORLD,code,ierror)
+         stop
+       endif
     endif
 
     return

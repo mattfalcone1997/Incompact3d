@@ -76,6 +76,8 @@ subroutine parameter(input_i3d)
   NAMELIST/tanhAccelTBL/U_ratio, accel_centre, alpha_accel
   NAMELIST/bodyForce/ibodyforces,ibftype
   NAMELIST/linearBodyF/linear_amp,linear_ext
+  NAMELIST/tempAccel/itempaccel, iacceltype
+  NAMELIST/linear_prof/Re_ratio, t_start, t_end
 
 #ifdef DEBG
   if (nrank == 0) write(*,*) '# parameter start'
@@ -222,6 +224,14 @@ subroutine parameter(input_i3d)
    else
       ibodyforces = 0
    endif
+
+   read(10,nml=tempAccel,iostat=iostat); rewind(10)
+   if (iostat==0.and.itempaccel==1) then
+      if (iacceltype==1) then
+         read(10,nml=linear_prof); rewind(10)
+      endif
+   endif
+
   endif
   if (itype.eq.itype_abl) then
      read(10, nml=ABL); rewind(10)
@@ -746,11 +756,18 @@ subroutine parameter_defaults()
 
   iaccel = 0
   U_ratio = one
-
+   ! body forces
   ibodyforces = 0
   linear_amp = zero
   linear_ext = zero
 
+  ! temporal acceleration
+  itempaccel = 0
+  Re_ratio = one
+  t_start = zero
+  t_end = zero
+
+  ! statistics
   istatbudget = .true.
   istatpstrain = .false.
   istatlambda2 = .false.
