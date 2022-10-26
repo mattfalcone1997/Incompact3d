@@ -17,7 +17,6 @@ module tbl_recy
   real(mytype), allocatable, dimension(:,:,:) :: source
   real(mytype), dimension(:,:), allocatable :: recy_mean_z, recy_mean_t
   real(mytype), dimension(:,:), allocatable :: inlt_mean_z, inlt_mean_t
-  real(mytype), dimension(:,:), allocatable :: u_avg_t
   real(mytype) :: delta_inlt_old
   real(mytype) :: dv_inlt, dv_recy
   real(mytype) :: delta_inlt, delta_recy
@@ -257,12 +256,6 @@ contains
          vm_inlt_ini(j) = v_mean(1,jdx)
       enddo
 
-#endif
-
-      call u_avg_z_calc(ux1,u_avg_z)
-      u_avg_t(:,:) = u_avg_z(:,:)
-
-#ifdef BL_DEBG
     if (nrank  ==  0) write(*,*) '# init end ok'
 #endif
 
@@ -281,7 +274,6 @@ contains
    allocate(inlt_mean_t(3,ny))
    allocate(inlt_mean_z(3,ny))
 
-   allocate(u_avg_t(zsize(1),zsize(2)))
    allocate(um_inlt_ini(xsize(2)), vm_inlt_ini(xsize(2)))
 
    if (plane_location.gt.xlx.and. nrank.eq.0) then
@@ -347,7 +339,6 @@ contains
    integer :: unit
    character(len=80) :: fn
 
-   real(mytype), dimension(nx,ny) :: u_avg_write
    real(mytype), dimension(ny) :: u_inlt, v_inlt
    call setup_tbl_recy
 
@@ -358,27 +349,17 @@ contains
    close(unit)
    um_inlt_ini(:) = u_inlt(xstart(2):xend(2))
    vm_inlt_ini(:) = v_inlt(xstart(2):xend(2))
-
-   write(fn,'(A,I7.7)') 'tbl_recy/restart_avg-',it
-   open(newunit=unit,file=fn,status='old',action='read',access='stream')
-
-   read(unit) u_avg_write
-
-   u_avg_t(:,:) = u_avg_write(zstart(1):zend(1),zstart(2):zend(2))
-
-   close(unit)
+   
    if(nrank.eq.0) write(*,*) "Reading tbl_recy restart information"
   end subroutine
 
   subroutine write_restart_tbl_recy(it, force_write)
    use MPI
-   use decomp_2d_io
    integer, intent(in) :: it
    logical, intent(in), optional :: force_write
 
 
    integer :: unit
-   real(mytype), dimension(zsize(1),zsize(2),1) :: u_avg_write
    integer, dimension(2) :: dims, coords
    logical, dimension(2) :: periods 
    integer :: split_comm, color, key, ierr
@@ -395,10 +376,6 @@ contains
 
    if (mod(it,icheckpoint).ne.0 .and..not.force_local) return
 
-   write(fn,'(A,I7.7)') 'restart_avg-',it
-   u_avg_write(:,:,1) = u_avg_t(:,:)
-   call decomp_2d_write_plane(3,u_avg_write,3,1,'tbl_recy',fn,'restart-io')
-   
    call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, ierr)
 
    allocate(displs(dims(1)), recvcounts(dims(1)))
@@ -469,7 +446,6 @@ contains
       else
          eps = one
       endif
-      eps = one
       x_coord = real(index - 1, mytype) * dx
    
       u_infty = one +  eps*half *(U_ratio - one)*(&
@@ -519,6 +495,7 @@ contains
    use MPI
     use navier, only : tbl_flrt
     use param , only : zero, zptwofive
+    use dbg_schemes, only: cos_prec
     implicit none
 
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux,uy,uz
@@ -544,9 +521,6 @@ contains
     call mean_flow_inlt_calc(u_mean, v_mean)
     call fluct_flow_inlt_calc(ux, uy, uz, u_fluct, v_fluct, w_fluct)
 
-    if (itr.eq.1) then
-      call u_avg_t_calc(ux)
-   endif
     do k = 1,xsize(3)
       do j = 1, xsize(2)
          bxx1(j, k) = u_mean(j) + u_fluct(j,k)
@@ -602,16 +576,15 @@ contains
       enddo
     endif
 
-    call v_infty_calc(v_infty)
+    call v_infty_calc(uy,byyn)
 
     !! Top Boundary
     if (nclyn == 2) then
        do k = 1, xsize(3)
           do i = 1, xsize(1)
-            call u_infty_calc(i, u_infty, dudx)
+             call u_infty_calc(i, u_infty, dudx)
 
              byxn(i, k) = ux(i, xsize(2) - 1, k)
-             byyn(i, k) = v_infty(i)
              byzn(i, k) = uz(i, xsize(2) - 1, k)
           enddo
        enddo
@@ -635,83 +608,55 @@ contains
 
     return
   end subroutine boundary_conditions_tbl_recy
-  subroutine v_infty_calc(v_infty)
-   use var
-   use param
-   use MPI
-   use decomp_2d
-   real(mytype), dimension(:), intent(out) :: v_infty
+  subroutine v_infty_calc(uy,byy)
+   real(mytype), dimension(xsize(1),xsize(2),xsize(3)), intent(in) :: uy
+   real(mytype), dimension(xsize(1),xsize(3)) :: byy
+   real(mytype) :: a, b, c,d_inv,c_inv, u_infty, dudx, h1,h2,h3,h4
+   integer :: i, k
 
-   real(mytype), dimension(nx) :: disp_thick
-   real(mytype), dimension(nx) :: disp_thick_grad
-   real(mytype), dimension(zsize(1)) :: local_disp, disp_comm
-   real(mytype), dimension(zsize(1)) :: u_infty
+   if (xsize(2)>3) then ! third order
+      h1 = yp(ny-2) - yp(ny-3)
+      h2 = yp(ny-1) - yp(ny-2)
+      h3 = yp(ny) - yp(ny-1)
 
-   ! MPI stuff
-   integer :: split_comm_x,split_comm_y
-   integer, dimension(2) :: dims, coords
-   logical, dimension(2) :: periods 
-   integer :: color, key, ierr, lrank
-   integer,dimension(:), allocatable :: displs, recv_counts
-   real(mytype) :: u_inf, u_infty_grad
-   integer :: i, j, j_loc, unit
-   character(len=80) :: fname
-   ! compute the displacement thickness
-
-   call MPI_CART_GET(DECOMP_2D_COMM_CART_Z, 2, dims, periods, coords, ierr)
-
-   key = coords(2)
-   color = coords(1)
-
-   call MPI_Comm_Split(DECOMP_2D_COMM_CART_Z, color, key, split_comm_x,ierr)
-   call MPI_Comm_Split(DECOMP_2D_COMM_CART_Z, key, color, split_comm_y,ierr)
-
-   if (key == dims(2)-1) then
-      u_infty(:) = u_avg_t(:,zsize(2))
-   endif
-   call MPI_Bcast(u_infty,zsize(1),real_type,dims(2)-1,split_comm_x,ierr)
-   
-   local_disp(:) = zero
-   do j = 1, zsize(2)
-      j_loc = j + zstart(2) -1
-      do i = 1, zsize(1)
-         local_disp(i) = local_disp(i) + (one - u_avg_t(i,j)/u_infty(i))*dy/ppy(j_loc)
+      a = -h3*(h2 + h3)/(h1*(h1**2 + 2*h1*h2 + h1*h3 + h2**2 + h2*h3))
+      b     = h3*(h1 + h2 + h3)/(h1*h2*(h2 + h3))
+      c     = -(h1*h2 + h1*h3 + h2**2 + 2*h2*h3 + h3**2)/(h2*h3*(h1 + h2))
+      d_inv     = (h3*(h1*h2 + h1*h3 + h2**2 + 2*h2*h3 + h3**2))/(h1*h2 + 2*h1*h3 + h2**2 + 4*h2*h3 + 3*h3**2)
+      
+      do i = 1, xsize(1)
+         call u_infty_calc(i, u_infty, dudx)
+         do k = 1, xsize(3)
+            byy(i,k) = d_inv*(-dudx -c*uy(i,xsize(2)-1,k) &
+                                       -b*uy(i,xsize(2)-2,k) &
+                                       -a*uy(i,xsize(2)-3,k))
+         enddo
       enddo
-   enddo
 
-   call MPI_Allreduce(local_disp,disp_comm,zsize(1),real_type,MPI_SUM,split_comm_x,ierr)
+   else if (xsize(2)>2) then ! second order
+      h2 = yp(ny-1) - yp(ny-2)
+      h3 = yp(ny) - yp(ny-1)
 
-   allocate(recv_counts(dims(1)),displs(dims(1)))
-   call MPI_Allgather(zsize(1),1,MPI_INTEGER,recv_counts,1,MPI_INTEGER,split_comm_y,ierr)
-   call MPI_Allgather(zstart(1)-1,1,MPI_INTEGER,displs,1,MPI_INTEGER,split_comm_y,ierr)
-   
-   call MPI_Allgatherv(disp_comm,zsize(1),real_type, disp_thick,recv_counts,displs,&
-                        real_type,split_comm_y,ierr)
-   
-   disp_thick_grad(1) = (disp_thick(2) - disp_thick(1))/dx
-   disp_thick_grad(nx) = (disp_thick(nx) - disp_thick(nx-1))/dx
-   do i = 2, nx-1
-      disp_thick_grad(i) = 0.5*(disp_thick(i+1) - disp_thick(i-1))/dx
-   enddo
+      a = h3/(h2*(h2 + h3))
+      b = -(h2 + h3)/(h2*h3)
+      c_inv     = h3*(h2 + h3)/(h2 + two*h3)
 
-   do i = 1, nx
-      call u_infty_calc(i,u_inf, u_infty_grad)
+      do i = 1, xsize(1)
+         call u_infty_calc(i, u_infty, dudx)
 
-      v_infty(i) = u_inf*disp_thick_grad(i) &
-                  + (disp_thick(i)-yly)*u_infty_grad
-
-   enddo
-
-   if (nrank==0 .and. itr==1 .and.mod(itime,icheckpoint)==0) then
-      call system('mkdir -p tbl_recy')
-
-      write(fname,'("tbl_recy/fstream_monitor-",I0,".csv")') itime
-      open(newunit=unit,file=fname,action='write',status='replace')
-      write(unit,'(A,",",2(A,","),A)') "i", "disp", "disp_grad", "v_infty"
-      do i = 1, nx
-         write(unit,'(I0, 3(",",g0))') i, disp_thick(i), disp_thick_grad(i), v_infty(i)
+         do k = 1, xsize(3)
+            byy(i,k) = c_inv*(-dudx -b*uy(i,xsize(2)-1,k) &
+                                       -a*uy(i,xsize(2)-2,k))
+         enddo
       enddo
-      close(unit)
+   else ! first order
+      do i = 1, xsize(1)
+         call u_infty_calc(i, u_infty, dudx)
+
+         do k = 1, xsize(3)
+            byy(i,k) = uy(i,xsize(2)-1,k) - dudx*h3
+         enddo
+      enddo
    endif
   end subroutine
   subroutine mean_flow_inlt_calc(um_inlt, vm_inlt)
@@ -1186,56 +1131,6 @@ contains
 
   end subroutine
 
-  subroutine u_avg_z_calc(ux_x,u_avg_z)
-   use param, only : zero
-   use decomp_2d
-   real(mytype), dimension(xsize(1),xsize(2),xsize(3)), intent(in) :: ux_x
-   real(mytype),dimension(:,:), intent(out) :: u_avg_z
-
-   real(mytype), dimension(ysize(1),ysize(2),ysize(3)) :: ux_y
-   real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: ux_z
-
-   integer :: i, j, k
-
-   u_avg_z(:,:) = zero
-
-   call transpose_x_to_y(ux_x,ux_y)
-   call transpose_y_to_z(ux_y,ux_z)
-
-   do k = 1, zsize(3)
-      do j = 1, zsize(2)
-         do i = 1, zsize(1)
-            u_avg_z(i,j) = u_avg_z(i,j) + ux_z(i,j,k)/ nz
-         enddo
-      enddo
-   enddo
-
-end subroutine
-subroutine u_avg_t_calc(ux)
-   real(mytype),dimension(xsize(1),xsize(2),xsize(3)), intent(in) :: ux
-
-   real(mytype),dimension(zsize(1),zsize(2)) :: u_avg_z
-   real(mytype) :: T_period, dtdivT
-
-   if (itime .lt. t_avg1.and.itime.lt. t_avg2) then
-      T_period = 1
-
-   elseif (itime.lt. t_avg2) then
-      T_period = 50
-
-   else
-      T_period =50 + itime - t_avg2
-
-   endif
-
-   dtdivT = dt / T_period
-
-   call u_avg_z_calc(ux,u_avg_z)
-
-   u_avg_t(:,:) = dtdivT *  u_avg_z(:,:) + &
-                           ( one - dtdivT )*u_avg_t(:,:)
-
-end subroutine
   subroutine compute_recycle_mean( ux, uy, uz, reset)
    use decomp_2d
    use MPI
