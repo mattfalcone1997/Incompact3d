@@ -461,9 +461,11 @@ contains
    use dbg_schemes
    implicit none
 
-   real(mytype) :: x_coord, u_infty, u_infty_grad
+   real(mytype) :: x_coord, u_infty, u_infty_grad, t_tmp
    integer :: i
 
+   t_tmp = t
+   t = 50.0
    call alloc_x(source)
    do i = 1, nx
       call u_infty_calc(i, u_infty, u_infty_grad)
@@ -483,6 +485,8 @@ contains
       enddo
       close(13)
    endif
+   t = t_tmp
+
    end subroutine
 
   subroutine momentum_forcing_tbl_recy(dux1, duy1, duz1, ux1, uy1, uz1)
@@ -576,8 +580,6 @@ contains
       enddo
     endif
 
-    call v_infty_calc(uy,byyn)
-
     !! Top Boundary
     if (nclyn == 2) then
        do k = 1, xsize(3)
@@ -585,6 +587,7 @@ contains
              call u_infty_calc(i, u_infty, dudx)
 
              byxn(i, k) = ux(i, xsize(2) - 1, k)
+             byyn(i, k) = uy(i, xsize(2) - 1,k) - dudx*(yp(ny) - yp(ny-1))
              byzn(i, k) = uz(i, xsize(2) - 1, k)
           enddo
        enddo
@@ -614,26 +617,7 @@ contains
    real(mytype) :: a, b, c,d_inv,c_inv, u_infty, dudx, h1,h2,h3,h4
    integer :: i, k
 
-   if (xsize(2)>3) then ! third order
-      h1 = yp(ny-2) - yp(ny-3)
-      h2 = yp(ny-1) - yp(ny-2)
-      h3 = yp(ny) - yp(ny-1)
-
-      a = -h3*(h2 + h3)/(h1*(h1**2 + 2*h1*h2 + h1*h3 + h2**2 + h2*h3))
-      b     = h3*(h1 + h2 + h3)/(h1*h2*(h2 + h3))
-      c     = -(h1*h2 + h1*h3 + h2**2 + 2*h2*h3 + h3**2)/(h2*h3*(h1 + h2))
-      d_inv     = (h3*(h1*h2 + h1*h3 + h2**2 + 2*h2*h3 + h3**2))/(h1*h2 + 2*h1*h3 + h2**2 + 4*h2*h3 + 3*h3**2)
-      
-      do i = 1, xsize(1)
-         call u_infty_calc(i, u_infty, dudx)
-         do k = 1, xsize(3)
-            byy(i,k) = d_inv*(-dudx -c*uy(i,xsize(2)-1,k) &
-                                       -b*uy(i,xsize(2)-2,k) &
-                                       -a*uy(i,xsize(2)-3,k))
-         enddo
-      enddo
-
-   else if (xsize(2)>2) then ! second order
+   if (xsize(2)>2) then ! second order
       h2 = yp(ny-1) - yp(ny-2)
       h3 = yp(ny) - yp(ny-1)
 
@@ -650,6 +634,8 @@ contains
          enddo
       enddo
    else ! first order
+      h3 = yp(ny) - yp(ny-1)
+
       do i = 1, xsize(1)
          call u_infty_calc(i, u_infty, dudx)
 
@@ -675,7 +661,7 @@ contains
    real(mytype), dimension(:), allocatable :: eta_inlt
    real(mytype), dimension(:), allocatable :: eta_recy
 
-   real(mytype) :: u_tmp, eps, y
+   real(mytype) :: u_tmp, eps, y, u_inf, dudx
    real(mytype) :: gamma, w, u_infty
    integer :: j, jdx
 #ifdef BL_DEBG
@@ -772,6 +758,10 @@ contains
 
    enddo
 
+   call u_infty_inlt(um_inlt,u_inf)
+   call u_infty_calc(1,u_infty,dudx)
+   um_inlt(:) = um_inlt(:)*u_infty/u_inf
+
 #ifdef BL_DEBG
    write(fname,"('real-',I0)") itime
 
@@ -785,7 +775,32 @@ contains
 
 
   end subroutine
+  subroutine u_infty_inlt(u_inlt,u_inf)
+   use MPI
+   use decomp_2d
 
+   real(mytype), dimension(xsize(2)), intent(in) :: u_inlt
+   real(mytype), intent(out) :: u_inf
+
+   integer :: ierr, brank, rank
+   integer, dimension(2) :: dims, coords
+   logical, dimension(2) :: periods 
+
+   call MPI_cart_get(DECOMP_2D_COMM_CART_X,2,dims,&
+                     periods,coords,ierr)
+   call MPI_cart_rank(DECOMP_2D_COMM_CART_X,[dims(1)-1,dims(2)-1],&
+                     brank,ierr)
+   call MPI_Comm_rank(DECOMP_2D_COMM_CART_X,rank,ierr)
+   
+   if (brank == rank) then
+      u_inf = u_inlt(xsize(2))
+   endif
+
+   call MPI_Bcast(u_inf,1,real_type,brank,&
+                  DECOMP_2D_COMM_CART_X,ierr)
+
+  end subroutine
+  
   subroutine fluct_flow_inlt_calc(ux, uy, uz, u_fluct, v_fluct, w_fluct)
    real(mytype), dimension(:,:,:), intent(in) :: ux, uy, uz
    real(mytype), dimension(:,:), intent(out) :: u_fluct
