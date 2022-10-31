@@ -426,6 +426,17 @@ subroutine write_params_json
       write(fl,yfmt) '    "bf_array"', body_force
       write(fl,'(A)') "  },"
    endif
+
+   if(itempaccel == 1) then
+      write(fl,"(A ,': {')") '  "temp_accel"'
+      if (iacceltype== 1) then
+         write(fl,"(A,': ',A,',')") '    "profile"','"linear"'
+         write(fl,"(A,': ',g0,',')") '    "t_start"',t_start
+         write(fl,"(A,': ',g0,',')") '    "t_end"',t_start
+         write(fl,"(A,': ',g0)") '    "Re_ratio"',Re_ratio
+         write(fl,'(A)') "  },"
+      endif
+   endif
    write(fl,"(A ,':',g0,',')") '  "re"',re
    write(fl,"(A ,':',g0)") '  "dt"',dt
 

@@ -568,15 +568,19 @@ contains
        return
     elseif (itime.eq.initstat) then
        call init_statistic()
+
+       if (istatout < 1) istatout = icheckpoint
     elseif (itime.eq.ifirst) then
        if (itempaccel.eq.1) then
           call init_statistic()
        else
           call restart_statistic()
        endif
+       if (istatout < 1) istatout = icheckpoint
     endif
     
     if (mod(itime,istatcalc) /= 0) return
+    if (itempaccel == 1 .and. mod(itime,istatout)/=0) return 
 
     !! Mean pressure
     !WORK Z-PENCILS
@@ -670,14 +674,14 @@ contains
                                   td3,dvdy,pmean,dvdymean,td3)
     endif
 
-    if (istatlambda2 .and. itime>initstat2) then
+    if (istatlambda2) then
       call update_lambda2_avg(lambda2mean,lambda22mean,&
                                 dudx,dudy,ta3,dvdx,dvdy,&
                                 tb3,dwdx,dwdy,tc3,td3)
     endif
 
     ! Write all statistics
-    if (mod(itime,icheckpoint)==0) then
+    if (mod(itime,istatout)==0) then
        call read_or_write_all_stats(.false.)
     endif
 
@@ -707,10 +711,10 @@ contains
   !
   ! Update um, the average of ux
   !
-  subroutine update_average_scalar(um, ux, ep,mask)
+  subroutine update_average_scalar(um, ux, ep,mask,istat2)
 
     use decomp_2d, only : mytype, xsize, zsize
-    use param, only : itime, initstat, istatcalc, itempaccel
+    use param, only : itime, initstat, istatcalc, itempaccel, initstat2
     use var, only : di1, tmean
 
     implicit none
@@ -720,6 +724,7 @@ contains
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ux
     logical, dimension(zsize(1),zsize(2),zsize(3)), optional, intent(in) :: mask
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ep
+    logical, optional, intent(in) :: istat2
 
     real(mytype), dimension(zsize(1), zsize(2)) :: stat_z
     real(mytype) :: stat_inc
@@ -736,7 +741,16 @@ contains
       return
     endif
 
-    stat_inc = real((itime-initstat)/istatcalc+1, kind=mytype)
+    if (present(istat2)) then
+      if (istat2) then
+        stat_inc = real((itime-initstat2)/istatcalc+1, kind=mytype)
+      else
+        stat_inc = real((itime-initstat)/istatcalc+1, kind=mytype)
+      endif
+    else
+      stat_inc = real((itime-initstat)/istatcalc+1, kind=mytype)
+    endif
+
     do j = 1, zsize(2)
       do i = 1, zsize(1)
         um(i,j,1) = um(i,j,1) + (stat_z(i,j) - um(i,j,1))/ stat_inc
@@ -928,10 +942,10 @@ contains
       enddo
     enddo
 
-    call update_average_scalar(pdvdy_q1m, p_fluct*dvdy_fluct, ep, mask=mask1)
-    call update_average_scalar(pdvdy_q2m, p_fluct*dvdy_fluct, ep, mask=mask2)
-    call update_average_scalar(pdvdy_q3m, p_fluct*dvdy_fluct, ep, mask=mask3)
-    call update_average_scalar(pdvdy_q4m, p_fluct*dvdy_fluct, ep, mask=mask4)
+    call update_average_scalar(pdvdy_q1m, p_fluct*dvdy_fluct, ep, mask=mask1,istat2=.true.)
+    call update_average_scalar(pdvdy_q2m, p_fluct*dvdy_fluct, ep, mask=mask2,istat2=.true.)
+    call update_average_scalar(pdvdy_q3m, p_fluct*dvdy_fluct, ep, mask=mask3,istat2=.true.)
+    call update_average_scalar(pdvdy_q4m, p_fluct*dvdy_fluct, ep, mask=mask4,istat2=.true.)
 
   end subroutine update_pstrain_cond_avg
 

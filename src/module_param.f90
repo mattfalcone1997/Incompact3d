@@ -295,7 +295,7 @@ module param
   integer :: itime0
   integer :: iscalar,nxboite,istat,iread,iadvance_time,irotation,iibm
   integer :: npif,izap,ianal
-  integer :: ivisu, ipost, initstat,initstat2,istatcalc
+  integer :: ivisu, ipost, initstat,initstat2,istatcalc, istatout
   logical :: istatbudget, istatpstrain, istatlambda2
   integer :: ifilter
   real(mytype) :: xlx,yly,zlz,dx,dy,dz,dx2,dy2,dz2,t,xxk1,xxk2,t0
