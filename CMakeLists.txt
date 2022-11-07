@@ -147,6 +147,9 @@ if(LAPACK_FOUND)
 else()
   message(STATUS "LAPACK not found")
 endif()
+
+option(SPECTRA_ENABLED "Use fftw library to compute energy spectra" OFF)
+
 # Create a static library for the fft
 add_subdirectory(decomp2d)
 

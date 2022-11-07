@@ -21,12 +21,13 @@ subroutine parameter(input_i3d)
   use complex_geometry
   use decomp_2d
   use ibm_param
+  use stats, only: 
   use dbg_schemes, only: sin_prec, cos_prec
 
   use var, only : dphi1
 
   use lockexch, only : pfront
-
+  use stats, only : h_quads
   use probes, only : nprobes, setup_probes, flag_all_digits, flag_extra_probes, xyzprobes
   use visu, only : output2D
   use forces, only : iforces, nvol, xld, xrd, yld, yud!, zld, zrd
@@ -52,7 +53,8 @@ subroutine parameter(input_i3d)
   NAMELIST /InOutParam/ irestart, icheckpoint, ioutput, nvisu, ilist, iprocessing, &
        ninflows, ntimesteps, inflowpath, ioutflow, output2D, nprobes
   NAMELIST /Statistics/ wrotation,spinup_time, nstat, initstat, &
-            istatcalc, istatbudget,istatpstrain,istatlambda2, initstat2, istatout
+            istatcalc, istatbudget,istatpstrain,istatlambda2, initstat2, istatout,&
+            istatquadrant, nquads
   NAMELIST /ProbesParam/ flag_all_digits, flag_extra_probes, xyzprobes
   NAMELIST /ScalarParam/ sc, ri, uset, cp, &
        nclxS1, nclxSn, nclyS1, nclySn, nclzS1, nclzSn, &
@@ -78,6 +80,7 @@ subroutine parameter(input_i3d)
   NAMELIST/linearBodyF/linear_amp,linear_ext
   NAMELIST/tempAccel/itempaccel, iacceltype
   NAMELIST/linear_prof/Re_ratio, t_start, t_end
+  NAMELIST/hquadrant/h_quads
 
 #ifdef DEBG
   if (nrank == 0) write(*,*) '# parameter start'
@@ -108,6 +111,12 @@ subroutine parameter(input_i3d)
   read(10, nml=NumOptions); rewind(10)
   read(10, nml=InOutParam); rewind(10)
   read(10, nml=Statistics); rewind(10)
+
+  if (istatquadrant) then
+   allocate(h_quads(nquads))
+   read(10,nml=hquadrant); rewind(10)
+  endif
+
   if (iibm.ne.0) then
      read(10, nml=ibmstuff); rewind(10)
   endif
@@ -771,5 +780,7 @@ subroutine parameter_defaults()
   istatbudget = .true.
   istatpstrain = .false.
   istatlambda2 = .false.
+  istatquadrant = .false.
+  istatspectra = .false.
   istatout = -1
 end subroutine parameter_defaults

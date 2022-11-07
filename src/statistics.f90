@@ -5,45 +5,33 @@
 module stats
   use param, only : mytype
   use decomp_2d, only : DECOMP_INFO
+#ifdef HAVE_FFTW
+  include "fftw3.f"
+#endif
   implicit none
 
   character(len=*), parameter :: io_statistics = "statistics-io", &
        stat_dir = "statistics"
 
   integer :: stats_time
+  real(mytype), dimension(:,:,:), allocatable ::  uvwp_mean
+  real(mytype), dimension(:,:,:), allocatable ::  uu_mean
+  real(mytype), dimension(:,:,:), allocatable ::  pu_mean
+  real(mytype), dimension(:,:,:), allocatable ::  uuu_mean
+  real(mytype), dimension(:,:,:), allocatable ::  pdudx_mean
+  real(mytype), dimension(:,:,:), allocatable ::  dudx_mean
+  real(mytype), dimension(:,:,:), allocatable ::  dudxdudx_mean
 
-  real(mytype), dimension(:,:,:), allocatable ::  pmean
-  real(mytype), dimension(:,:,:), allocatable ::  umean, uumean
-  real(mytype), dimension(:,:,:), allocatable ::  vmean, vvmean
-  real(mytype), dimension(:,:,:), allocatable ::  wmean, wwmean
-  real(mytype), dimension(:,:,:), allocatable ::  uvmean, uwmean
-  real(mytype), dimension(:,:,:), allocatable ::  vwmean
-  real(mytype), dimension(:,:,:), allocatable ::  phimean, phiphimean
+  real(mytype), dimension(:,:,:), allocatable ::  pdvdy_q_mean
 
-  real(mytype), dimension(:,:,:), allocatable ::  uuumean, uuvmean
-  real(mytype), dimension(:,:,:), allocatable ::  uuwmean, uvvmean
-  real(mytype), dimension(:,:,:), allocatable ::  uvwmean, uwwmean
-  real(mytype), dimension(:,:,:), allocatable ::  vvwmean, vwwmean
-  real(mytype), dimension(:,:,:), allocatable ::  vvvmean, wwwmean
+  real(mytype), dimension(:,:,:), allocatable :: uv_quadrant_mean
+  real(mytype), dimension(:,:,:), allocatable :: spectra_x_mean
+  real(mytype), dimension(:,:,:,:), allocatable :: spectra_z_mean
 
-  real(mytype), dimension(:,:,:), allocatable ::  pdudxmean, pdvdymean, pdwdzmean
-  real(mytype), dimension(:,:,:), allocatable ::  pumean, pvmean, pwmean
-
-  real(mytype), dimension(:,:,:), allocatable :: dudxmean, dudymean, dudzmean
-  real(mytype), dimension(:,:,:), allocatable :: dvdxmean, dvdymean, dvdzmean
-  real(mytype), dimension(:,:,:), allocatable :: dwdxmean, dwdymean, dwdzmean
-
-  real(mytype), dimension(:,:,:), allocatable :: dudxdudxmean, dudxdvdxmean
-  real(mytype), dimension(:,:,:), allocatable :: dudxdwdxmean, dvdxdvdxmean
-  real(mytype), dimension(:,:,:), allocatable :: dvdxdwdxmean, dwdxdwdxmean
-
-  real(mytype), dimension(:,:,:), allocatable :: dudydudymean, dudydvdymean
-  real(mytype), dimension(:,:,:), allocatable :: dudydwdymean, dvdydvdymean
-  real(mytype), dimension(:,:,:), allocatable :: dvdydwdymean, dwdydwdymean
-
-  real(mytype), dimension(:,:,:), allocatable :: pdvdy_q1mean, pdvdy_q2mean
-  real(mytype), dimension(:,:,:), allocatable :: pdvdy_q3mean, pdvdy_q4mean
-
+  type(DECOMP_INFO) :: uvwp_info, uu_info, pu_info
+  type(DECOMP_INFO) :: uuu_info, pdudx_info, dudx_info
+  type(DECOMP_INFO) :: dudxdudx_info, pdvdy_q_info
+  type(DECOMP_INFO) :: uv_quadrant_info
   real(mytype), dimension(:,:,:), allocatable :: lambda2mean, lambda22mean
 
   
@@ -54,11 +42,16 @@ module stats
 
   real(mytype) :: coefx_b, coefx_f
   real(mytype) :: coefz_b, coefz_f
-
+  real(mytype), dimension(:), allocatable :: h_quads
+  integer :: spectra_level, nspectra, spectra_nlocs, spectra_size
+  real(mytype), dimension(:), allocatable :: spectra_xlocs
+  integer, allocatable, dimension(:) :: spectra_x_indices
+  type(DECOMP_INFO) :: spectra_x_info, spectra_z_info
   type(DECOMP_INFO) :: dstat_plane
 
+
   private
-  public overall_statistic
+  public overall_statistic, h_quads, spectra_level
 
 contains
 
@@ -66,7 +59,7 @@ contains
 
     use decomp_2d, only : mytype
     use decomp_2d_io, only : decomp_2d_register_variable, decomp_2d_init_io
-    use param, only : istatbudget, istatpstrain, istatlambda2
+    use param, only : istatbudget, istatpstrain, istatlambda2, istatquadrant
     use var, only : numscalar
     
     implicit none
@@ -79,76 +72,31 @@ contains
     if (.not. initialised) then
        call decomp_2d_init_io(io_statistics)
     
-       call decomp_2d_register_variable(io_statistics, "umean", 3, 1, 3, mytype, opt_nplanes=1)
-       call decomp_2d_register_variable(io_statistics, "vmean", 3, 1, 3, mytype, opt_nplanes=1)
-       call decomp_2d_register_variable(io_statistics, "wmean", 3, 1, 3, mytype, opt_nplanes=1)
-       
-       call decomp_2d_register_variable(io_statistics, "pmean", 3, 1, 3, mytype, opt_nplanes=1)
-       
-       call decomp_2d_register_variable(io_statistics, "uumean", 3, 1, 3, mytype, opt_nplanes=1)
-       call decomp_2d_register_variable(io_statistics, "vvmean", 3, 1, 3, mytype, opt_nplanes=1)
-       call decomp_2d_register_variable(io_statistics, "wwmean", 3, 1, 3, mytype, opt_nplanes=1)
-
-       call decomp_2d_register_variable(io_statistics, "uvmean", 3, 1, 3, mytype, opt_nplanes=1)
-       call decomp_2d_register_variable(io_statistics, "uwmean", 3, 1, 3, mytype, opt_nplanes=1)
-       call decomp_2d_register_variable(io_statistics, "vwmean", 3, 1, 3, mytype, opt_nplanes=1)
-
+       call decomp_2d_register_variable(io_statistics, "uvwp_mean", 3, 0, 0, mytype,opt_decomp=uvwp_info)
+       call decomp_2d_register_variable(io_statistics, "uu_mean", 3, 0, 0, mytype,opt_decomp=uu_info)
+              
        if (istatbudget) then
-        call decomp_2d_register_variable(io_statistics, "uuumean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "uuvmean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "uuwmean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "uvvmean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "uvwmean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "uwwmean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "vvvmean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "vvwmean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "vwwmean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "wwwmean", 3, 1, 3, mytype, opt_nplanes=1)
+        call decomp_2d_register_variable(io_statistics, "pu_mean", 3, 0, 0, mytype,opt_decomp=pu_info)
+       call decomp_2d_register_variable(io_statistics, "uuu_mean", 3, 0, 0, mytype,opt_decomp=uuu_info)
+       call decomp_2d_register_variable(io_statistics, "pdudx_mean", 3, 0, 0, mytype,opt_decomp=pdudx_info)
+       call decomp_2d_register_variable(io_statistics, "dudx_mean", 3, 0, 0, mytype,opt_decomp=pdudx_info)
+       call decomp_2d_register_variable(io_statistics, "dudxdudx_mean", 3, 0, 0, mytype,opt_decomp=dudxdudx_info)
 
-        call decomp_2d_register_variable(io_statistics, "pdudxmean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "pdvdymean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "pdwdzmean", 3, 1, 3, mytype, opt_nplanes=1)
-
-        call decomp_2d_register_variable(io_statistics, "pumean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "pvmean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "pwmean", 3, 1, 3, mytype, opt_nplanes=1)
-
-        call decomp_2d_register_variable(io_statistics, "dudxmean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "dudymean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "dudzmean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "dvdxmean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "dvdymean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "dvdzmean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "dwdxmean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "dwdymean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "dwdzmean", 3, 1, 3, mytype, opt_nplanes=1)
-
-        call decomp_2d_register_variable(io_statistics, "dudydudymean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "dudydvdymean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "dudydwdymean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "dvdydvdymean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "dvdydwdymean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "dwdydwdymean", 3, 1, 3, mytype, opt_nplanes=1)
-
-        call decomp_2d_register_variable(io_statistics, "dudydudymean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "dudydvdymean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "dudydwdymean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "dvdydvdymean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "dvdydwdymean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "dwdydwdymean", 3, 1, 3, mytype, opt_nplanes=1)
-       endif
+      endif
 
        if (istatpstrain) then
-        call decomp_2d_register_variable(io_statistics, "pdvdy_q1mean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "pdvdy_q2mean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "pdvdy_q3mean", 3, 1, 3, mytype, opt_nplanes=1)
-        call decomp_2d_register_variable(io_statistics, "pdvdy_q4mean", 3, 1, 3, mytype, opt_nplanes=1)
+        call decomp_2d_register_variable(io_statistics, "pdvdy_q_mean", 3, 0, 0, mytype, opt_decomp=pdvdy_q_info)
        endif
 
        if (istatlambda2) then
         call decomp_2d_register_variable(io_statistics, "lambda2mean", 3, 1, 3, mytype, opt_nplanes=1)
         call decomp_2d_register_variable(io_statistics, "lambda22mean", 3, 1, 3, mytype, opt_nplanes=1)
        endif
+
+       if (istatquadrant) then
+        call decomp_2d_register_variable(io_statistics, "uv_quadrant_mean", 3, 0, 0, mytype,opt_decomp=uv_quadrant_info)
+       endif
+
        do is=1, numscalar
           write(varname,"('phi',I2.2)") is
           call decomp_2d_register_variable(io_statistics, varname, 3, 1, 3, mytype, opt_nplanes=1)
@@ -166,125 +114,34 @@ contains
   !
   subroutine init_statistic
 
-    use param, only : zero, iscalar, istatbudget, istatpstrain, istatlambda2
+    use param, only : zero, iscalar, istatbudget, istatpstrain
+    use param, only : istatquadrant, istatlambda2, nquads, istatspectra
     use variables, only : nx, ny, nz
     use decomp_2d, only : zsize, decomp_info_init
     use MPI
 
     implicit none
     integer :: code
-    allocate(umean(zsize(1),zsize(2),1))
-    allocate(vmean(zsize(1),zsize(2),1))
-    allocate(wmean(zsize(1),zsize(2),1))
-    allocate(pmean(zsize(1),zsize(2),1))
-    allocate(uumean(zsize(1),zsize(2),1))
-    allocate(vvmean(zsize(1),zsize(2),1))
-    allocate(wwmean(zsize(1),zsize(2),1))
-    allocate(uvmean(zsize(1),zsize(2),1))
-    allocate(uwmean(zsize(1),zsize(2),1))
-    allocate(vwmean(zsize(1),zsize(2),1))
 
-    pmean = zero
-    umean = zero
-    uumean = zero
-    vmean = zero
-    vvmean = zero
-    wmean = zero
-    wwmean = zero
-    uvmean = zero
-    uwmean = zero
-    vwmean = zero
+    allocate(uvwp_mean(zsize(1),zsize(2),4))
+    allocate(uu_mean(zsize(1),zsize(2),6))
+
+    uvwp_mean = zero
+    uu_mean = zero
 
     if (istatbudget) then
-      allocate(uuumean(zsize(1),zsize(2),1))
-      allocate(uuvmean(zsize(1),zsize(2),1))
-      allocate(uuwmean(zsize(1),zsize(2),1))
-      allocate(uvvmean(zsize(1),zsize(2),1))
-      allocate(uvwmean(zsize(1),zsize(2),1))
-      allocate(uwwmean(zsize(1),zsize(2),1))
-      allocate(vvvmean(zsize(1),zsize(2),1))
-      allocate(vvwmean(zsize(1),zsize(2),1))
-      allocate(vwwmean(zsize(1),zsize(2),1))
-      allocate(wwwmean(zsize(1),zsize(2),1))
+      allocate(pu_mean(zsize(1),zsize(2),3))
+      allocate(uuu_mean(zsize(1),zsize(2),10))
+      allocate(pdudx_mean(zsize(1),zsize(2),3))
+      allocate(dudx_mean(zsize(1),zsize(2),9))
+      allocate(dudxdudx_mean(zsize(1),zsize(2),12))
 
-      allocate(pdudxmean(zsize(1),zsize(2),1))
-      allocate(pdvdymean(zsize(1),zsize(2),1))
-      allocate(pdwdzmean(zsize(1),zsize(2),1))
-
-      allocate(phimean(zsize(1),zsize(2),1))
-      allocate(phiphimean(zsize(1),zsize(2),1))
-
-      allocate(pumean(zsize(1),zsize(2),1))
-      allocate(pvmean(zsize(1),zsize(2),1))
-      allocate(pwmean(zsize(1),zsize(2),1))
-
-      allocate(dudxmean(zsize(1),zsize(2),1))
-      allocate(dudymean(zsize(1),zsize(2),1))
-      allocate(dudzmean(zsize(1),zsize(2),1))
-      allocate(dvdxmean(zsize(1),zsize(2),1))
-      allocate(dvdymean(zsize(1),zsize(2),1))
-      allocate(dvdzmean(zsize(1),zsize(2),1))
-      allocate(dwdxmean(zsize(1),zsize(2),1))
-      allocate(dwdymean(zsize(1),zsize(2),1))
-      allocate(dwdzmean(zsize(1),zsize(2),1))
-
-      allocate(dudxdudxmean(zsize(1),zsize(2),1))
-      allocate(dudxdvdxmean(zsize(1),zsize(2),1))
-      allocate(dudxdwdxmean(zsize(1),zsize(2),1))
-      allocate(dvdxdvdxmean(zsize(1),zsize(2),1))
-      allocate(dvdxdwdxmean(zsize(1),zsize(2),1))
-      allocate(dwdxdwdxmean(zsize(1),zsize(2),1))
-
-      allocate(dudydudymean(zsize(1),zsize(2),1))
-      allocate(dudydvdymean(zsize(1),zsize(2),1))
-      allocate(dudydwdymean(zsize(1),zsize(2),1))
-      allocate(dvdydvdymean(zsize(1),zsize(2),1))
-      allocate(dvdydwdymean(zsize(1),zsize(2),1))
-      allocate(dwdydwdymean(zsize(1),zsize(2),1))
-
-
-      uuumean = zero
-      uuvmean = zero
-      uuwmean = zero
-      uvvmean = zero
-      uvwmean = zero
-      uwwmean = zero
-      vvvmean = zero
-      vvwmean = zero
-      vwwmean = zero
-      wwwmean = zero
-
-      pdudxmean = zero
-      pdvdymean = zero
-      pdwdzmean = zero
-
-      pumean = zero
-      pvmean = zero
-      pwmean = zero
-
-      dudxmean = zero
-      dudymean = zero
-      dudzmean = zero
-      dvdxmean = zero
-      dvdymean = zero
-      dvdzmean = zero
-      dwdxmean = zero
-      dwdymean = zero
-      dwdzmean = zero
-
-      dudxdudxmean = zero
-      dudxdvdxmean = zero
-      dudxdwdxmean = zero
-      dvdxdvdxmean = zero
-      dvdxdwdxmean = zero
-      dwdxdwdxmean = zero
-
-      dudydudymean = zero
-      dudydvdymean = zero
-      dudydwdymean = zero
-      dvdydvdymean = zero
-      dvdydwdymean = zero
-      dwdydwdymean = zero
+      pu_mean = zero
+      uuu_mean = zero
+      pdudx_mean = zero
+      dudx_mean = zero
+      dudxdudx_mean = zero
+      
     endif
 
     if (istatpstrain) then
@@ -293,17 +150,14 @@ contains
         call MPI_Abort(MPI_COMM_WORLD,1,code)
       endif
 
-      allocate(pdvdy_q1mean(zsize(1),zsize(2),1))
-      allocate(pdvdy_q2mean(zsize(1),zsize(2),1))
-      allocate(pdvdy_q3mean(zsize(1),zsize(2),1))
-      allocate(pdvdy_q4mean(zsize(1),zsize(2),1))
+      allocate(pdvdy_q_mean(zsize(1),zsize(2),4))
 
-      pdvdy_q1mean = zero
-      pdvdy_q2mean = zero
-      pdvdy_q3mean = zero
-      pdvdy_q4mean = zero
+      pdvdy_q_mean = zero
     endif
 
+    if (istatquadrant) then
+      allocate(uv_quadrant_mean(zsize(1),zsize(2),4*nquads))
+    endif
     if (istatlambda2) then
 #ifndef HAVE_LAPACK 
       write(*,*) "Cannot calaculate mean lambda2 without LAPACK"
@@ -316,8 +170,26 @@ contains
       lambda2mean = zero
       lambda22mean = zero
     endif
+
+    if (istatspectra) then
+#ifndef HAVE_FFTW
+      write(*,*) "Cannot use spectra unless built with FFTw"
+      call MPI_Abort(MPI_COMM_WORLD,1,code)
+#endif      
+      call init_spectra
+    endif
   
-    call decomp_info_init(nx, ny, 1,dstat_plane)
+    call decomp_info_init(nx, ny, 4, uvwp_info)
+    call decomp_info_init(nx, ny, 6, uu_info)
+    call decomp_info_init(nx, ny, 3, pu_info)
+    call decomp_info_init(nx, ny, 10, uuu_info)
+    call decomp_info_init(nx, ny, 3, pdudx_info)
+    call decomp_info_init(nx, ny, 9, dudx_info)
+    call decomp_info_init(nx, ny, 12, dudxdudx_info)
+
+    call decomp_info_init(nx, ny, 4*nquads, uv_quadrant_info)
+
+    call decomp_info_init(nx, ny, 4, pdvdy_q_info)
 
     call init_statistic_adios2
 
@@ -325,6 +197,77 @@ contains
 
   end subroutine init_statistic
 
+  subroutine init_spectra
+    use param
+    use decomp_2d
+    use dbg_schemes, only : abs_prec
+    real(mytype), dimension(:,:,:), allocatable :: spectra_x_in, spectra_z_in
+    real(mytype), dimension(:,:,:), allocatable :: spectra_x_out, spectra_z_out
+    real(mytype) :: x
+#ifdef HAVE_FFTW
+    integer :: plane_type = FFTW_MEASURE
+
+    if (spectra_level == 1) then
+      nspectra = 4
+    else if (spectra_level == 2) then
+      nspectra = 5
+    else
+      write(*,*) "Invalid spectra level"
+    call MPI_Abort(MPI_COMM_WORLD,1,code)
+    endif
+
+    if (spectra_nlocs > 0) then
+      allocate(spectra_x_indices(spectra_nlocs))
+      do j = 1, spectra_nlocs
+        do i = 1, nx
+          x = real(i-1,kind=mytype)*dx
+          if (abs_prec(spectra_xlocs(i)-x) <= half*dx) then
+            spectra_x_indices(j) = i
+            exit
+          endif
+        enddo
+      enddo
+    else
+      spectra_nlocs = 1
+    endif
+
+    allocate(spectra_x_mean(nx/2, zsize(2),nspectra))
+    allocate(spectra_z_mean(zsize(2),nz/2,spectra_nlocs,nspectra))
+
+    allocate(spectra_x_out(nx/2,xsize(2),xsize(3)))
+    allocate(spectra_z_out(zsize(1),zsize(2),nz/2))
+
+    allocate(spectra_x_in(nx,xsize(2),xsize(3)))
+    allocate(spectra_z_in(zsize(1),zsize(2),nz))
+
+#ifdef DOUBLE_PREC
+    call dfftw_plan_many_dft_r2c(plan_x, 1, xsize(1), &
+         xsize(2)*xsize(3), spectra_x_in, xsize(1), 1, &
+         xsize(1), spectra_x_out, spectra_x_info%xsz(1), 1, spectra_x_info%xsz(1), &
+         plan_type)
+#else
+    call sfftw_plan_many_dft_r2c(plan_x, 1, xsize(1), &
+         xsize(2)*xsize(3), spectra_x_in, xsize(1), 1, &
+         xsize(1), spectra_x_out, spectra_x_info%xsz(1), 1, spectra_x_info%xsz(1), &
+         plan_type)
+#endif
+
+#ifdef DOUBLE_PREC
+    call dfftw_plan_many_dft_r2c(plan1, 1, zsize(3), &
+         zsize(1)*zsize(2), spectra_z_in, zsize(3), &
+         zsize(1)*zsize(2), 1, spectra_z_out, nz/2, &
+         zsize(1)*zsize(2), 1, plan_type)
+#else
+    call sfftw_plan_many_dft_r2c(plan1, 1, zsize(3), &
+         zsize(1)*zsize(2), spectra_z_in, zsize(3), &
+         zsize(1)*zsize(2), 1, spectra_z_out, nz/2, &
+         zsize(1)*zsize(2), 1, plan_type)
+#endif
+   
+    deallocate(spectra_x_in,spectra_x_out)
+    deallocate(spectra_z_in,spectra_z_out)
+#endif    
+  end subroutine
   !
   ! Read all statistics if possible
   !
@@ -375,7 +318,8 @@ contains
   !
   subroutine read_or_write_all_stats(flag_read)
 
-    use param, only : iscalar, itime, istatbudget, istatpstrain, initstat2, istatlambda2
+    use param, only : iscalar, itime, istatbudget, istatpstrain
+    use param, only : initstat2, istatlambda2, istatquadrant
     use variables, only : numscalar
     use decomp_2d, only : nrank
     use decomp_2d_io, only : decomp_2d_write_mode, decomp_2d_read_mode, &
@@ -420,74 +364,28 @@ contains
     call decomp_2d_start_io(io_statistics, stat_dir)
 #endif
     
-    call read_or_write_one_stat(flag_read, gen_statname("pmean"), pmean)
-    call read_or_write_one_stat(flag_read, gen_statname("umean"), umean)
-    call read_or_write_one_stat(flag_read, gen_statname("vmean"), vmean)
-    call read_or_write_one_stat(flag_read, gen_statname("wmean"), wmean)
-
-    call read_or_write_one_stat(flag_read, gen_statname("uumean"), uumean)
-    call read_or_write_one_stat(flag_read, gen_statname("vvmean"), vvmean)
-    call read_or_write_one_stat(flag_read, gen_statname("wwmean"), wwmean)
-
-    call read_or_write_one_stat(flag_read, gen_statname("uvmean"), uvmean)
-    call read_or_write_one_stat(flag_read, gen_statname("uwmean"), uwmean)
-    call read_or_write_one_stat(flag_read, gen_statname("vwmean"), vwmean)
-
+    call read_or_write_one_stat(flag_read, gen_statname("uvwp_mean"), uvwp_mean,uvwp_info)
+    call read_or_write_one_stat(flag_read, gen_statname("uu_mean"), uu_mean,uu_info)
+   
     if (istatbudget) then
-      call read_or_write_one_stat(flag_read, gen_statname("uuumean"), uuumean)
-      call read_or_write_one_stat(flag_read, gen_statname("uuvmean"), uuvmean)
-      call read_or_write_one_stat(flag_read, gen_statname("uuwmean"), uuwmean)
-      call read_or_write_one_stat(flag_read, gen_statname("uvvmean"), uvvmean)
-      call read_or_write_one_stat(flag_read, gen_statname("uvwmean"), uvwmean)
-      call read_or_write_one_stat(flag_read, gen_statname("uwwmean"), uwwmean)
-      call read_or_write_one_stat(flag_read, gen_statname("vvvmean"), vvvmean)
-      call read_or_write_one_stat(flag_read, gen_statname("vvwmean"), vvwmean)
-      call read_or_write_one_stat(flag_read, gen_statname("vwwmean"), vwwmean)
-      call read_or_write_one_stat(flag_read, gen_statname("wwwmean"), wwwmean)
-      
-      call read_or_write_one_stat(flag_read, gen_statname("pdudxmean"), pdudxmean)
-      call read_or_write_one_stat(flag_read, gen_statname("pdvdymean"), pdvdymean)
-      call read_or_write_one_stat(flag_read, gen_statname("pdwdzmean"), pdwdzmean)
+      call read_or_write_one_stat(flag_read, gen_statname("uuu_mean"), uuu_mean, uuu_info)
+      call read_or_write_one_stat(flag_read, gen_statname("pdudx_mean"), pdudx_mean, pdudx_info)
+      call read_or_write_one_stat(flag_read, gen_statname("dudx_mean"), dudx_mean,dudx_info)
+      call read_or_write_one_stat(flag_read, gen_statname("pu_mean"), pu_mean,pu_info)
+      call read_or_write_one_stat(flag_read, gen_statname("dudxdudx_mean"), dudxdudx_mean,dudxdudx_info)
 
-      call read_or_write_one_stat(flag_read, gen_statname("pumean"), pumean)
-      call read_or_write_one_stat(flag_read, gen_statname("pvmean"), pvmean)
-      call read_or_write_one_stat(flag_read, gen_statname("pwmean"), pwmean)
-
-      call read_or_write_one_stat(flag_read, gen_statname("dudxmean"), dudxmean)
-      call read_or_write_one_stat(flag_read, gen_statname("dudymean"), dudymean)
-      call read_or_write_one_stat(flag_read, gen_statname("dudzmean"), dudzmean)
-      call read_or_write_one_stat(flag_read, gen_statname("dvdxmean"), dvdxmean)
-      call read_or_write_one_stat(flag_read, gen_statname("dvdymean"), dvdymean)
-      call read_or_write_one_stat(flag_read, gen_statname("dvdzmean"), dvdzmean)
-      call read_or_write_one_stat(flag_read, gen_statname("dwdxmean"), dwdxmean)
-      call read_or_write_one_stat(flag_read, gen_statname("dwdymean"), dwdymean)
-      call read_or_write_one_stat(flag_read, gen_statname("dwdzmean"), dwdzmean)
-
-      call read_or_write_one_stat(flag_read, gen_statname("dudxdudxmean"), dudxdudxmean)
-      call read_or_write_one_stat(flag_read, gen_statname("dudxdvdxmean"), dudxdvdxmean)
-      call read_or_write_one_stat(flag_read, gen_statname("dudxdwdxmean"), dudxdwdxmean)
-      call read_or_write_one_stat(flag_read, gen_statname("dvdxdvdxmean"), dvdxdvdxmean)
-      call read_or_write_one_stat(flag_read, gen_statname("dvdxdwdxmean"), dvdxdwdxmean)
-      call read_or_write_one_stat(flag_read, gen_statname("dwdxdwdxmean"), dwdxdwdxmean)
-
-      call read_or_write_one_stat(flag_read, gen_statname("dudydudymean"), dudydudymean)
-      call read_or_write_one_stat(flag_read, gen_statname("dudydvdymean"), dudydvdymean)
-      call read_or_write_one_stat(flag_read, gen_statname("dudydwdymean"), dudydwdymean)
-      call read_or_write_one_stat(flag_read, gen_statname("dvdydvdymean"), dvdydvdymean)
-      call read_or_write_one_stat(flag_read, gen_statname("dvdydwdymean"), dvdydwdymean)
-      call read_or_write_one_stat(flag_read, gen_statname("dwdydwdymean"), dwdydwdymean)
     endif
 
     if (istatpstrain .and. itime > initstat2) then
-      call read_or_write_one_stat(flag_read, gen_statname("pdvdy_q1mean"), pdvdy_q1mean)
-      call read_or_write_one_stat(flag_read, gen_statname("pdvdy_q2mean"), pdvdy_q2mean)
-      call read_or_write_one_stat(flag_read, gen_statname("pdvdy_q3mean"), pdvdy_q3mean)
-      call read_or_write_one_stat(flag_read, gen_statname("pdvdy_q4mean"), pdvdy_q4mean)
+      call read_or_write_one_stat(flag_read, gen_statname("pdvdy_q_mean"), pdvdy_q_mean, pdvdy_q_info)
     endif
 
-    if (istatlambda2 .and. itime > initstat2) then
-      call read_or_write_one_stat(flag_read, gen_statname("lambda2mean"), lambda2mean)
-      call read_or_write_one_stat(flag_read, gen_statname("lambda22mean"), lambda22mean)
+    if (istatquadrant .and. itime>initstat2) then
+      call read_or_write_one_stat(flag_read, gen_statname("uv_quadrant_mean"), uv_quadrant_mean, uv_quadrant_info)
+    endif
+    if (istatlambda2) then
+      call read_or_write_one_stat(flag_read, gen_statname("lambda2mean"), lambda2mean,dstat_plane)
+      call read_or_write_one_stat(flag_read, gen_statname("lambda22mean"), lambda22mean,dstat_plane)
     endif
 #ifdef ADIOS2
     call decomp_2d_end_io(io_statistics, stat_dir)
@@ -508,7 +406,7 @@ contains
   !
   ! Statistics: perform one IO
   !
-  subroutine read_or_write_one_stat(flag_read, filename, array)
+  subroutine read_or_write_one_stat(flag_read, filename, array,opt_decomp)
 
     use decomp_2d, only : mytype, xstS, xenS, zsize
     use decomp_2d_io, only : decomp_2d_read_one, decomp_2d_write_one
@@ -519,16 +417,76 @@ contains
     logical, intent(in) :: flag_read
     character(len=*), intent(in) :: filename
     real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: array
+    type(DECOMP_INFO), intent(in) :: opt_decomp
     integer :: ierror
 
     if (flag_read) then
        ! There was a check for nvisu = 1 before
-       call decomp_2d_read_one(3, array, stat_dir, filename, io_statistics, reduce_prec=.false.,opt_decomp=dstat_plane)
+       call decomp_2d_read_one(3, array, stat_dir, filename, io_statistics, reduce_prec=.false.,opt_decomp=opt_decomp)
     else
-       call decomp_2d_write_one(3, array, stat_dir, filename, 0, io_statistics, reduce_prec=.false.,opt_decomp=dstat_plane)
+       call decomp_2d_write_one(3, array, stat_dir, filename, 0, io_statistics, reduce_prec=.false.,opt_decomp=opt_decomp)
     endif
 
   end subroutine read_or_write_one_stat
+
+  subroutine read_write_spectra_x(flag_read, filename)
+    use decomp_2d
+    use MPI
+    logical, intent(in) :: flag_read
+    character(len=*), intent(in) :: filename
+
+    integer, dimension(3) :: sizes, subsizes, starts
+    integer :: color, key
+    integer, dimension(2) :: dims, coords
+    logical, dimension(2) :: periods 
+    integer :: split_comm_y, split_comm_z, code
+    integer :: arr_type, comm_rank, fh
+    integer :: i, j, k
+
+
+    sizes = [xsize(1)/2,ysize(2),nspectra]
+    subsizes = [xsize(1)/2,xsize(2),nspectra]
+    starts = [0, xstart(2)-1,0]
+
+    call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, code)
+    key = coords(1)
+    color = coords(2)
+ 
+    call MPI_Comm_split(DECOMP_2D_COMM_CART_X, color, key, split_comm_y,code)
+    call MPI_Comm_split(DECOMP_2D_COMM_CART_X, key, color, split_comm_z,code)
+
+    call MPI_Type_create_subarray(3,sizes,subsizes,&
+                                   starts,MPI_ORDER_FORTRAN,&
+                                   complex_type,arr_type,code)
+    call MPI_Type_commit(arr_type,code)
+    call MPI_Comm_rank(split_comm_z,comm_rank,code)
+
+    if (flag_Read) then
+      call MPI_File_open(split_comm_y,filename,MPI_MODE_RDONLY,&
+                          MPI_INFO_NULL,fh, code)
+
+      call MPI_File_read_all(fh,spectra_x_mean,1,arr_type,&
+                              MPI_STATUS_IGNORE,code)                          
+      call MPI_File_close(fh, code)
+    else
+      if (comm_rank == 0) then
+        call MPI_File_open(split_comm_y,filename,MPI_MODE_CREATE+MPI_MODE_WRONLY,&
+                          MPI_INFO_NULL,fh, code)
+        
+        call MPI_File_write_all(fh,spectra_x_mean,1,arr_type,&
+                                MPI_STATUS_IGNORE,code)                          
+        call MPI_File_close(fh, code)
+  
+      endif
+    endif
+    call MPI_Type_free(arr_type,code)
+
+  end subroutine
+
+  subroutine read_write_spectra_z(flag_read, filename)
+    logical, intent(in) :: flag_read
+    character(len=*), intent(in) :: filename
+  end subroutine
 
   !
   ! Statistics : Intialize, update and perform IO
@@ -607,14 +565,15 @@ contains
     call transpose_y_to_z(uz2,uz3)
     call transpose_y_to_z(td2,td3)
 
-    call update_average_scalar(pmean, td3, ep1)
+    call update_average_scalar(uvwp_mean(:,:,4), td3, ep1)
 
     !! Mean velocity
-    call update_average_vector(umean, vmean, wmean, &
+    call update_average_vector(uvwp_mean(:,:,1),uvwp_mean(:,:,2), uvwp_mean(:,:,3), &
                                ux3, uy3, uz3, td3)
 
     !! Second-order velocity moments
-    call update_variance_vector(uumean, vvmean, wwmean, uvmean, uwmean, vwmean, &
+    call update_variance_vector(uu_mean(:,:,1),uu_mean(:,:,2), uu_mean(:,:,3),&
+                                uu_mean(:,:,4), uu_mean(:,:,5), uu_mean(:,:,6), &
                                 ux3, uy3, uz3, td3)
 
     if (istatbudget) then
@@ -645,35 +604,38 @@ contains
       call transpose_y_to_z(tb2,dvdx)
       call transpose_y_to_z(tc2,dwdx)
 
-    call update_skewness_tensor(uuumean,uuvmean,uuwmean,uvvmean,uvwmean,uwwmean,&
-                               vvvmean,vvwmean,vwwmean,wwwmean,&
-                               ux3,uy3,uz3,td3)  
+    call update_skewness_tensor(uuu_mean(:,:,1), uuu_mean(:,:,2), uuu_mean(:,:,3),&
+                               uuu_mean(:,:,4),uuu_mean(:,:,5),uuu_mean(:,:,6),&
+                               uuu_mean(:,:,7),uuu_mean(:,:,8),uuu_mean(:,:,9),&
+                               uuu_mean(:,:,10), ux3, uy3, uz3, td3)  
 
-    call update_pvelograd_vector(pdudxmean,pdvdymean,pdwdzmean,dudx,dvdy,tc3,td3)
+    call update_pvelograd_vector(pdudx_mean(:,:,1), pdudx_mean(:,:,2), pdudx_mean(:,:,3),&
+                                dudx, dvdy, tc3, td3)
 
-    call update_pvelo_vector(pumean, pvmean, pwmean, ux3, uy3, uz3,td3)
+    call update_pvelo_vector(pu_mean(:,:,1), pu_mean(:,:,2), pu_mean(:,:,3), ux3, uy3, uz3,td3)
 
-    call update_pvelograd_vector(pdudxmean,pdvdymean,pdwdzmean,dudx,dvdy,tc3,td3)
+    call update_velograd_tensor(dudx_mean, dudx,dudy,ta3,dvdx,dvdy,&
+                                tb3,dwdx,dwdy,tc3,td3)
 
-    call update_velograd_tensor(dudxmean,dudymean,dudzmean,dvdxmean,dvdymean,&
-                                dvdzmean,dwdxmean,dwdymean,dwdzmean,&
-                                dudx,dudy,ta3,dvdx,dvdy,tb3,dwdx,dwdy,tc3,td3)
-
-    call update_velograd2_tensor(dudxdudxmean,dudxdvdxmean,dudxdwdxmean,&
-                                 dvdxdvdxmean, dvdxdwdxmean,dwdxdwdxmean,&
-                                 dudx,dvdx,dwdx,td3)
-
-    call update_velograd2_tensor(dudydudymean,dudydvdymean,dudydwdymean,&
-                                 dvdydvdymean, dvdydwdymean,dwdydwdymean,&
-                                 dudy,dvdy,dwdy,td3)                         
+    call update_velograd2_tensor(dudxdudx_mean,&
+                                 dudx,dvdx,dwdx,dudy,dvdy,dwdy,td3)
+                      
     endif                             
 
     if (istatpstrain .and. itime>initstat2) then
-      call update_pstrain_cond_avg(pdvdy_q1mean,pdvdy_q2mean,&
-                                  pdvdy_q3mean,pdvdy_q4mean,&
-                                  td3,dvdy,pmean,dvdymean,td3)
+      call update_pstrain_cond_avg(pdvdy_q_mean(:,:,1),pdvdy_q_mean(:,:,2),&
+                                  pdvdy_q_mean(:,:,3),pdvdy_q_mean(:,:,4),&
+                                  td3,dvdy,uvwp_mean(:,:,4),dudx_mean(:,:,5),td3)
     endif
 
+    if (istatquadrant .and. itime>initstat2) then
+      call update_uv_quad_avg(uv_quadrant_mean, uu_mean(:,:,1), uu_mean(:,:,2),&
+                              uvwp_mean(:,:,1), uvwp_mean(:,:,2),ux3,uy3, td3)
+    endif
+
+    if (istatspectra .and. itime>initstat2) then
+      call update_spectra_avg(spectra_x_mean,spectra_z_mean,ux1,uy1,uz1,ux3,uy3,uz3)
+    endif
     if (istatlambda2) then
       call update_lambda2_avg(lambda2mean,lambda22mean,&
                                 dudx,dudy,ta3,dvdx,dvdy,&
@@ -720,7 +682,7 @@ contains
     implicit none
 
     ! inputs
-    real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: um
+    real(mytype), dimension(zsize(1),zsize(2)), intent(inout) :: um
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ux
     logical, dimension(zsize(1),zsize(2),zsize(3)), optional, intent(in) :: mask
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ep
@@ -729,6 +691,7 @@ contains
     real(mytype), dimension(zsize(1), zsize(2)) :: stat_z
     real(mytype) :: stat_inc
     integer :: i, j
+    
     if (present(mask)) then
       stat_z = sum(ux,dim=3,mask=mask) / real(zsize(3),kind=mytype)
 
@@ -737,7 +700,7 @@ contains
     endif
 
     if (itempaccel==1) then
-      um(:,:,1) = stat_z(:,:)
+      um(:,:) = stat_z(:,:)
       return
     endif
 
@@ -753,7 +716,7 @@ contains
 
     do j = 1, zsize(2)
       do i = 1, zsize(1)
-        um(i,j,1) = um(i,j,1) + (stat_z(i,j) - um(i,j,1))/ stat_inc
+        um(i,j) = um(i,j) + (stat_z(i,j) - um(i,j))/ stat_inc
       enddo
     enddo
 
@@ -792,7 +755,7 @@ contains
     implicit none
 
     ! inputs
-    real(mytype), dimension(zsize(1),zsize(2), 1), intent(inout) :: um, vm, wm
+    real(mytype), dimension(zsize(1),zsize(2)), intent(inout) :: um, vm, wm
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ux, uy, uz, ep
 
     call update_average_scalar(um, ux, ep)
@@ -811,7 +774,7 @@ contains
     implicit none
 
     ! inputs
-    real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: uum, vvm, wwm, uvm, uwm, vwm
+    real(mytype), dimension(zsize(1),zsize(2)), intent(inout) :: uum, vvm, wwm, uvm, uwm, vwm
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ux, uy, uz, ep
 
     call update_average_scalar(uum, ux*ux, ep)
@@ -827,7 +790,7 @@ contains
                                     uwwm,vvvm,vvwm,vwwm,wwwm,&
                                     ux, uy, uz, ep)
   use decomp_2d, only : mytype, xsize, zsize
-  real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: uuum,uuvm,uuwm,uvvm,uvwm,&
+  real(mytype), dimension(zsize(1),zsize(2)), intent(inout) :: uuum,uuvm,uuwm,uvvm,uvwm,&
                                                                  uwwm,vvvm,vvwm,vwwm,wwwm
   real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ux, uy, uz, ep
 
@@ -847,7 +810,7 @@ contains
   subroutine update_pvelograd_vector(pdudxm,pdvdym,pdwdzm,dudx,dvdy,dwdz,ep)
     use decomp_2d, only : mytype, xsize, zsize
 
-    real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: pdudxm,pdvdym,pdwdzm
+    real(mytype), dimension(zsize(1),zsize(2)), intent(inout) :: pdudxm,pdvdym,pdwdzm
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: dudx, dvdy, dwdz, ep
 
     call update_average_scalar(pdudxm, ep*dudx, ep)
@@ -858,7 +821,7 @@ contains
   subroutine update_pvelo_vector(pum, pvm, pwm, ux, uy, uz, ep)
     use decomp_2d, only : mytype, xsize, zsize
 
-    real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: pum, pvm, pwm
+    real(mytype), dimension(zsize(1),zsize(2)), intent(inout) :: pum, pvm, pwm
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ux, uy, uz, ep
 
     call update_average_scalar(pum, ep*ux, ep)
@@ -867,62 +830,127 @@ contains
 
   end subroutine update_pvelo_vector
 
-  subroutine update_velograd_tensor(dudxm, dudym, dudzm, dvdxm,&
-                                    dvdym, dvdzm, dwdxm, dwdym,&
-                                    dwdzm, dudx, dudy, dudz, dvdx,&
+  subroutine update_velograd_tensor(dudxm, dudx, dudy, dudz, dvdx,&
                                     dvdy, dvdz, dwdx, dwdy, dwdz, ep)
     use decomp_2d, only : mytype, xsize, zsize
 
-    real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: dudxm, dudym, dudzm
-    real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: dvdxm, dvdym, dvdzm
-    real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: dwdxm, dwdym, dwdzm
+    real(mytype), dimension(zsize(1),zsize(2),9), intent(inout) :: dudxm
 
 
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: dudx, dudy, dudz, ep
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: dvdx, dvdy, dvdz   
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: dwdx, dwdy, dwdz
 
-    call update_average_scalar(dudxm, dudx, ep)
-    call update_average_scalar(dudym, dudy, ep)
-    call update_average_scalar(dudzm, dudz, ep)
-    call update_average_scalar(dvdxm, dvdx, ep)
-    call update_average_scalar(dvdym, dvdy, ep)
-    call update_average_scalar(dvdzm, dvdz, ep)
-    call update_average_scalar(dwdxm, dudx, ep)
-    call update_average_scalar(dwdym, dwdy, ep)
-    call update_average_scalar(dwdzm, dwdz, ep)
+    call update_average_scalar(dudxm(:,:,1), dudx, ep)
+    call update_average_scalar(dudxm(:,:,2), dudy, ep)
+    call update_average_scalar(dudxm(:,:,3), dudz, ep)
+    call update_average_scalar(dudxm(:,:,4), dvdx, ep)
+    call update_average_scalar(dudxm(:,:,5), dvdy, ep)
+    call update_average_scalar(dudxm(:,:,6), dvdz, ep)
+    call update_average_scalar(dudxm(:,:,7), dudx, ep)
+    call update_average_scalar(dudxm(:,:,8), dwdy, ep)
+    call update_average_scalar(dudxm(:,:,9), dwdz, ep)
 
 
   end subroutine update_velograd_tensor
 
-  subroutine update_velograd2_tensor(dudxdudxm, dudxdvdxm, dudxdwdxm,&
-                                     dvdxdvdxm, dvdxdwdxm, dwdxdwdxm,&
-                                     dudx,dvdx,dwdx,ep)
+  subroutine update_velograd2_tensor(dudxdudxm,&
+                                     dudx,dvdx,dwdx,dudy,dvdy,dwdy,ep)
     use decomp_2d, only : mytype, xsize, zsize
 
-    real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: dudxdudxm, dudxdvdxm
-    real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: dudxdwdxm, dvdxdvdxm
-    real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: dvdxdwdxm, dwdxdwdxm
+    real(mytype), dimension(zsize(1),zsize(2),12), intent(inout) :: dudxdudxm
 
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: dudx, dvdx, dwdx, ep
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: dudy, dvdy, dwdy
 
-    call update_average_scalar(dudxdudxm, dudx*dudx, ep)
-    call update_average_scalar(dudxdvdxm, dudx*dvdx, ep)
-    call update_average_scalar(dudxdwdxm, dudx*dwdx, ep)
-    call update_average_scalar(dvdxdvdxm, dvdx*dvdx, ep)
-    call update_average_scalar(dvdxdwdxm, dvdx*dwdx, ep)
-    call update_average_scalar(dwdxdwdxm, dwdx*dwdx, ep)
+    call update_average_scalar(dudxdudxm(:,:,1), dudx*dudx, ep)
+    call update_average_scalar(dudxdudxm(:,:,2), dudx*dvdx, ep)
+    call update_average_scalar(dudxdudxm(:,:,3), dudx*dwdx, ep)
+    call update_average_scalar(dudxdudxm(:,:,4), dvdx*dvdx, ep)
+    call update_average_scalar(dudxdudxm(:,:,5), dvdx*dwdx, ep)
+    call update_average_scalar(dudxdudxm(:,:,6), dwdx*dwdx, ep)
+
+    call update_average_scalar(dudxdudxm(:,:,7), dudy*dudy, ep)
+    call update_average_scalar(dudxdudxm(:,:,8), dudy*dvdy, ep)
+    call update_average_scalar(dudxdudxm(:,:,9), dudy*dwdy, ep)
+    call update_average_scalar(dudxdudxm(:,:,10), dvdy*dvdy, ep)
+    call update_average_scalar(dudxdudxm(:,:,11), dvdy*dwdy, ep)
+    call update_average_scalar(dudxdudxm(:,:,12), dwdy*dwdy, ep)
 
   end subroutine update_velograd2_tensor
+  
+  subroutine update_uv_quad_avg(uvqm, uum, vvm, um, vm, ux, uy, ep)
+    use dbg_schemes, only : sqrt_prec, abs_prec
+    use decomp_2d, only : mytype, xsize, zsize
+    use param, only: nquads, zero
+    use MPI
+    real(mytype), dimension(zsize(1),zsize(2),4*nquads), intent(inout) :: uvqm
+    real(mytype), dimension(zsize(1),zsize(2)), intent(in) :: um, vm
+    real(mytype), dimension(zsize(1),zsize(2)), intent(in) :: uum, vvm
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ux, uy, ep
 
+    logical, dimension(:,:,:,:,:) , allocatable :: mask
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: uv_fluct
+
+    logical :: quad(4), thresh
+    integer :: i, j, k, l, ierr
+    real(mytype) :: u_rms, v_rms, u_fluct, v_fluct
+
+    allocate(mask(zsize(1),zsize(2),zsize(3),nquads,4))
+    uv_fluct = zero
+      do k = 1, zsize(3)
+        do j = 1, zsize(2)
+          do i = 1, zsize(1)
+            u_rms = sqrt_prec(uum(i,j) - um(i,j)*um(i,j))
+            v_rms = sqrt_prec(vvm(i,j) - vm(i,j)*vm(i,j))
+
+            u_fluct = ux(i,j,k) - um(i,j)
+            v_fluct = uy(i,j,k) - vm(i,j)
+
+            uv_fluct(i,j,k) = u_fluct*v_fluct
+
+            quad(1) =  u_fluct .gt. zero .and. v_fluct .gt. zero
+            quad(2) =  u_fluct .lt. zero .and. v_fluct .gt. zero
+            quad(3) =  u_fluct .lt. zero .and. v_fluct .lt. zero
+            quad(4) =  u_fluct .gt. zero .and. v_fluct .lt. zero
+
+            do l = 1, nquads
+
+              thresh = abs_prec(uv_fluct(i,j,k)) > h_quads(l)*u_rms*v_rms
+              
+
+              mask(i,j,k,l,1) =  quad(1) .and. thresh
+              mask(i,j,k,l,2) =  quad(2) .and. thresh
+              mask(i,j,k,l,3) =  quad(3) .and. thresh
+              mask(i,j,k,l,4) =  quad(4) .and. thresh
+
+          enddo
+        enddo
+      enddo
+    enddo
+
+    if (any(isnan(uv_fluct))) then
+      write(*,*) "NaN detected in quadrant analysis"
+      call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+    endif 
+    do j = 1, nquads
+      do i = 1, 4
+        call update_average_scalar(uvqm(:,:,(j-1)*nquads+i),uv_fluct,&
+                                  ep,mask=mask(:,:,:,j,i),istat2=.true.)
+      enddo
+    enddo
+
+    deallocate(mask)
+
+  end subroutine update_uv_quad_avg
   subroutine update_pstrain_cond_avg(pdvdy_q1m,pdvdy_q2m,&
                                      pdvdy_q3m,pdvdy_q4m,&
                                      p,dvdy, pm, dvdym,ep)
     use decomp_2d, only : mytype, xsize, zsize
     use param, only : zero, zpfive
-    real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: pdvdy_q1m, pdvdy_q2m
-    real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: pdvdy_q3m, pdvdy_q4m
-    real(mytype), dimension(zsize(1),zsize(2),1), intent(in) :: pm, dvdym
+    real(mytype), dimension(zsize(1),zsize(2)), intent(inout) :: pdvdy_q1m, pdvdy_q2m
+    real(mytype), dimension(zsize(1),zsize(2)), intent(inout) :: pdvdy_q3m, pdvdy_q4m
+    real(mytype), dimension(zsize(1),zsize(2)), intent(in) :: pm, dvdym
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: p,dvdy, ep
 
     logical, dimension(zsize(1),zsize(2),zsize(3)) :: mask1, mask2, mask3, mask4
@@ -932,8 +960,8 @@ contains
     do k = 1, zsize(3)
       do j = 1, zsize(2)
         do i = 1, zsize(1)
-          p_fluct(i,j,k) = p(i,j,k) - pm(i,j,1)
-          dvdy_fluct(i,j,k) = dvdy(i,j,k) - dvdym(i,j,1)
+          p_fluct(i,j,k) = p(i,j,k) - pm(i,j)
+          dvdy_fluct(i,j,k) = dvdy(i,j,k) - dvdym(i,j)
           mask1(i,j,k) = p_fluct(i,j,k) .gt. zero .and.  dvdy_fluct(i,j,k) .gt. zero
           mask2(i,j,k) = p_fluct(i,j,k) .lt. zero .and.  dvdy_fluct(i,j,k) .gt. zero
           mask3(i,j,k) = p_fluct(i,j,k) .lt. zero .and.  dvdy_fluct(i,j,k) .lt. zero
@@ -1029,7 +1057,109 @@ contains
     call update_average_scalar(lambda22m, lambda2*lambda2, ep)
 
 #endif    
-  end subroutine                                                         
+  end subroutine    
+  
+  subroutine update_spectra_avg(spec_xm,spec_zm, ux1, uy1, uz1, ux3, uy3, uz3)
+    use MPI
+    use decomp_2d
+    use variables, only : nx, nz
+
+    real(mytype), dimension(nx/2,xsize(2),nspectra) :: spec_xm
+    real(mytype), dimension(zsize(1),zsize(2),spectra_size) :: spec_zm
+
+    real(mytype), dimension(xsize(1),xsize(2),xsize(3)) :: ux1, uy1, uz1
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: ux3, uy3, uz3
+    real(mytype), dimension(zsize(1),zsize(2),4) :: um
+#ifdef HAVE_FFTW
+
+    complex(mytype), dimension(nx/2,xsize(2),xsize(3)) :: u_spec_x, vspec_x, w_spec_x
+    complex(mytype), dimension(zsize(1),zsize(2),nz/2) :: u_spec_z, vspec_z, w_spec_z
+
+    complex(mytype), dimension(nx/2,xsize(2),nspectra) :: spect_x_avg_z, spect_x_avg_z_global
+    complex(mytype), dimension(xsize(2),nz/2,spectra_nlocs,nspectra) :: spect_z_avg_z, spect_z_avg_z_global
+    
+    integer :: i, j, k, code, arr_type, comm_rank, fh
+    integer :: color, key
+    integer, dimension(2) :: dims, coords
+    logical, dimension(2) :: periods 
+    integer :: split_comm_y, split_comm_z
+    real(mytype) :: stat_inc
+    
+    spect_x_avg_z = zero
+    spect_z_avg_z = zero
+
+    call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, ierr)
+    key = coords(1)
+    color = coords(2)
+ 
+    call MPI_Comm_split(DECOMP_2D_COMM_CART_X, color, key, split_comm_y,ierr)
+    call MPI_Comm_split(DECOMP_2D_COMM_CART_X, key, color, split_comm_z,ierr)
+
+
+      
+    call dfftw_execute_r2c(plan_x,ux1,u_spec_x)
+    call dfftw_execute_r2c(plan_x,uy1,v_spec_x)
+    call dfftw_execute_r2c(plan_x,uz1,w_spec_x)
+
+    do k = 1, xsize(3)
+      do j =1, xsize(2)
+        do i = 1, nx/2
+          spect_x_avg_z(i,j,1) = spect_x_avg_z(i,j,1) &
+                  + u_spec_x(i,j,k)*conjg(u_spec_x(i,j,k))
+          spect_x_avg_z(i,j,2) = spect_x_avg_z(i,j,2) &
+                  + v_spec_x(i,j,k)*conjg(v_spec_x(i,j,k))                    
+          spect_x_avg_z(i,j,3) = spect_x_avg_z(i,j,3) &
+                  + w_spec_x(i,j,k)*conjg(w_spec_x(i,j,k))                    
+          spect_x_avg_z(i,j,4) = spect_x_avg_z(i,j,4) &
+                  + u_spec_x(i,j,k)*conjg(v_spec_x(i,j,k))                    
+        enddo
+      enddo
+    enddo      
+
+    call dfftw_execute_r2c(plan_z,ux3,u_spec_z)
+    call dfftw_execute_r2c(plan_z,uy3,v_spec_z)
+    call dfftw_execute_r2c(plan_z,uz3,w_spec_z)
+
+    spect_z_avg_z = zero
+    if (spectra_nlocs == 0) then
+        do k = 1, nz/2
+          do j = 1, zsize(2)
+            do i = 1, zsize(1)
+
+            spect_z_avg_x(j,k,1,1) = spect_z_avg_z(j,k,1,1) &
+                      +  u_spec_z(i,j,k)*conjg(u_spec_z(i,j,k))/xsize(1)
+            spect_z_avg_x(j,k,1,2) = spect_z_avg_z(j,k,1,2) &
+                      +  v_spec_z(i,j,k)*conjg(v_spec_z(i,j,k))/xsize(1)             
+            spect_z_avg_x(j,k,1,3) = spect_z_avg_z(j,k,1,3) &
+                      +  w_spec_z(i,j,k)*conjg(w_spec_z(i,j,k))/xsize(1)
+            spect_z_avg_x(j,k,1,4) = spect_z_avg_z(j,k,1,4) &
+                      +  u_spec_z(i,j,k)*conjg(v_spec_z(i,j,k))/xsize(1)
+          enddo
+        enddo
+      enddo
+
+      call MPI_Allreduce(spect_z_avg_x,spect_z_avg_x_global,size(spect_z_avg_x),&
+                         complex_type,MPI_SUM,split_comm_y,code)    else
+
+    endif
+
+    if (spectra_level == 2) then
+      write(*,*) "Not implemented yet"
+      call MPI_Abort(MPI_COMM_WORLD,1,code)
+    endif
+    spect_x_avg_z = spect_x_avg_z / real(zsize(3),kind=mytype)
+    
+    call MPI_Allreduce(spect_x_avg_z,spect_x_avg_z_global,size(spect_x_avg_z),&
+                        complex_type,MPI_SUM,split_comm_y,code)
+
+    stat_inc = real((itime-initstat2)/istatcalc+1, kind=mytype)
+    spectra_x_mean = spectra_x_mean &
+                    + (spect_x_avg_z_global - spectra_x_mean) &
+                    / stat_inc
+
+
+#endif    
+  end subroutine
   subroutine grad_init
     use param, only : zpfive, one, three,onepfive, two
     use var, only : yp, ny, dx, dz

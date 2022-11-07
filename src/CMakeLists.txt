@@ -69,6 +69,15 @@ if(LAPACK_FOUND)
   target_link_libraries(xcompact3d PRIVATE LAPACK::LAPACK)
 endif()
 
+if(SPECTRA_ENABLED)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(FFTW REQUIRED IMPORTED_TARGET fftw3)
+
+  target_link_libraries(xcompact3d PUBLIC ${FFTW_LIBRARIES})
+  target_include_directories(xcompact3d PUBLIC ${FFTW_INCLUDE_DIRS})
+  target_compile_definitions(xcompact3d PUBLIC HAVE_FFTW)
+endif()
+
 install(TARGETS xcompact3d
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}

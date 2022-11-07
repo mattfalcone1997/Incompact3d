@@ -352,6 +352,7 @@ subroutine write_params_json
    use decomp_2d, only : nrank
    use tbl_recy, only : u_infty_calc
    use channel, only : body_force
+   use stats, only : h_quads
    implicit none
 
    real(mytype), dimension(nx) :: xcoords, u_infty
@@ -434,8 +435,18 @@ subroutine write_params_json
          write(fl,"(A,': ',g0,',')") '    "t_start"',t_start
          write(fl,"(A,': ',g0,',')") '    "t_end"',t_start
          write(fl,"(A,': ',g0)") '    "Re_ratio"',Re_ratio
-         write(fl,'(A)') "  },"
       endif
+      write(fl,'(A)') "  },"
+   endif
+   if (istatquadrant) then
+      write(fl,"(A ,': {')") '  "uv_quadrant"'
+      if (nquads > 1) then
+         write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nquads-1,"(',',g0),']')"
+      else
+         xfmt =  "( A, ': [',g0,']')"
+      endif
+      write(fl,xfmt) '    "h_quads"',h_quads
+      write(fl,'(A)') "  },"
    endif
    write(fl,"(A ,':',g0,',')") '  "re"',re
    write(fl,"(A ,':',g0)") '  "dt"',dt
