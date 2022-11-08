@@ -76,6 +76,7 @@ subroutine parameter(input_i3d)
   NAMELIST/ADMParam/Ndiscs,ADMcoords,C_T,aind,iturboutput,rho_air
   NAMELIST/TBLRecy/plane_location, t_avg1,t_avg2, t_recy1, t_recy2, iaccel,t_trip
   NAMELIST/tanhAccelTBL/U_ratio, accel_centre, alpha_accel
+  NAMELIST/tanhAccelCubicTBL/U_ratio, accel_centre, alpha_accel, iaccel_thresh
   NAMELIST/bodyForce/ibodyforces,ibftype
   NAMELIST/linearBodyF/linear_amp,linear_ext
   NAMELIST/tempAccel/itempaccel, iacceltype
@@ -220,6 +221,8 @@ subroutine parameter(input_i3d)
       read(10, nml=Tripping); rewind(10)
       if(iaccel.eq.1) then
          read(10, nml=tanhAccelTBL); rewind(10)
+      else if(iaccel.eq.2) then
+         read(10, nml=tanhAccelCubicTBL); rewind(10)
       endif
 
    endif
@@ -777,6 +780,7 @@ subroutine parameter_defaults()
   t_end = zero
 
   ! statistics
+  istatcalc = 1
   istatbudget = .true.
   istatpstrain = .false.
   istatlambda2 = .false.

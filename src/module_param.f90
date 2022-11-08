@@ -411,7 +411,7 @@ module param
   real(mytype) :: plane_location
 
   !TBL acceleration params
-  real(mytype) :: alpha_accel, U_ratio, accel_centre
+  real(mytype) :: alpha_accel, U_ratio, accel_centre, iaccel_thresh
 
   !channel body forces
   integer :: ibodyforces, ibftype

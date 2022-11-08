@@ -304,6 +304,8 @@ contains
       u_infty_calc => zpg_BL
    else if (iaccel.eq.1) then
       u_infty_calc => tanh_BL
+   else if (iaccel .eq. 2) then
+      u_infty_calc => tanh_cubic_BL
    else
       write(*,*) "Invalid iaccel value"
       call MPI_Abort(MPI_COMM_WORLD, 1,ierror)
@@ -454,6 +456,67 @@ contains
    
       u_infty_grad = eps*half*alpha_accel*(U_ratio-one)*cosh_prec( alpha_accel*(x_coord &
                       - accel_centre ) )**(-two)
+   end subroutine
+
+   subroutine tanh_cubic_BL(index,u_infty, u_infty_grad)
+      use param
+      use variables
+      use var, only : t
+      use dbg_schemes, only : tanh_prec, cosh_prec
+      use MPI
+      integer, intent(in) :: index
+      real(mytype), intent(out) :: u_infty, u_infty_grad
+      real(mytype) :: x, x_1, x_2, eps, a, b, c, d, inflection
+      integer :: code
+
+      if (t<50) then
+         eps = t/fifty
+      else
+         eps = one
+      endif
+
+      x = real(index - 1, mytype) * dx
+
+      x_1 = accel_centre + atanh(two*iaccel_thresh/(U_ratio-one)-one)/alpha_accel
+      x_2 = accel_centre
+
+      a = (U_ratio*alpha_accel*x_1 - U_ratio*alpha_accel*x_2 + two*U_ratio - alpha_accel*x_1 + alpha_accel*x_2 - two)&
+         /(two*(x_1**three - three*x_1**two*x_2 + three*x_1*x_2**two - x_2**three))
+
+      b = (-two*U_ratio*alpha_accel*x_1**two + U_ratio*alpha_accel*x_1*x_2 &
+         + U_ratio*alpha_accel*x_2**two - three*U_ratio*x_1 - three*U_ratio*x_2 &
+         + two*alpha_accel*x_1**two - alpha_accel*x_1*x_2 - alpha_accel*x_2**two &
+            + three*x_1 + three*x_2)/(2*(x_1**three - three*x_1**two*x_2 + three*x_1*x_2**two - x_2**three))
+
+      c = x_1*(U_ratio*alpha_accel*x_1**two + U_ratio*alpha_accel*x_1*x_2 &
+         - two*U_ratio*alpha_accel*x_2**two + six*U_ratio*x_2 &
+         - alpha_accel*x_1**two - alpha_accel*x_1*x_2 + 2*alpha_accel*x_2**two &
+         - six*x_2)/(2*(x_1**three - three*x_1**two*x_2 + three*x_1*x_2**two - x_2**three))
+
+      d = (-U_ratio*alpha_accel*x_1**three*x_2 + U_ratio*alpha_accel*x_1**two*x_2**two &
+         + U_ratio*x_1**three - three*U_ratio*x_1**two*x_2 + alpha_accel*x_1**three*x_2 &
+         - alpha_accel*x_1**two*x_2**two + x_1**three - three*x_1**two*x_2 &
+         + six*x_1*x_2**2 - two*x_2**three)/(2*(x_1**three - three*x_1**two*x_2 &
+         + three*x_1*x_2**two - x_2**three))
+
+      inflection = -b / (three*a)
+      if (inflection > x_1  .and. inflection < x_2) then
+           if (nrank.eq.0) then
+            write(*,*) "Incorrect parameters"
+            call MPI_Abort(MPI_COMM_WORLD,1,code)
+           endif
+           
+      endif
+      if (x>accel_centre) then
+         call tanh_BL(index,u_infty, u_infty_grad)
+      
+      else if (x>x_1) then
+         U_infty = one - eps + eps*(a*x**three + b*x**two + c*x + d)
+         U_infty_grad = eps*(three*a*x**two + two*b*x + c)
+      else
+         u_infty = one
+         u_infty_grad = zero
+      endif
    end subroutine
   subroutine accel_source
    use param
