@@ -25,13 +25,15 @@ module stats
   real(mytype), dimension(:,:,:), allocatable ::  pdvdy_q_mean
 
   real(mytype), dimension(:,:,:), allocatable :: uv_quadrant_mean
+  real(mytype), dimension(:,:,:), allocatable :: uuuu_mean
+
   real(mytype), dimension(:,:,:), allocatable :: spectra_x_mean
   real(mytype), dimension(:,:,:,:), allocatable :: spectra_z_mean
 
   type(DECOMP_INFO) :: uvwp_info, uu_info, pu_info
   type(DECOMP_INFO) :: uuu_info, pdudx_info, dudx_info
   type(DECOMP_INFO) :: dudxdudx_info, pdvdy_q_info
-  type(DECOMP_INFO) :: uv_quadrant_info
+  type(DECOMP_INFO) :: uv_quadrant_info, uuuu_info
   real(mytype), dimension(:,:,:), allocatable :: lambda2mean, lambda22mean
 
   
@@ -60,6 +62,7 @@ contains
     use decomp_2d, only : mytype
     use decomp_2d_io, only : decomp_2d_register_variable, decomp_2d_init_io
     use param, only : istatbudget, istatpstrain, istatlambda2, istatquadrant
+    use param, only : istatflatness
     use var, only : numscalar
     
     implicit none
@@ -93,6 +96,9 @@ contains
         call decomp_2d_register_variable(io_statistics, "lambda22mean", 3, 1, 3, mytype, opt_nplanes=1)
        endif
 
+       if (istatflatness) then
+        call decomp_2d_register_variable(io_statistics, "uuuu_mean", 3, 0, 0, mytype, opt_decomp=uuuu_info)
+       endif
        if (istatquadrant) then
         call decomp_2d_register_variable(io_statistics, "uv_quadrant_mean", 3, 0, 0, mytype,opt_decomp=uv_quadrant_info)
        endif
@@ -116,6 +122,7 @@ contains
 
     use param, only : zero, iscalar, istatbudget, istatpstrain
     use param, only : istatquadrant, istatlambda2, nquads, istatspectra
+    use param, only : istatflatness
     use variables, only : nx, ny, nz
     use decomp_2d, only : zsize, decomp_info_init
     use MPI
@@ -144,6 +151,11 @@ contains
       
     endif
 
+    if (istatflatness) then
+      allocate(uuuu_mean(zsize(1),zsize(2),3))
+      uuuu_mean = zero
+    endif
+
     if (istatpstrain) then
       if (.not.istatbudget) then
         write(*,*) "If p-strain conditional averaging used, istatbudget must be T"
@@ -157,6 +169,8 @@ contains
 
     if (istatquadrant) then
       allocate(uv_quadrant_mean(zsize(1),zsize(2),4*nquads))
+
+      uv_quadrant_mean = zero
     endif
     if (istatlambda2) then
 #ifndef HAVE_LAPACK 
@@ -190,6 +204,7 @@ contains
     call decomp_info_init(nx, ny, 4*nquads, uv_quadrant_info)
 
     call decomp_info_init(nx, ny, 4, pdvdy_q_info)
+    call decomp_info_init(nx, ny, 3, uuuu_info)
 
     call init_statistic_adios2
 
@@ -319,7 +334,7 @@ contains
   subroutine read_or_write_all_stats(flag_read)
 
     use param, only : iscalar, itime, istatbudget, istatpstrain
-    use param, only : initstat2, istatlambda2, istatquadrant
+    use param, only : initstat2, istatlambda2, istatquadrant, istatflatness
     use variables, only : numscalar
     use decomp_2d, only : nrank
     use decomp_2d_io, only : decomp_2d_write_mode, decomp_2d_read_mode, &
@@ -374,6 +389,10 @@ contains
       call read_or_write_one_stat(flag_read, gen_statname("pu_mean"), pu_mean,pu_info)
       call read_or_write_one_stat(flag_read, gen_statname("dudxdudx_mean"), dudxdudx_mean,dudxdudx_info)
 
+    endif
+
+    if (istatflatness) then
+      call read_or_write_one_stat(flag_read, gen_statname("uuuu_mean"), uuuu_mean, uuuu_info)
     endif
 
     if (istatpstrain .and. itime > initstat2) then
@@ -622,6 +641,9 @@ contains
                       
     endif                             
 
+    if (istatflatness) then
+      call update_flatness(uuuu_mean,ux3, uy3, uz3,td3)
+    endif
     if (istatpstrain .and. itime>initstat2) then
       call update_pstrain_cond_avg(pdvdy_q_mean(:,:,1),pdvdy_q_mean(:,:,2),&
                                   pdvdy_q_mean(:,:,3),pdvdy_q_mean(:,:,4),&
@@ -879,6 +901,17 @@ contains
 
   end subroutine update_velograd2_tensor
   
+  subroutine update_flatness(uuuum, ux, uy, uz, ep)
+    use decomp_2d, only : mytype, xsize, zsize
+    real(mytype), dimension(zsize(1),zsize(2),3), intent(inout) :: uuuum
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ux, uy, uz, ep
+  
+    call update_average_scalar(uuuum(:,:,1), ux*ux*ux*ux, ep)
+    call update_average_scalar(uuuum(:,:,2), uy*uy*uy*uy, ep)
+    call update_average_scalar(uuuum(:,:,3), uz*uz*uz*uz, ep)
+
+  end subroutine update_flatness
+
   subroutine update_uv_quad_avg(uvqm, uum, vvm, um, vm, ux, uy, ep)
     use dbg_schemes, only : sqrt_prec, abs_prec
     use decomp_2d, only : mytype, xsize, zsize
@@ -935,7 +968,7 @@ contains
     endif 
     do j = 1, nquads
       do i = 1, 4
-        call update_average_scalar(uvqm(:,:,(j-1)*nquads+i),uv_fluct,&
+        call update_average_scalar(uvqm(:,:,(j-1)*4+i),uv_fluct,&
                                   ep,mask=mask(:,:,:,j,i),istat2=.true.)
       enddo
     enddo

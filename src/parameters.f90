@@ -54,7 +54,7 @@ subroutine parameter(input_i3d)
        ninflows, ntimesteps, inflowpath, ioutflow, output2D, nprobes
   NAMELIST /Statistics/ wrotation,spinup_time, nstat, initstat, &
             istatcalc, istatbudget,istatpstrain,istatlambda2, initstat2, istatout,&
-            istatquadrant, nquads
+            istatquadrant, nquads, istatflatness
   NAMELIST /ProbesParam/ flag_all_digits, flag_extra_probes, xyzprobes
   NAMELIST /ScalarParam/ sc, ri, uset, cp, &
        nclxS1, nclxSn, nclyS1, nclySn, nclzS1, nclzSn, &
@@ -786,5 +786,6 @@ subroutine parameter_defaults()
   istatlambda2 = .false.
   istatquadrant = .false.
   istatspectra = .false.
+  istatflatness = .false.
   istatout = -1
 end subroutine parameter_defaults

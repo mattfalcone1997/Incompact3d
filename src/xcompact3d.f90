@@ -278,6 +278,7 @@ subroutine init_xcompact3d()
   endif
 
   call write_params_json
+  call write_run_info
 
 endsubroutine init_xcompact3d
 !########################################################################
@@ -388,7 +389,7 @@ subroutine write_params_json
    write(fl,"(A ,':',I0,',')") '  "itype"',itype
    write(fl,"(A ,':',I0,',')") '  "istatcalc"',istatcalc
    write(fl,"(A ,':',I0,',')") '  "initstat"',initstat
-
+   write(fl,"(A ,':',I0,',')") '  "initstat2"',initstat2
 
    write(fl,"(A ,' : {')") '  "geometry"'
    write(fl,"(A ,': ',g0,',')") '    "xlx"',xlx
@@ -450,7 +451,44 @@ subroutine write_params_json
    endif
    write(fl,"(A ,':',g0,',')") '  "re"',re
    write(fl,"(A ,':',g0)") '  "dt"',dt
+   write(fl,'(A)') "}"
 
+   close(fl)
+
+end subroutine
+
+subroutine write_run_info
+   use param
+   use decomp_2d, only : nrank
+
+   implicit none
+   integer :: fl, recl
+   character(80) :: run_str
+
+   if (nrank .ne. 0) return
+
+   if (irestart==1) then
+      open(newunit=fl,file='run_log.json',status='old',action='readwrite',position='rewind')
+      recl=0
+      do
+         read(fl,*,end=10)
+         recl = recl + 1
+      enddo
+      10 write(run_str,'("  ",A," ",I0)') "run",(recl -2)/5 +1
+      backspace(fl); backspace(fl); backspace(fl)
+      write(fl,'(A)') "  },"
+      write(fl,"(A ,': {')") '  "'//trim(adjustl(run_str))//'"'
+   else
+      open(newunit=fl,file='run_log.json',status='replace',action='write')
+      write(fl,'(A)') "{"
+      write(fl,"(A ,': {')") '  "run 1"'
+
+   endif
+
+   write(fl,'(A," : ",I0,",")') '    "itime0"',ifirst
+   write(fl,'(A," : ",g0,",")') '    "t0"', t0
+   write(fl,'(A," : ",g0)') '    "dt"',dt
+   write(fl,'(A)') "  }"
    write(fl,'(A)') "}"
 
    close(fl)
