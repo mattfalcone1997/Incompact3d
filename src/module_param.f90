@@ -413,7 +413,7 @@ module param
 
   !TBL acceleration params
   real(mytype) :: alpha_accel, U_ratio, accel_centre, iaccel_thresh
-
+  character(len=80) :: accel_file
   !channel body forces
   integer :: ibodyforces, ibftype
   real(mytype) :: linear_amp, linear_ext 

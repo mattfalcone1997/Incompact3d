@@ -16,9 +16,12 @@ module channel
   real(mytype), dimension(:), allocatable :: body_force
   PRIVATE ! All functions/subroutines private by default
   procedure(real(mytype)), pointer :: temp_accel_calc
+  real(mytype), dimension(:), allocatable :: ub_temp_accel
+
   PUBLIC :: init_channel, boundary_conditions_channel, postprocess_channel, &
             visu_channel, visu_channel_init, momentum_forcing_channel, &
-            geomcomplex_channel, body_force, temp_accel_init, body_forces_init
+            geomcomplex_channel, body_force, temp_accel_init, body_forces_init,&
+            temp_accel_calc
 
 contains
   !############################################################################
@@ -380,9 +383,17 @@ contains
       linear_temp = one
    endif
 
-  end function
+  end function linear_temp
 
+  real(mytype) function spatial_equiv(temp)
+     real(mytype), intent(in) :: temp
 
+      integer :: i 
+
+      i = int(temp/dt)
+
+      spatial_equiv = ub_temp_accel(i)
+  end function spatial_equiv
   !############################################################################
   !############################################################################
   subroutine postprocess_channel(ux1,uy1,uz1,pp3,phi1,ep1)
@@ -561,10 +572,26 @@ contains
   end subroutine
   subroutine temp_accel_init
 
-   use param, only : iacceltype
+   use param
+   use dbg_schemes, only : tanh_prec
+
+   integer :: i
+   real(mytype) :: dudx, x=0
+
    if (itempaccel == 1) then
       if (iacceltype == 1) then
          temp_accel_calc => linear_temp
+      else if (iacceltype == 2) then
+         allocate(ub_temp_accel(ilast))
+         ub_temp_accel(1) = one
+         do i = 2, ilast
+            x = x + ub_temp_accel(i-1)*dt
+            ub_temp_accel(i) = one +   half *(U_ratio - one)*(&
+                                       tanh_prec( alpha_accel*(x &
+                                       - accel_centre ))  + one )
+         enddo
+
+         temp_accel_calc => spatial_equiv
       else
          write(*,*) "Invalid temporal acceleration profile"
       endif

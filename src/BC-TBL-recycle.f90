@@ -17,6 +17,7 @@ module tbl_recy
   real(mytype), allocatable, dimension(:,:,:) :: source
   real(mytype), dimension(:,:), allocatable :: recy_mean_z, recy_mean_t
   real(mytype), dimension(:,:), allocatable :: inlt_mean_z, inlt_mean_t
+  real(mytype), dimension(:), allocatable :: u_infty_file
   real(mytype) :: delta_inlt_old
   real(mytype) :: dv_inlt, dv_recy
   real(mytype) :: delta_inlt, delta_recy
@@ -266,8 +267,8 @@ contains
    use MPI
    use dbg_schemes, only : abs_prec
 
-   real(mytype) :: x, xdiff
-   integer :: i, ierror
+   real(mytype) :: x, xdiff, x_read
+   integer :: i, ierror, unit, ios
 
    allocate(recy_mean_t(3,ny))
    allocate(recy_mean_z(3,ny))
@@ -306,6 +307,27 @@ contains
       u_infty_calc => tanh_BL
    else if (iaccel .eq. 2) then
       u_infty_calc => tanh_cubic_BL
+   else if (iaccel .eq. 3) then
+      open(newunit=unit,file=accel_file,action='read',status='old',iostat=ios)
+      if (ios /= 0) then
+         write(*,*) "Error reading file "//trim(adjustl(accel_file))
+         call MPI_Abort(MPI_COMM_WORLD, 1,ierror)
+      endif
+
+      allocate(u_infty_file(nx))
+
+      do i = 1, nx
+         x = real(i-1,kind=mytype)*dx
+         read(unit,fmt=*) &
+               x_read, u_infty_file(i)
+
+         if (abs_prec(x_read-x) > real(1e-8,kind=mytype)) then
+            write(*,*) "x coordinate in file does not match case setup"
+            call MPI_Abort(MPI_COMM_WORLD, 1,ierror)
+         endif
+
+      enddo
+      u_infty_calc => file_BL
    else
       write(*,*) "Invalid iaccel value"
       call MPI_Abort(MPI_COMM_WORLD, 1,ierror)
@@ -518,6 +540,32 @@ contains
          u_infty_grad = zero
       endif
    end subroutine
+
+   subroutine file_BL(index,u_infty, u_infty_grad)
+      use param, only : dx
+      use var, only : t
+      integer, intent(in) :: index
+      real(mytype), intent(out) :: u_infty, u_infty_grad
+
+      real(mytype) :: eps
+      if (t<50) then
+         eps = t/fifty
+      else
+         eps = one
+      endif
+
+      u_infty = u_infty_file(1) + eps*(u_infty_file(index) - u_infty_file(1))
+
+      if (index == 1) then
+         u_infty_grad = eps*(u_infty_file(2)-u_infty_file(1))/dx
+      else if (index == nx) then
+         u_infty_grad = eps*(u_infty_file(nx)-u_infty_file(nx-1))/dx
+      else
+         u_infty_grad = eps*0.5*(u_infty_file(index+1)-u_infty_file(index-1))/dx
+      endif
+
+   end subroutine
+
   subroutine accel_source
    use param
    use variables
@@ -746,13 +794,7 @@ contains
 
 
 
-   if (t < t_recy1) then
-      eps = zero
-   else if (t < t_recy2) then
-      eps = (t - t_recy1)/ (t_recy2 - t_recy1)
-   else
-      eps = one
-   endif
+   eps=one
 
    do j = 1, ny
       if (istret==0) y=real(j-1,mytype)*dy
@@ -821,7 +863,7 @@ contains
 
    enddo
 
-   call u_infty_inlt(um_inlt,u_inf)
+   call u_infty_inlt_calc(um_inlt,u_inf)
    call u_infty_calc(1,u_infty,dudx)
    um_inlt(:) = um_inlt(:)*u_infty/u_inf
 
@@ -838,7 +880,7 @@ contains
 
 
   end subroutine
-  subroutine u_infty_inlt(u_inlt,u_inf)
+  subroutine u_infty_inlt_calc(u_inlt,u_inf)
    use MPI
    use decomp_2d
 

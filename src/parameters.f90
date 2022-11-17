@@ -77,10 +77,12 @@ subroutine parameter(input_i3d)
   NAMELIST/TBLRecy/plane_location, t_avg1,t_avg2, t_recy1, t_recy2, iaccel,t_trip
   NAMELIST/tanhAccelTBL/U_ratio, accel_centre, alpha_accel
   NAMELIST/tanhAccelCubicTBL/U_ratio, accel_centre, alpha_accel, iaccel_thresh
+  NAMELIST/fileAccel/accel_file
   NAMELIST/bodyForce/ibodyforces,ibftype
   NAMELIST/linearBodyF/linear_amp,linear_ext
   NAMELIST/tempAccel/itempaccel, iacceltype
   NAMELIST/linear_prof/Re_ratio, t_start, t_end
+  NAMELIST/spatial_equiv/U_ratio, accel_centre, alpha_accel
   NAMELIST/hquadrant/h_quads
 
 #ifdef DEBG
@@ -223,6 +225,8 @@ subroutine parameter(input_i3d)
          read(10, nml=tanhAccelTBL); rewind(10)
       else if(iaccel.eq.2) then
          read(10, nml=tanhAccelCubicTBL); rewind(10)
+      else if (iaccel == 3) then
+         read(10, nml=fileAccel); rewind(10)
       endif
 
    endif
@@ -241,6 +245,8 @@ subroutine parameter(input_i3d)
    if (iostat==0.and.itempaccel==1) then
       if (iacceltype==1) then
          read(10,nml=linear_prof); rewind(10)
+      else if (iacceltype==2) then
+         read(10,nml=spatial_equiv); rewind(10)
       endif
    endif
 

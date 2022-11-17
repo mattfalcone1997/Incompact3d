@@ -352,12 +352,13 @@ subroutine write_params_json
    use variables
    use decomp_2d, only : nrank
    use tbl_recy, only : u_infty_calc
-   use channel, only : body_force
+   use channel, only : body_force, temp_accel_calc
    use stats, only : h_quads
    implicit none
 
    real(mytype), dimension(nx) :: xcoords, u_infty
    real(mytype), dimension(nz) :: zcoords
+   real(mytype), dimension(:), allocatable :: u_b, t_b
    real(mytype) :: u_infty_grad, t_tmp
    character(80) :: xfmt, zfmt,yfmt
    integer :: fl, i
@@ -435,8 +436,27 @@ subroutine write_params_json
          write(fl,"(A,': ',A,',')") '    "profile"','"linear"'
          write(fl,"(A,': ',g0,',')") '    "t_start"',t_start
          write(fl,"(A,': ',g0,',')") '    "t_end"',t_start
-         write(fl,"(A,': ',g0)") '    "Re_ratio"',Re_ratio
+         write(fl,"(A,': ',g0),',')") '    "Re_ratio"',Re_ratio
+      else if (iacceltype==2) then
+         write(fl,"(A,': ',A,',')") '    "profile"','"spatial equiv"'
+         write(fl,"(A,': ',g0,',')") '    "U_ratio"',U_ratio
+         write(fl,"(A,': ',g0,',')") '    "x0"',accel_centre
+         write(fl,"(A,': ',g0,',')") '    "alpha_accel"',alpha_accel
       endif
+
+      allocate(u_b(ilast/ilist))
+      allocate(t_b(ilast/ilist))
+      
+      do i = 1,ilast/ilist
+         t_b(i) = real(i,kind=mytype)*dt*ilist
+         u_b(i) = temp_accel_calc( t_b(i))
+      enddo
+      write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ilast/ilist-1,"(',',g0),'],')"
+      write(fl,yfmt) '    "t"', t_b
+      write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ilast/ilist-1,"(',',g0),']')"
+      write(fl,yfmt) '    "U_b"', u_b
+
+      deallocate(u_b,t_b)
       write(fl,'(A)') "  },"
    endif
    if (istatquadrant) then
