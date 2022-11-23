@@ -51,7 +51,7 @@ subroutine parameter(input_i3d)
   NAMELIST /NumOptions/ ifirstder, isecondder, itimescheme, iimplicit, &
        nu0nu, cnu, ipinter
   NAMELIST /InOutParam/ irestart, icheckpoint, ioutput, nvisu, ilist, iprocessing, &
-       ninflows, ntimesteps, inflowpath, ioutflow, output2D, nprobes
+       ninflows, ntimesteps, inflowpath, ioutflow, output2D, nprobes, log_cputime
   NAMELIST /Statistics/ wrotation,spinup_time, nstat, initstat, &
             istatcalc, istatbudget,istatpstrain,istatlambda2, initstat2, istatout,&
             istatquadrant, nquads, istatflatness
@@ -747,6 +747,7 @@ subroutine parameter_defaults()
   ioutflow=0
   output2D = 0
   nprobes=0
+  log_cputime=.false.
 
   !! PROBES
   flag_all_digits = .false.
@@ -770,10 +771,12 @@ subroutine parameter_defaults()
   ts_tr_tbl=1.402033_mytype
   x0_tr_tbl=3.505082_mytype
   y0_tr_tbl=0.05_mytype
-   ! Accel
-
+   
+  ! Accel
   iaccel = 0
   U_ratio = one
+  t_trip = 600.0_mytype
+
    ! body forces
   ibodyforces = 0
   linear_amp = zero

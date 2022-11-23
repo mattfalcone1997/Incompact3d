@@ -149,6 +149,7 @@ contains
     use simulation_stats
     use var
     use MPI
+    use param, only : log_cputime
 
     implicit none
 
@@ -161,6 +162,7 @@ contains
        tranksum=zero
        ttotal=zero
        call cpu_time(tstart)
+       if (nrank==0.and.log_cputime) call output_cputime(1.0,reset=.true.)
     else if (iwhen == 2) then !AT THE START OF A TIME STEP
        if (nrank == 0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime==ilast)) then
           call cpu_time(time1)
@@ -170,7 +172,10 @@ contains
     else if ((iwhen == 3).and.(itime > ifirst)) then !AT THE END OF A TIME STEP
        if (nrank == 0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime==ilast)) then
           call cpu_time(trank)
+          
           if (nrank==0) write(*,*) 'Time for this time step (s):',real(trank-time1)
+          if (nrank==0.and.log_cputime) call output_cputime(real(trank-time1))
+
           telapsed = (trank-tstart)/threethousandsixhundred
           tremaining  = telapsed*(ilast-itime)/(itime-ifirst)
           write(*,"(' Remaining time:',I8,' h ',I2,' min')") int(tremaining), int((tremaining-int(tremaining))*sixty)
@@ -199,6 +204,38 @@ contains
     endif
 
   end subroutine simu_stats
+  !##############################################################################
+    !! 
+  !##############################################################################
+  subroutine output_cputime(t_cpu,reset)
+   use var
+   use param
+   implicit none
+
+   real, intent(in) :: t_cpu
+   logical, intent(in), optional :: reset
+
+   integer :: unit
+
+   if (.not.log_cputime) return 
+
+   if (present(reset)) then
+      if (reset) then
+         open(newunit=unit,file='timer_stats.csv',status='replace',action='write')
+         write(unit,'(A,",",A)') "t", "t_cpu"
+         close(unit)
+         return
+      else
+         open(newunit=unit,file='timer_stats.csv',status='old',action='write',position='append')
+      endif
+   else
+      open(newunit=unit,file='timer_stats.csv',status='old',action='write',position='append')
+   endif
+
+   write(unit,'(g0,",",g0)') t, t_cpu
+   close(unit)
+
+  end subroutine
   !##############################################################################
     !!
     !!  SUBROUTINE: restart

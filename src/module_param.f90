@@ -298,6 +298,7 @@ module param
   integer :: ivisu, ipost, initstat,initstat2,istatcalc, istatout, nquads
   logical :: istatbudget, istatpstrain, istatlambda2, istatquadrant, istatspectra
   logical :: istatflatness
+  logical :: log_cputime
   integer :: ifilter
   
   real(mytype) :: xlx,yly,zlz,dx,dy,dz,dx2,dy2,dz2,t,xxk1,xxk2,t0
