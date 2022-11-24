@@ -1310,6 +1310,12 @@ contains
    recy_mean_z_local(:,:) = zero
    inlt_mean_z_local(:,:) = zero
 
+   recy_mean_z_ls(:,:) = zero
+   inlt_mean_z_ls(:,:) = zero
+
+   recy_mean_z(:,:) = zero
+   inlt_mean_z(:,:) = zero
+
    call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, ierr)
 
    allocate(displs(dims(1)), recvcounts(dims(1)))
@@ -1385,10 +1391,6 @@ contains
       recy_mean_t(:,:) = (dtdivT) *  recy_mean_z(:,:) + &
                            ( one - dtdivT )*recy_mean_t(:,:)                           
    endif
-
-   call u_infty_calc(1,u_infty,dudx)
-   inlt_mean_t(1,:) = inlt_mean_t(1,:)*u_infty/inlt_mean_t(1,ny)
-
 
    call MPI_Comm_free(split_comm_y,ierr)
    call MPI_Comm_free(split_comm_z,ierr)
