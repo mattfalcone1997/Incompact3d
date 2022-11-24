@@ -13,7 +13,6 @@ module tbl_recy
   integer :: fs
   character(len=100) :: fileformat
   character(len=1),parameter :: NL=char(10) !new line character
-  real(mytype), allocatable, dimension(:) :: um_inlt_ini, vm_inlt_ini
   real(mytype), allocatable, dimension(:,:,:) :: source
   real(mytype), dimension(:,:), allocatable :: recy_mean_z, recy_mean_t
   real(mytype), dimension(:,:), allocatable :: inlt_mean_z, inlt_mean_t
@@ -24,7 +23,7 @@ module tbl_recy
 
   integer :: plane_index, tbl_recy_log
   logical, parameter :: write_logs = .true.
-  
+  integer :: test_unit
   abstract interface 
   subroutine u_infty_interface(index,u_infty, u_infty_grad)
      import mytype
@@ -178,8 +177,8 @@ contains
                            
 
         ! report average quantities
-    call GetScalings(dbg_dv_inlt, dbg_dv_recy, dbg_delta_inlt, dbg_delta_recy, reset=.true.)
-    call output_scalings("update",dbg_dv_inlt, dbg_dv_recy, dbg_delta_inlt, dbg_delta_recy)
+   call GetScalings(dbg_dv_inlt, dbg_dv_recy, dbg_delta_inlt, dbg_delta_recy, reset=.true.)
+   call output_scalings("update",dbg_dv_inlt, dbg_dv_recy, dbg_delta_inlt, dbg_delta_recy)
 
    do i = 1, ny
       y_in(i)  = real(i - one    ,mytype)
@@ -218,12 +217,7 @@ contains
 #endif
 
       call nickels_init(u_mean, v_mean)
-      
-      do j = 1, xsize(2)
-         jdx  = xstart(2) + j -1
-         um_inlt_ini(j) = u_mean(1,jdx)
-         vm_inlt_ini(j) = v_mean(1,jdx)
-      enddo
+
 
       do k=1,xsize(3)
          do j=1,xsize(2)
@@ -250,12 +244,6 @@ contains
       t_recy1 = dbg_t_recy1
       t_recy2 = dbg_t_recy2
 
-      ! reseting inly_ini variables
-      do j = 1, xsize(2)
-         jdx  = xstart(2) + j -1
-         um_inlt_ini(j) = u_mean(1,jdx)
-         vm_inlt_ini(j) = v_mean(1,jdx)
-      enddo
 
     if (nrank  ==  0) write(*,*) '# init end ok'
 #endif
@@ -274,8 +262,6 @@ contains
    allocate(recy_mean_z(3,ny))
    allocate(inlt_mean_t(3,ny))
    allocate(inlt_mean_z(3,ny))
-
-   allocate(um_inlt_ini(xsize(2)), vm_inlt_ini(xsize(2)))
 
    if (plane_location.gt.xlx.and. nrank.eq.0) then
       write(*,*) "Plane location must be less than domain size"
@@ -333,6 +319,13 @@ contains
       call MPI_Abort(MPI_COMM_WORLD, 1,ierror)
    endif
 
+   if (nrank == 0) then
+      open(unit=test_unit,file='tbl_info.txt',status='replace',action='write')
+      close(test_unit)
+   endif
+   call MPI_Barrier(MPI_COMM_WORLD,ierror)
+   open(unit=test_unit,file='tbl_info.txt',status='old',action='write')
+
    call accel_source
 
 #ifdef BL_DEBG   
@@ -371,8 +364,6 @@ contains
    open(newunit=unit,file=fn,status='old',action='read',access='stream')
    read(unit) recy_mean_t, inlt_mean_t, u_inlt, v_inlt,delta_inlt_old
    close(unit)
-   um_inlt_ini(:) = u_inlt(xstart(2):xend(2))
-   vm_inlt_ini(:) = v_inlt(xstart(2):xend(2))
    
    if(nrank.eq.0) write(*,*) "Reading tbl_recy restart information"
   end subroutine
@@ -400,33 +391,8 @@ contains
 
    if (mod(it,icheckpoint).ne.0 .and..not.force_local) return
 
-   call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, ierr)
-
-   allocate(displs(dims(1)), recvcounts(dims(1)))
-   allocate(ldispl(dims(1)))
-   
-   key = coords(1)
-   color = coords(2)
-
-
-   call MPI_Comm_split(DECOMP_2D_COMM_CART_X,color, key,split_comm,ierr)
-   if (color.ne.0) then
-      call MPI_Comm_free(split_comm,ierr)
-      return
-   endif
-
-   call MPI_Allgather(xstart(2), 1, MPI_INTEGER, ldispl,&
-   1, MPI_INTEGER,split_comm,ierr)
-
-   displs = ldispl - 1
-   call MPI_Allgather(xsize(2), 1, MPI_INTEGER, recvcounts,&
-   1, MPI_INTEGER,split_comm,ierr) 
-
-   call MPI_Gatherv(um_inlt_ini,xsize(2),real_type,inlt_u,recvcounts,&
-                  displs,real_type,0,split_comm,ierr)
-
-   call MPI_Gatherv(vm_inlt_ini,xsize(2),real_type,inlt_v,recvcounts,&
-                  displs,real_type,0,split_comm,ierr)
+   inlt_u = zero
+   inlt_v = zero
                   
    if(nrank .eq.0) then
       write(*,*) "Writing tbl_recy restart file"
@@ -438,7 +404,6 @@ contains
       write(unit) recy_mean_t, inlt_mean_t, inlt_u, inlt_v, delta_inlt_old
       close(unit)
    endif
-   call MPI_Comm_free(split_comm,ierr)
 
   end subroutine
 
@@ -623,18 +588,44 @@ contains
 
     real(mytype), dimension(nx) :: v_infty
 
-    real(mytype) :: x, y, z, u_infty
+    real(mytype) :: x, y, z, u_infty, max_u, max_v, max_w, max_work
     real(mytype) :: udx,udy,udz,uddx,uddy,uddz,cx, dudx
-    integer :: i, j, k
+    integer :: i, j, k, ierr
     
 
     !INFLOW with an update of bxx1, byy1 and bzz1 at the inlet
-    
+    max_work = maxval(abs(ux))
+    call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+    max_work = maxval(abs(uy))
+    call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+    max_work = maxval(abs(uz))
+    call MPI_Allreduce(max_work,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+    if (nrank ==0) &
+       write(test_unit,'("Iteration: ",I0," max u v w ",g0," ",g0," ",g0," ")') itime, max_u, max_v, max_w
+
     call compute_recycle_mean(ux, uy, uz)
     call GetScalings(dv_inlt, dv_recy, delta_inlt, delta_recy)
 
     call mean_flow_inlt_calc(u_mean, v_mean)
+    
+    max_work = maxval(abs(u_mean))
+    call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+    max_work = maxval(abs(v_mean))
+    call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+
+    if (nrank ==0) &
+       write(test_unit,'("Iteration: ",I0," max mean u v ",g0," ",g0," ")') itime,max_u, max_v
     call fluct_flow_inlt_calc(ux, uy, uz, u_fluct, v_fluct, w_fluct)
+
+    max_work = maxval(abs(u_fluct))
+    call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+    max_work = maxval(abs(v_fluct))
+    call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+    max_work = maxval(abs(w_fluct))
+    call MPI_Allreduce(max_work,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+    
+    if (nrank ==0) &
+       write(test_unit,'("Iteration: ",I0," max fluct u v w ",g0," ",g0," ",g0," ")') itime, max_u, max_v, max_w
 
     do k = 1,xsize(3)
       do j = 1, xsize(2)
@@ -841,7 +832,7 @@ contains
       dbg_u_inner(j) = u_inner(j)
 #endif
       ! outer u
-      u_tmp = u_tmp + w*(gamma*u_outer(j) +&
+      um_inlt(j) = u_tmp + w*(gamma*u_outer(j) +&
                         (one - gamma)*u_infty)
 #ifdef BL_DEBG
 
@@ -850,16 +841,10 @@ contains
       dbg_v_inner(j) = v_inner(j)
       dbg_v_outer(j) = v_outer(j)
 #endif
-      ! weighted with value from previous time step
-      um_inlt(j) = eps*u_tmp + (one - eps)*um_inlt_ini(j)
-      um_inlt_ini(j) = um_inlt(j)
       ! weighting v with weighting function
-      u_tmp = v_inner(j)*(one - w) + &
+      vm_inlt(j) = v_inner(j)*(one - w) + &
                w*v_outer(j)
 
-      ! weighted with value from previous time step
-      vm_inlt(j) = eps*u_tmp + (one - eps)*vm_inlt_ini(j)
-      vm_inlt_ini(j) = vm_inlt(j)
 
    enddo
 

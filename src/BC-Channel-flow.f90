@@ -283,15 +283,32 @@ contains
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux,uy,uz
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
     real(mytype) :: u_b
-    u_b = one
+
+    if (use_center) then
+      u_b = two/three
+    else
+      u_b = one
+    endif
     if (.not. cpg) then ! if not constant pressure gradient
-       if (itempaccel==1) u_b = temp_accel_calc(t) 
        
-       if (idir_stream == 1) then
-          call channel_cfr(ux,u_b)
-       else
-          call channel_cfr(uz,u_b)
-       endif
+      if (.not. use_center) then
+         if (itempaccel==1) u_b = temp_accel_calc(t) 
+       
+         if (idir_stream == 1) then
+            call channel_cfr(ux,u_b)
+         else
+            call channel_cfr(uz,u_b)
+         endif
+      else
+         if (itempaccel==1) u_b = temp_accel_calc(t) 
+       
+         if (idir_stream == 1) then
+            call channel_c_center(ux,u_b)
+         else
+            call channel_c_center(uz,u_b)
+         endif
+      endif
+
     end if
 
     if (iscalar /= 0) then
@@ -368,6 +385,38 @@ contains
 
   end subroutine channel_cfr
 
+  subroutine channel_c_center(ux, constant)
+   use MPI
+   real(mytype), dimension(xsize(1),xsize(2),xsize(3)) :: ux
+   real(mytype), intent(in) :: constant
+   integer, dimension(:),allocatable :: ranks_incl,displs, recvcounts
+
+   integer :: y_mid, y_ind
+   integer :: ierr, i, j, k
+   real(mytype) :: u_c, u_c_global, can
+
+   y_mid = (ny+1) / 2
+   if (y_mid>=xstart(2).and.y_mid<=xend(2)) then
+      y_ind = y_mid - xstart(2) +1
+      u_c = sum(ux(:,y_ind,:))/nx/nz
+   else
+      u_c = zero
+   endif
+   
+   call MPI_Allreduce(u_c,u_c_global,1,real_type,MPI_SUM,DECOMP_2D_COMM_CART_X,ierr)
+   can = -(constant - u_c_global)
+
+   if (nrank==0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime == ilast)) &
+   write(*,*) 'UT', u_c_global, can
+
+   do k=1,xsize(3)
+      do j=1,xsize(2)
+         do i=1,xsize(1)
+            ux(i,j,k) = ux(i,j,k) - can
+         enddo
+      enddo
+   enddo
+  end subroutine
   !! calculation of temporal acceleration
 
   real(mytype) function linear_temp(temp)

@@ -47,7 +47,7 @@ subroutine parameter(input_i3d)
        ivisu, ipost, &
        gravx, gravy, gravz, &
        cpg, idir_stream, &
-       ifilter, C_filter, iturbine
+       ifilter, C_filter, iturbine, use_center
   NAMELIST /NumOptions/ ifirstder, isecondder, itimescheme, iimplicit, &
        nu0nu, cnu, ipinter
   NAMELIST /InOutParam/ irestart, icheckpoint, ioutput, nvisu, ilist, iprocessing, &
@@ -787,6 +787,7 @@ subroutine parameter_defaults()
   Re_ratio = one
   t_start = zero
   t_end = zero
+  use_center = .false.
 
   ! statistics
   istatcalc = 1
