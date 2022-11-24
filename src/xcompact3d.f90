@@ -232,10 +232,10 @@ subroutine init_xcompact3d()
         call init_sandbox(ux1,uy1,uz1,ep1,phi1,1)
      end if
 
+     call restart(ux1,uy1,uz1,dux1,duy1,duz1,ep1,pp3(:,:,:,1),phi1,dphi1,px1,py1,pz1,rho1,drho1,mu1,0)
      if (itype == itype_tbl_recy) then
       call restart_tbl_recy(ifirst-1)
      endif
-     call restart(ux1,uy1,uz1,dux1,duy1,duz1,ep1,pp3(:,:,:,1),phi1,dphi1,px1,py1,pz1,rho1,drho1,mu1,0)
   endif
   
 !   call postprocessing(rho1, ux1, uy1, uz1, pp3, phi1, ep1)
