@@ -614,7 +614,7 @@ contains
     call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
 
     if (nrank ==0) &
-       write(test_unit,'("Iteration: ",I0," max mean u v ",g0," ",g0," ")') itime,max_u, max_v
+       write(test_unit,'("Iteration: ",I0," max inlet mean u v ",g0," ",g0," ")') itime,max_u, max_v
     call fluct_flow_inlt_calc(ux, uy, uz, u_fluct, v_fluct, w_fluct)
 
     max_work = maxval(abs(u_fluct))
@@ -852,6 +852,8 @@ contains
    call u_infty_calc(1,u_infty,dudx)
    um_inlt(:) = um_inlt(:)*u_infty/u_inf
 
+   if (nrank ==0) &
+      write(test_unit,'("Iteration: ",I0," u_infty ",g0," ",g0)') itime, u_infty, u_inf
 #ifdef BL_DEBG
    write(fname,"('real-',I0)") itime
 
@@ -892,6 +894,7 @@ contains
   end subroutine
   
   subroutine fluct_flow_inlt_calc(ux, uy, uz, u_fluct, v_fluct, w_fluct)
+   use MPI
    real(mytype), dimension(:,:,:), intent(in) :: ux, uy, uz
    real(mytype), dimension(:,:), intent(out) :: u_fluct
    real(mytype), dimension(:,:), intent(out) :: v_fluct
@@ -910,7 +913,9 @@ contains
    real(mytype), dimension(:), allocatable :: eta_inlt
    real(mytype), dimension(:), allocatable :: eta_recy
    real(mytype) :: y, w, u_tmp, gamma, factor
-   integer :: j,k, jdx
+   real(mytype) :: max_u, max_v, max_w, max_work
+
+   integer :: j,k, jdx, ierr
 #ifdef BL_DEBG
    character(20) :: fname
 #endif
@@ -926,6 +931,33 @@ contains
    allocate(v_fluct_outer(xsize(2),xsize(3)))
    allocate(w_fluct_outer(xsize(2),xsize(3)))
 
+   max_work = maxval(abs(ux))
+   call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   max_work = maxval(abs(uy))
+   call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   max_work = maxval(abs(uz))
+   call MPI_Allreduce(max_work,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   if (nrank ==0) &
+       write(test_unit,'("Iteration: ",I0," (fluct) max u v w ",g0," ",g0," ",g0," ")') itime, max_u, max_v, max_w
+
+   max_work = maxval(abs(recy_mean_t(1,:)))
+   call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   max_work = maxval(abs(recy_mean_t(2,:)))
+   call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+
+   if (nrank ==0) &
+      write(test_unit,'("Iteration: ",I0," max mean t u v ",g0," ",g0," ")') itime,max_u, max_v
+   
+   max_work = maxval(abs(recy_mean_z(1,:)))
+   call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   max_work = maxval(abs(recy_mean_z(2,:)))
+   call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   max_work = maxval(abs(recy_mean_z(3,:)))
+   call MPI_Allreduce(max_work,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+
+   if (nrank ==0) &
+      write(test_unit,'("Iteration: ",I0," max mean z u v w ",g0," ",g0," ",g0," ")') itime,max_u, max_v, max_w
+   
    do k = 1, xsize(3)
       do j = 1, xsize(2)
          jdx = xstart(2) + j -1
@@ -934,6 +966,17 @@ contains
          w_fluct_in(j,k) =  uz(plane_index,j,k) - recy_mean_z(3,jdx)
       enddo
    enddo
+
+   max_work = maxval(abs(u_fluct_in))
+   call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   max_work = maxval(abs(v_fluct_in))
+   call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   max_work = maxval(abs(w_fluct_in))
+   call MPI_Allreduce(max_work,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   
+   if (nrank ==0) &
+      write(test_unit,'("Iteration: ",I0," max fluct in u v w ",g0," ",g0," ",g0," ")') itime, max_u, max_v, max_w
+
 
    allocate(y_plus_inlt(ny))
    allocate(y_plus_recy(ny))
