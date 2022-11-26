@@ -253,6 +253,7 @@ contains
 
   subroutine setup_tbl_recy
    use MPI
+   use param, only: iimplicit
    use dbg_schemes, only : abs_prec
 
    real(mytype) :: x, xdiff, x_read
@@ -262,6 +263,11 @@ contains
    allocate(recy_mean_z(3,ny))
    allocate(inlt_mean_t(3,ny))
    allocate(inlt_mean_z(3,ny))
+
+   if (iimplicit.ne.0.and.iaccel/=0) then
+      write(*,*) "Cannot use iimplicit /= 0 with accelerations"
+      call MPI_Abort(MPI_COMM_WORLD,1,ierror)
+   endif
 
    if (plane_location.gt.xlx.and. nrank.eq.0) then
       write(*,*) "Plane location must be less than domain size"
@@ -1300,6 +1306,16 @@ contains
    integer, allocatable, dimension(:) :: ldispl,displs, recvcounts
    logical :: reset_local
    real(mytype) :: T_period, dtdivT, u_infty, dudx
+   real(mytype) :: max_u, max_v, max_w, max_work
+
+    max_work = maxval(abs(ux(plane_index,:,:)))
+    call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+    max_work = maxval(abs(uy(plane_index,:,:)))
+    call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+    max_work = maxval(abs(uz(plane_index,:,:)))
+    call MPI_Allreduce(max_work,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+    if (nrank ==0) &
+       write(test_unit,'("Iteration: ",I0," max u v w recy_plane ",g0," ",g0," ",g0," ")') itime, max_u, max_v, max_w
 
    allocate(recy_mean_z_local(3, xsize(2)))
    allocate(inlt_mean_z_local(3, xsize(2)))
