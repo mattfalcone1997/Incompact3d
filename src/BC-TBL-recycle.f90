@@ -1357,12 +1357,31 @@ contains
       enddo
    enddo
 
+   max_work = maxval(abs(recy_mean_z_local(1,:)))
+   call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   max_work = maxval(abs(recy_mean_z_local(2,:)))
+   call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   max_work = maxval(abs(recy_mean_z_local(3,:)))
+   call MPI_Allreduce(max_work,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   if (nrank ==0) &
+       write(test_unit,'("Iteration: ",I0," max u v w avg_z 1 ",g0," ",g0," ",g0," ")') itime, max_u, max_v, max_w
+
+
    asize = xsize(2)*3
    call MPI_Allreduce(inlt_mean_z_local, inlt_mean_z_ls, asize, real_type,&
                       MPI_SUM, split_comm_z, ierr)
 
    call MPI_Allreduce(recy_mean_z_local, recy_mean_z_ls, asize, real_type,&
                       MPI_SUM, split_comm_z, ierr) 
+
+   max_work = maxval(abs(recy_mean_z_ls(1,:)))
+   call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   max_work = maxval(abs(recy_mean_z_ls(2,:)))
+   call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   max_work = maxval(abs(recy_mean_z_ls(3,:)))
+   call MPI_Allreduce(max_work,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   if (nrank ==0) &
+       write(test_unit,'("Iteration: ",I0," max u v w avg_z 2 ",g0," ",g0," ",g0," ")') itime, max_u, max_v, max_w
 
     
    call MPI_Allgather(xstart(2), 1, MPI_INTEGER, ldispl,&
@@ -1380,6 +1399,15 @@ contains
                        recy_mean_z,recvcounts,displs,real_type,&
                        split_comm_y,ierr)                       
 
+   max_work = maxval(abs(recy_mean_z(1,:)))
+   call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   max_work = maxval(abs(recy_mean_z(2,:)))
+   call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   max_work = maxval(abs(recy_mean_z(3,:)))
+   call MPI_Allreduce(max_work,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   if (nrank ==0) &
+      write(test_unit,'("Iteration: ",I0," max u v w avg_z 3 ",g0," ",g0," ",g0," ")') itime, max_u, max_v, max_w
+                    
    if (.not. present(reset)) reset_local = .false.
    if (present(reset)) reset_local = reset
 
