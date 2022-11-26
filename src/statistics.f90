@@ -1231,7 +1231,7 @@ contains
     integer :: split_comm_y
     real(mytype) :: norm
 
-#ifndef HAVE_FFTW
+#ifdef HAVE_FFTW
     ! perform fft
     call dfftw_execute_dft_r2c(plan_z,val1,val1_spec)
     if (.not.present(val2)) then
@@ -1285,7 +1285,7 @@ contains
     integer :: split_comm_y
     real(mytype) :: norm
 
-#ifndef HAVE_FFTW
+#ifdef HAVE_FFTW
     call dfftw_execute_dft_r2c(plan_x,val1,val1_spec)
     if (.not.present(val2)) then
       val2_spec = val1_spec

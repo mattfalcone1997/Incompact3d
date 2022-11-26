@@ -326,11 +326,11 @@ contains
    endif
 
    if (nrank == 0) then
-      open(unit=test_unit,file='tbl_info.txt',status='replace',action='write')
+      open(newunit=test_unit,file='tbl_info.txt',status='replace',action='write')
       close(test_unit)
    endif
    call MPI_Barrier(MPI_COMM_WORLD,ierror)
-   open(unit=test_unit,file='tbl_info.txt',status='old',action='write')
+   open(newunit=test_unit,file='tbl_info.txt',status='old',action='write')
 
    call accel_source
 
@@ -1300,14 +1300,14 @@ contains
    real(mytype), allocatable, dimension(:,:) :: inlt_mean_z_ls
 
 
-   integer :: k, j, ierr,  color, key, split_comm_y, split_comm_z, asize
+   integer :: k, j, ierr,  color, key, split_comm_y, split_comm_z, asize, test_unit2
    integer, dimension(2) :: dims, coords
    logical, dimension(2) :: periods 
    integer, allocatable, dimension(:) :: ldispl,displs, recvcounts
    logical :: reset_local
    real(mytype) :: T_period, dtdivT, u_infty, dudx
-   real(mytype) :: max_u, max_v, max_w, max_work
-
+   real(mytype) :: max_u, max_v, max_w, max_ul, max_vl, max_wl, max_work
+   character(len=80) :: f_string, status
     max_work = maxval(abs(ux(plane_index,:,:)))
     call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
     max_work = maxval(abs(uy(plane_index,:,:)))
@@ -1357,15 +1357,29 @@ contains
       enddo
    enddo
 
-   max_work = maxval(abs(recy_mean_z_local(1,:)))
-   call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   max_work = maxval(abs(recy_mean_z_local(2,:)))
-   call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   max_work = maxval(abs(recy_mean_z_local(3,:)))
-   call MPI_Allreduce(max_work,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   max_ul = maxval(abs(recy_mean_z_local(1,:)))
+   call MPI_Allreduce(max_ul,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   max_vl = maxval(abs(recy_mean_z_local(2,:)))
+   call MPI_Allreduce(max_vl,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
+   max_wl = maxval(abs(recy_mean_z_local(3,:)))
+   call MPI_Allreduce(max_wl,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
    if (nrank ==0) &
        write(test_unit,'("Iteration: ",I0," max u v w avg_z 1 ",g0," ",g0," ",g0," ")') itime, max_u, max_v, max_w
 
+   do j = 0, nproc-1
+      if (nrank==j) then
+         if (nrank==0) write(status,*) "replace"
+         if (nrank/=0) write(status,*) "old"
+
+         write(f_string,"('tbl_rank_info-',I0,'.txt')") itime
+         open(newunit=test_unit2,file=trim(adjustl(f_string)),status=trim(adjustl(status)),action='write',position='append')
+         write(test_unit2,'("Iteration: ",I0," rank: ",I0," coords: ",I0," "I0," max u v w avg_z 1: ",g0," ",g0," ",g0," ")')&
+               itime, nrank, coords(1), coords(2), max_ul*dims(2), max_vl*dims(2), max_wl*dims(2)
+         close(test_unit2)
+      endif
+
+      call MPI_Barrier(MPI_COMM_WORLD,ierr)
+   enddo
 
    asize = xsize(2)*3
    call MPI_Allreduce(inlt_mean_z_local, inlt_mean_z_ls, asize, real_type,&
