@@ -236,6 +236,11 @@ subroutine init_xcompact3d()
      if (itype == itype_tbl_recy) then
       call restart_tbl_recy(ifirst-1)
      endif
+     
+     itime=ifirst
+     call postprocessing(rho1,ux1,uy1,uz1,pp3,phi1,ep1,.true.)
+     if (nrank==0) write(*,*) "Testing restart"
+     call MPI_Abort(MPI_COMM_WORLD,1,ierr) 
   endif
   
 !   call postprocessing(rho1, ux1, uy1, uz1, pp3, phi1, ep1)
