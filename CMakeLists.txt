@@ -1,5 +1,6 @@
-cmake_minimum_required(VERSION 3.0.2)                        
+cmake_minimum_required(VERSION 3.12)                        
 cmake_policy(SET CMP0048 NEW)
+cmake_policy(SET CMP0074 NEW)
 
 project(xcompact3d LANGUAGES Fortran C CXX)
 
@@ -130,10 +131,10 @@ if(USE_ADIOS2)
   find_package(ADIOS2)
 endif()
 if(ADIOS2_FOUND)
-  message(STATUS "ADIOS INCLUDE ${ADIOS2_INCLUDE_DIRS}")
+  message(STATUS "ADIOS FOUND")
   include_directories(${ADIOS2_INCLUDE_DIRS})
   add_definitions("-DADIOS2")
-else(ADIOS_FOUND)
+else()
   message(STATUS "ADIOS2 not found")
 endif()
 
