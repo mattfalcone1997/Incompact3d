@@ -1,6 +1,5 @@
-cmake_minimum_required(VERSION 3.12)                        
+cmake_minimum_required(VERSION 3.0.2)                        
 cmake_policy(SET CMP0048 NEW)
-cmake_policy(SET CMP0074 NEW)
 
 project(xcompact3d LANGUAGES Fortran C CXX)
 
@@ -126,27 +125,14 @@ set_property(CACHE FFT_Choice PROPERTY STRINGS generic fftw3 mkl)
 
 # Look for ADIOS2 library
 option(USE_ADIOS2 "Build XCompact with ADIOS2 library" OFF)
-
 if(USE_ADIOS2)
   #find_package(ADIOS2 COMPONENTS fortran)
-  find_package(ADIOS2 QUIET)
+  find_package(ADIOS2)
 endif()
-option(ADIOS2_ROOT "Path to Adios2 root install directory")
 if(ADIOS2_FOUND)
-  message(STATUS "ADIOS found")
+  message(STATUS "ADIOS INCLUDE ${ADIOS2_INCLUDE_DIRS}")
   include_directories(${ADIOS2_INCLUDE_DIRS})
   add_definitions("-DADIOS2")
-elseif(USE_ADIOS2 AND ADIOS2_ROOT)
-    message(STATUS "find package did not find ADIOS checking ADIOS2_ROOT")
-    find_path(ADIOS_ROOT_EXISTS ${ADIOS2_ROOT})
-    if (ADIOS_ROOT_EXISTS)
-      include_directories(${ADIOS2_ROOT}"/include")
-      link_libraries(${ADIOS2_ROOT}"/lib")
-      add_definitions("-DADIOS2")
-    else()
-      message(STATUS "ADIOS2 not found")
-    endif()
-
 else()
   message(STATUS "ADIOS2 not found")
 endif()
