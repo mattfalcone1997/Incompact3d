@@ -222,6 +222,24 @@ subroutine init_xcompact3d()
   end if
   ! compute diffusion number of simulation
   call compute_cfldiff()
+  call get_decomp_info(test_decomp)
+  if (nrank==0) then
+      write(*,*) "**MPI_OFFSET_KIND", MPI_OFFSET_KIND
+      open(newunit=unit,file='decomp_test.csv',action='write',status='replace')
+      write(unit,"(A,18(',',A))") 'rank', 'xsz(1)', 'xsz(2)', 'xsz(3)', 'xst(1)', 'xst(2)', 'xst(3)',&
+                               'xen(1)', 'xen(2)', 'xen(3)', 'zsz(1)','zsz(2)', 'zsz(3)', 'zst(1)', 'zst(2)', 'zst(3)',&
+                               'zen(1)', 'zen(2)', 'zen(3)'
+      close(unit)
+  endif
+  
+  do i = 0, nproc-1
+    if (i==nrank) then
+      open(newunit=unit,file='decomp_test.csv',action='write',status='old',position='append')
+      write(unit,"(I0,18(',',I0))") nrank, test_decomp%xsz, test_decomp%xst, test_decomp%xen,test_decomp%zsz, test_decomp%zst, test_decomp%zen
+      close(unit)
+    endif
+    call MPI_Barrier(MPI_COMM_WORLD,ierr)
+  enddo
   !####################################################################
   if (irestart==0) then
      call init(rho1,ux1,uy1,uz1,ep1,phi1,drho1,dux1,duy1,duz1,dphi1,pp3,px1,py1,pz1)
@@ -233,29 +251,10 @@ subroutine init_xcompact3d()
         call init_sandbox(ux1,uy1,uz1,ep1,phi1,1)
      end if
 
-     call get_decomp_info(test_decomp)
-     if (nrank==0) then
-         open(newunit=unit,file='decomp_test.csv',action='write',status='replace')
-         write(unit,"(A,18(',',A))") 'rank', 'xsz(1)', 'xsz(2)', 'xsz(3)', 'xst(1)', 'xst(2)', 'xst(3)',&
-                                  'xen(1)', 'xen(2)', 'xen(3)', 'zsz(1)','zsz(2)', 'zsz(3)', 'zst(1)', 'zst(2)', 'zst(3)',&
-                                  'zen(1)', 'zen(2)', 'zen(3)'
-         close(unit)
-     endif
-     
-     do i = 0, nproc-1
-       if (i==nrank) then
-         open(newunit=unit,file='decomp_test.csv',action='write',status='old',position='append')
-         write(unit,"(I0,18(',',I0))") nrank, test_decomp%xsz, test_decomp%xst, test_decomp%xen,test_decomp%zsz, test_decomp%zst, test_decomp%zen
-         close(unit)
-       endif
-       call MPI_Barrier(MPI_COMM_WORLD,ierr)
-     enddo
-
      call restart(ux1,uy1,uz1,dux1,duy1,duz1,ep1,pp3(:,:,:,1),phi1,dphi1,px1,py1,pz1,rho1,drho1,mu1,0)
      if (itype == itype_tbl_recy) then
       call restart_tbl_recy(ifirst-1)
      endif
-
 
      itime=ifirst
      call postprocessing(rho1,ux1,uy1,uz1,pp3,phi1,ep1,.true.)

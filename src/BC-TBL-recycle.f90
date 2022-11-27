@@ -1366,14 +1366,19 @@ contains
    if (nrank ==0) &
        write(test_unit,'("Iteration: ",I0," max u v w avg_z 1 ",g0," ",g0," ",g0," ")') itime, max_u, max_v, max_w
 
+   write(f_string,"('tbl_rank_info-',I0,'.csv')") itime
+   if (nrank == 0) then
+      
+      open(newunit=test_unit2,file=trim(adjustl(f_string)),status='replace',action='write',position='append')
+      write(test_unit2,'(A,6(",", A))') "Iteration", "rank", 'coords(1)', 'coords(2)', 'u','v','w'
+      close(test_unit2)
+   endif
+
    do j = 0, nproc-1
       if (nrank==j) then
-         if (nrank==0) write(status,*) "replace"
-         if (nrank/=0) write(status,*) "old"
+         open(newunit=test_unit2,file=trim(adjustl(f_string)),status='old',action='write',position='append')
 
-         write(f_string,"('tbl_rank_info-',I0,'.txt')") itime
-         open(newunit=test_unit2,file=trim(adjustl(f_string)),status=trim(adjustl(status)),action='write',position='append')
-         write(test_unit2,'("Iteration: ",I0," rank: ",I0," coords: ",I0," "I0," max u v w avg_z 1: ",g0," ",g0," ",g0," ")')&
+         write(test_unit2,'(I0,3(",",I0),3(",",g0))')&
                itime, nrank, coords(1), coords(2), max_ul*dims(2), max_vl*dims(2), max_wl*dims(2)
          close(test_unit2)
       endif
