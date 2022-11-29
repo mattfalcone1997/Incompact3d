@@ -226,6 +226,13 @@ subroutine init_xcompact3d()
         call init_sandbox(ux1,uy1,uz1,ep1,phi1,1)
      end if
      call restart(ux1,uy1,uz1,dux1,duy1,duz1,ep1,pp3(:,:,:,1),phi1,dphi1,px1,py1,pz1,rho1,drho1,mu1,0)
+     itime=ifirst
+     call postprocessing(rho1,ux1,uy1,uz1,pp3,phi1,ep1,force=.true.)
+     if (nrank ==0) then
+       write(*,*) "Kill to test restart"
+       call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+     endif
+     
   endif
 
   if ((ioutflow.eq.1).or.(iin.eq.3)) then
