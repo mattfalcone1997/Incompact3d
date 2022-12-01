@@ -243,7 +243,7 @@ contains
     logical, optional :: force
 
     integer :: j
-    character(len=32) :: num
+    integer :: num
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: T ! FIXME This can be huge
     logical :: force_post
 
@@ -411,7 +411,7 @@ contains
     real(mytype), intent(in), dimension(ph1%zst(1):ph1%zen(1), ph1%zst(2):ph1%zen(2), nzmsize, npress) :: pp3
     real(mytype), intent(in), dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
     real(mytype), intent(in), dimension(xsize(1),xsize(2),xsize(3)) :: ep1
-    character(len=32), intent(in) :: num
+    integer, intent(in) :: num
 
     logical :: called_visu = .false.
     
