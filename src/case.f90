@@ -231,7 +231,7 @@ contains
   end subroutine preprocessing
   !##################################################################
   !##################################################################
-  subroutine postprocessing(rho1, ux1, uy1, uz1, pp3, phi1, ep1, force)
+  subroutine postprocessing(rho1, ux1, uy1, uz1, pp3, phi1, ep1)
 
     use decomp_2d, only : mytype, xsize, ph1
     use visu, only  : write_snapshot, end_snapshot
@@ -249,18 +249,10 @@ contains
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),nrhotime), intent(in) :: rho1
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)), intent(in) :: ep1
     real(mytype),dimension(ph1%zst(1):ph1%zen(1), ph1%zst(2):ph1%zen(2), nzmsize, npress), intent(in) :: pp3
-    logical, optional :: force
 
-    logical :: force_post
     integer :: j
     character(len=32) :: num
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: T ! FIXME This can be huge
-    
-    if (present(force)) then
-      force_post = force
-    else
-      force_post = .false.
-    endif
 
     T = zero
 
@@ -273,7 +265,7 @@ contains
       T = phi1
     endif
 
-    if (((ivisu.ne.0).and.(mod(itime, ioutput).eq.0)).or.force_post) then
+    if ((ivisu.ne.0).and.(mod(itime, ioutput).eq.0)) then
        call write_snapshot(rho1, ux1, uy1, uz1, pp3, T, ep1, itime, num)
 
        ! XXX: Ultimate goal for ADIOS2 is to pass do all postproc online - do we need this?

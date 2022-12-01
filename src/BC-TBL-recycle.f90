@@ -23,7 +23,7 @@ module tbl_recy
 
   integer :: plane_index, tbl_recy_log
   logical, parameter :: write_logs = .true.
-  integer :: test_unit
+  
   abstract interface 
   subroutine u_infty_interface(index,u_infty, u_infty_grad)
      import mytype
@@ -325,13 +325,6 @@ contains
       call MPI_Abort(MPI_COMM_WORLD, 1,ierror)
    endif
 
-   if (nrank == 0) then
-      open(newunit=test_unit,file='tbl_info.txt',status='replace',action='write')
-      close(test_unit)
-   endif
-   call MPI_Barrier(MPI_COMM_WORLD,ierror)
-   open(newunit=test_unit,file='tbl_info.txt',status='old',action='write')
-
    call accel_source
 
 #ifdef BL_DEBG   
@@ -578,7 +571,6 @@ contains
   end subroutine momentum_forcing_tbl_recy
   !********************************************************************
   subroutine boundary_conditions_tbl_recy (ux,uy,uz,phi)
-   use MPI
     use navier, only : tbl_flrt
     use param , only : zero, zptwofive
     use dbg_schemes, only: cos_prec
@@ -594,44 +586,17 @@ contains
 
     real(mytype), dimension(nx) :: v_infty
 
-    real(mytype) :: x, y, z, u_infty, max_u, max_v, max_w, max_work
+    real(mytype) :: x, y, z, u_infty
     real(mytype) :: udx,udy,udz,uddx,uddy,uddz,cx, dudx
-    integer :: i, j, k, ierr
+    integer :: i, j, k
     
 
     !INFLOW with an update of bxx1, byy1 and bzz1 at the inlet
-    max_work = maxval(abs(ux))
-    call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-    max_work = maxval(abs(uy))
-    call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-    max_work = maxval(abs(uz))
-    call MPI_Allreduce(max_work,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-    if (nrank ==0) &
-       write(test_unit,'("Iteration: ",I0," max u v w ",g0," ",g0," ",g0," ")') itime, max_u, max_v, max_w
-
     call compute_recycle_mean(ux, uy, uz)
     call GetScalings(dv_inlt, dv_recy, delta_inlt, delta_recy)
 
     call mean_flow_inlt_calc(u_mean, v_mean)
-    
-    max_work = maxval(abs(u_mean))
-    call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-    max_work = maxval(abs(v_mean))
-    call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-
-    if (nrank ==0) &
-       write(test_unit,'("Iteration: ",I0," max inlet mean u v ",g0," ",g0," ")') itime,max_u, max_v
     call fluct_flow_inlt_calc(ux, uy, uz, u_fluct, v_fluct, w_fluct)
-
-    max_work = maxval(abs(u_fluct))
-    call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-    max_work = maxval(abs(v_fluct))
-    call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-    max_work = maxval(abs(w_fluct))
-    call MPI_Allreduce(max_work,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-    
-    if (nrank ==0) &
-       write(test_unit,'("Iteration: ",I0," max fluct u v w ",g0," ",g0," ",g0," ")') itime, max_u, max_v, max_w
 
     do k = 1,xsize(3)
       do j = 1, xsize(2)
@@ -833,13 +798,13 @@ contains
       w = recycleWeighting(eta_inlt(jdx))
 
       ! inner u
-      u_tmp = gamma*u_inner(j)*(one - w) 
 #ifdef BL_DEBG
       dbg_u_inner(j) = u_inner(j)
 #endif
       ! outer u
-      um_inlt(j) = u_tmp + w*(gamma*u_outer(j) +&
-                        (one - gamma)*u_infty)
+      um_inlt(j) = gamma*u_inner(j)*(one - w) &
+                   + w*(gamma*u_outer(j) &
+                   + (one - gamma)*u_infty)
 #ifdef BL_DEBG
 
       dbg_u_outer(j) = u_outer(j)
@@ -858,8 +823,6 @@ contains
    call u_infty_calc(1,u_infty,dudx)
    um_inlt(:) = um_inlt(:)*u_infty/u_inf
 
-   if (nrank ==0) &
-      write(test_unit,'("Iteration: ",I0," u_infty ",g0," ",g0)') itime, u_infty, u_inf
 #ifdef BL_DEBG
    write(fname,"('real-',I0)") itime
 
@@ -900,70 +863,29 @@ contains
   end subroutine
   
   subroutine fluct_flow_inlt_calc(ux, uy, uz, u_fluct, v_fluct, w_fluct)
-   use MPI
    real(mytype), dimension(:,:,:), intent(in) :: ux, uy, uz
    real(mytype), dimension(:,:), intent(out) :: u_fluct
    real(mytype), dimension(:,:), intent(out) :: v_fluct
    real(mytype), dimension(:,:), intent(out) :: w_fluct
 
-   real(mytype), dimension(:,:), allocatable :: u_fluct_in
-   real(mytype), dimension(:,:), allocatable :: v_fluct_in
-   real(mytype), dimension(:,:), allocatable :: w_fluct_in
+   real(mytype), dimension(xsize(2),xsize(3)) :: u_fluct_in
+   real(mytype), dimension(xsize(2),xsize(3)) :: v_fluct_in
+   real(mytype), dimension(xsize(2),xsize(3)) :: w_fluct_in
 
-   real(mytype), dimension(:,:), allocatable :: u_fluct_inner, u_fluct_outer
-   real(mytype), dimension(:,:), allocatable :: v_fluct_inner, v_fluct_outer 
-   real(mytype), dimension(:,:), allocatable :: w_fluct_inner, w_fluct_outer
+   real(mytype), dimension(xsize(2),xsize(3)) :: u_fluct_inner, u_fluct_outer
+   real(mytype), dimension(xsize(2),xsize(3)) :: v_fluct_inner, v_fluct_outer 
+   real(mytype), dimension(xsize(2),xsize(3)) :: w_fluct_inner, w_fluct_outer
 
-   real(mytype), dimension(:), allocatable :: y_plus_inlt
-   real(mytype), dimension(:), allocatable :: y_plus_recy
-   real(mytype), dimension(:), allocatable :: eta_inlt
-   real(mytype), dimension(:), allocatable :: eta_recy
+   real(mytype), dimension(ny) :: y_plus_inlt
+   real(mytype), dimension(ny) :: y_plus_recy
+   real(mytype), dimension(ny) :: eta_inlt
+   real(mytype), dimension(ny) :: eta_recy
    real(mytype) :: y, w, u_tmp, gamma, factor
-   real(mytype) :: max_u, max_v, max_w, max_work
-
-   integer :: j,k, jdx, ierr
+   integer :: j,k, jdx
 #ifdef BL_DEBG
    character(20) :: fname
 #endif
-   allocate(u_fluct_in(xsize(2),xsize(3)))
-   allocate(v_fluct_in(xsize(2),xsize(3)))
-   allocate(w_fluct_in(xsize(2),xsize(3)))
 
-   allocate(u_fluct_inner(xsize(2),xsize(3)))
-   allocate(v_fluct_inner(xsize(2),xsize(3)))
-   allocate(w_fluct_inner(xsize(2),xsize(3)))
-
-   allocate(u_fluct_outer(xsize(2),xsize(3)))
-   allocate(v_fluct_outer(xsize(2),xsize(3)))
-   allocate(w_fluct_outer(xsize(2),xsize(3)))
-
-   max_work = maxval(abs(ux))
-   call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   max_work = maxval(abs(uy))
-   call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   max_work = maxval(abs(uz))
-   call MPI_Allreduce(max_work,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   if (nrank ==0) &
-       write(test_unit,'("Iteration: ",I0," (fluct) max u v w ",g0," ",g0," ",g0," ")') itime, max_u, max_v, max_w
-
-   max_work = maxval(abs(recy_mean_t(1,:)))
-   call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   max_work = maxval(abs(recy_mean_t(2,:)))
-   call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-
-   if (nrank ==0) &
-      write(test_unit,'("Iteration: ",I0," max mean t u v ",g0," ",g0," ")') itime,max_u, max_v
-   
-   max_work = maxval(abs(recy_mean_z(1,:)))
-   call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   max_work = maxval(abs(recy_mean_z(2,:)))
-   call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   max_work = maxval(abs(recy_mean_z(3,:)))
-   call MPI_Allreduce(max_work,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-
-   if (nrank ==0) &
-      write(test_unit,'("Iteration: ",I0," max mean z u v w ",g0," ",g0," ",g0," ")') itime,max_u, max_v, max_w
-   
    do k = 1, xsize(3)
       do j = 1, xsize(2)
          jdx = xstart(2) + j -1
@@ -972,22 +894,6 @@ contains
          w_fluct_in(j,k) =  uz(plane_index,j,k) - recy_mean_z(3,jdx)
       enddo
    enddo
-
-   max_work = maxval(abs(u_fluct_in))
-   call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   max_work = maxval(abs(v_fluct_in))
-   call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   max_work = maxval(abs(w_fluct_in))
-   call MPI_Allreduce(max_work,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   
-   if (nrank ==0) &
-      write(test_unit,'("Iteration: ",I0," max fluct in u v w ",g0," ",g0," ",g0," ")') itime, max_u, max_v, max_w
-
-
-   allocate(y_plus_inlt(ny))
-   allocate(y_plus_recy(ny))
-   allocate(eta_inlt(ny))
-   allocate(eta_recy(ny))
 
    gamma = dv_recy / dv_inlt
    
@@ -1293,35 +1199,19 @@ contains
    real(mytype),dimension(xsize(1),xsize(2),xsize(3)), intent(in) :: ux, uy, uz
    logical, optional, intent(in) :: reset
 
-   real(mytype), allocatable, dimension(:,:) :: recy_mean_z_local
-   real(mytype), allocatable, dimension(:,:) :: inlt_mean_z_local
+   real(mytype), dimension(3, xsize(2)) :: recy_mean_z_local
+   real(mytype), dimension(3, xsize(2)) :: inlt_mean_z_local
 
-   real(mytype), allocatable, dimension(:,:) :: recy_mean_z_ls
-   real(mytype), allocatable, dimension(:,:) :: inlt_mean_z_ls
+   real(mytype), dimension(3, xsize(2)) :: recy_mean_z_ls
+   real(mytype), dimension(3, xsize(2)) :: inlt_mean_z_ls
 
 
-   integer :: k, j, ierr,  color, key, split_comm_y, split_comm_z, asize, test_unit2
+   integer :: k, j, ierr,  color, key, split_comm_y, split_comm_z, asize
    integer, dimension(2) :: dims, coords
    logical, dimension(2) :: periods 
    integer, allocatable, dimension(:) :: ldispl,displs, recvcounts
    logical :: reset_local
    real(mytype) :: T_period, dtdivT, u_infty, dudx
-   real(mytype) :: max_u, max_v, max_w, max_ul, max_vl, max_wl, max_work
-   character(len=80) :: f_string, status
-    max_work = maxval(abs(ux(plane_index,:,:)))
-    call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-    max_work = maxval(abs(uy(plane_index,:,:)))
-    call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-    max_work = maxval(abs(uz(plane_index,:,:)))
-    call MPI_Allreduce(max_work,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-    if (nrank ==0) &
-       write(test_unit,'("Iteration: ",I0," max u v w recy_plane ",g0," ",g0," ",g0," ")') itime, max_u, max_v, max_w
-
-   allocate(recy_mean_z_local(3, xsize(2)))
-   allocate(inlt_mean_z_local(3, xsize(2)))
-
-   allocate(recy_mean_z_ls(3, xsize(2)))
-   allocate(inlt_mean_z_ls(3, xsize(2)))
 
    recy_mean_z_local(:,:) = zero
    inlt_mean_z_local(:,:) = zero
@@ -1357,50 +1247,12 @@ contains
       enddo
    enddo
 
-   max_ul = maxval(abs(recy_mean_z_local(1,:)))
-   call MPI_Allreduce(max_ul,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   max_vl = maxval(abs(recy_mean_z_local(2,:)))
-   call MPI_Allreduce(max_vl,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   max_wl = maxval(abs(recy_mean_z_local(3,:)))
-   call MPI_Allreduce(max_wl,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   if (nrank ==0) &
-       write(test_unit,'("Iteration: ",I0," max u v w avg_z 1 ",g0," ",g0," ",g0," ")') itime, max_u, max_v, max_w
-
-   write(f_string,"('tbl_rank_info-',I0,'.csv')") itime
-   if (nrank == 0) then
-      
-      open(newunit=test_unit2,file=trim(adjustl(f_string)),status='replace',action='write',position='append')
-      write(test_unit2,'(A,6(",", A))') "Iteration", "rank", 'coords(1)', 'coords(2)', 'u','v','w'
-      close(test_unit2)
-   endif
-
-   do j = 0, nproc-1
-      if (nrank==j) then
-         open(newunit=test_unit2,file=trim(adjustl(f_string)),status='old',action='write',position='append')
-
-         write(test_unit2,'(I0,3(",",I0),3(",",g0))')&
-               itime, nrank, coords(1), coords(2), max_ul*dims(2), max_vl*dims(2), max_wl*dims(2)
-         close(test_unit2)
-      endif
-
-      call MPI_Barrier(MPI_COMM_WORLD,ierr)
-   enddo
-
    asize = xsize(2)*3
    call MPI_Allreduce(inlt_mean_z_local, inlt_mean_z_ls, asize, real_type,&
                       MPI_SUM, split_comm_z, ierr)
 
    call MPI_Allreduce(recy_mean_z_local, recy_mean_z_ls, asize, real_type,&
                       MPI_SUM, split_comm_z, ierr) 
-
-   max_work = maxval(abs(recy_mean_z_ls(1,:)))
-   call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   max_work = maxval(abs(recy_mean_z_ls(2,:)))
-   call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   max_work = maxval(abs(recy_mean_z_ls(3,:)))
-   call MPI_Allreduce(max_work,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   if (nrank ==0) &
-       write(test_unit,'("Iteration: ",I0," max u v w avg_z 2 ",g0," ",g0," ",g0," ")') itime, max_u, max_v, max_w
 
     
    call MPI_Allgather(xstart(2), 1, MPI_INTEGER, ldispl,&
@@ -1418,15 +1270,6 @@ contains
                        recy_mean_z,recvcounts,displs,real_type,&
                        split_comm_y,ierr)                       
 
-   max_work = maxval(abs(recy_mean_z(1,:)))
-   call MPI_Allreduce(max_work,max_u,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   max_work = maxval(abs(recy_mean_z(2,:)))
-   call MPI_Allreduce(max_work,max_v,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   max_work = maxval(abs(recy_mean_z(3,:)))
-   call MPI_Allreduce(max_work,max_w,1,real_type,MPI_MAX,MPI_COMM_WORLD,ierr)
-   if (nrank ==0) &
-      write(test_unit,'("Iteration: ",I0," max u v w avg_z 3 ",g0," ",g0," ",g0," ")') itime, max_u, max_v, max_w
-                    
    if (.not. present(reset)) reset_local = .false.
    if (present(reset)) reset_local = reset
 
@@ -1457,10 +1300,6 @@ contains
 
    call MPI_Comm_free(split_comm_y,ierr)
    call MPI_Comm_free(split_comm_z,ierr)
-   deallocate(inlt_mean_z_local)
-   deallocate(recy_mean_z_local)
-   deallocate(recy_mean_z_ls)
-   deallocate(inlt_mean_z_ls)
 
    deallocate(displs,recvcounts,ldispl)
   end subroutine
