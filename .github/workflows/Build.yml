@@ -22,8 +22,19 @@ jobs:
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
     - uses: actions/checkout@v2
 
-    # Runs a single command using the runners shell
-    - name: Install requirements
+    # We don't want to build openmpi each time this workflow is
+    # run. Setup caching of OpenMPI after it is built and installed.
+    # See "Caching dependencies to speed up workflows" on the GH
+    # actions docs.
+    - name: Cache OpenMPI
+      id: cache-openmpi
+      uses: actions/cache@v2
+      with:
+        path: openmpi-4.1.4/installed
+        key: openmpi-4.1.4
+
+    - name: Build openmpi
+      if: steps.cache-openmpi.outputs.cache-hit != 'true'
       run: |
         sudo apt-get update; sudo apt-get install -y gfortran openmpi-bin libopenmpi-dev
 

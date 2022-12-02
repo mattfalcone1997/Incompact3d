@@ -456,7 +456,7 @@ contains
     ! Arguments
     logical, intent(in) :: flag_read
     character(len=*), intent(in) :: filename
-    real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: array
+    real(mytype), dimension(:,:,:), intent(inout) :: array
     type(DECOMP_INFO), intent(in) :: opt_decomp
     integer :: ierror
 
