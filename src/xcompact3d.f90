@@ -451,7 +451,7 @@ subroutine write_params_json
          write(fl,"(A,': ',A,',')") '    "profile"','"linear"'
          write(fl,"(A,': ',g0,',')") '    "t_start"',t_start
          write(fl,"(A,': ',g0,',')") '    "t_end"',t_start
-         write(fl,"(A,': ',g0),',')") '    "Re_ratio"',Re_ratio
+         write(fl,"(A,': ',g0,',')") '    "Re_ratio"',Re_ratio
       else if (iacceltype==2) then
          write(fl,"(A,': ',A,',')") '    "profile"','"spatial equiv"'
          write(fl,"(A,': ',g0,',')") '    "U_ratio"',U_ratio
