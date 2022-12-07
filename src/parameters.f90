@@ -27,7 +27,7 @@ subroutine parameter(input_i3d)
   use var, only : dphi1
 
   use lockexch, only : pfront
-  use stats, only : h_quads, spectra_nlocs, spectra_level, spectra_xlocs
+  use stats, only : h_quads, spectra_level
   use probes, only : nprobes, setup_probes, flag_all_digits, flag_extra_probes, xyzprobes
   use visu, only : output2D
   use forces, only : iforces, nvol, xld, xrd, yld, yud!, zld, zrd
@@ -53,8 +53,8 @@ subroutine parameter(input_i3d)
   NAMELIST /InOutParam/ irestart, icheckpoint, ioutput, nvisu, ilist, iprocessing, &
        ninflows, ntimesteps, inflowpath, ioutflow, output2D, nprobes, log_cputime
   NAMELIST /Statistics/ wrotation,spinup_time, nstat, initstat, &
-            istatcalc, istatbudget,istatpstrain,istatlambda2, initstat2, istatout,&
-            istatquadrant, nquads, istatflatness, istatspectra, spectra_nlocs,spectra_level
+            istatcalc, istatbudget,istatpstrain,istatlambda2, initstat2,&
+            istatquadrant, nquads, istatflatness, istatspectra,spectra_level
   NAMELIST /ProbesParam/ flag_all_digits, flag_extra_probes, xyzprobes
   NAMELIST /ScalarParam/ sc, ri, uset, cp, &
        nclxS1, nclxSn, nclyS1, nclySn, nclzS1, nclzSn, &
@@ -80,11 +80,10 @@ subroutine parameter(input_i3d)
   NAMELIST/fileAccel/accel_file
   NAMELIST/bodyForce/ibodyforces,ibftype
   NAMELIST/linearBodyF/linear_amp,linear_ext
-  NAMELIST/tempAccel/itempaccel, iacceltype
+  NAMELIST/tempAccel/itempaccel, iacceltype, istatout,ispectout
   NAMELIST/linear_prof/Re_ratio, t_start, t_end
   NAMELIST/spatial_equiv/U_ratio, accel_centre, alpha_accel
   NAMELIST/hquadrant/h_quads
-  NAMELIST/spectra_locs/spectra_xlocs
 
 #ifdef DEBG
   if (nrank == 0) write(*,*) '# parameter start'
@@ -125,14 +124,6 @@ subroutine parameter(input_i3d)
    if (spectra_level.lt.1) then
       write(*,*) "spectra_level must be set"
       call MPI_Abort(MPI_COMM_WORLD,1,ierr)
-   endif
-   if (nclx1.ne.0.and.nclxn.ne.0) then
-      if (spectra_nlocs.lt.1) then
-         write(*,*) "Spectra_nlocs must be specified"
-         call MPI_Abort(MPI_COMM_WORLD,1,ierr)
-      endif
-      allocate(spectra_xlocs(spectra_nlocs))
-      read(10,nml=spectra_locs); rewind(10)
    endif
   endif
 
@@ -264,6 +255,22 @@ subroutine parameter(input_i3d)
       else if (iacceltype==2) then
          read(10,nml=spatial_equiv); rewind(10)
       endif
+
+      if (istatout<1) then
+         write(*,*) "If temporal acceleration is used istatout "//&
+                     "must be specified and valid"
+         call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+      endif
+      if (ispectout<1.and.istatspectra) then
+         write(*,*) "If temporal acceleration is used "//&
+                     "ispectout must be specified and valid"
+         call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+      endif
+   endif
+
+   if (itempaccel == 0) then
+      istatout = icheckpoint
+      ispectout = icheckpoint
    endif
 
   endif
@@ -660,7 +667,7 @@ subroutine parameter_defaults()
   use probes, only : nprobes, flag_all_digits, flag_extra_probes
   use visu, only : output2D
   use forces, only : iforces, nvol
-  use stats, only : spectra_level, spectra_nlocs
+  use stats, only : spectra_level
 
   implicit none
 
@@ -815,6 +822,6 @@ subroutine parameter_defaults()
   istatspectra = .false.
   istatflatness = .false.
   istatout = -1
+  ispectout = -1
   spectra_level=-1
-  spectra_nlocs=-1
 end subroutine parameter_defaults
