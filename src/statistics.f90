@@ -1107,7 +1107,7 @@ contains
     complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3)) :: spec1, spec2
 
     integer :: i,j,k
-
+    real(mytype) :: norm
 #ifdef HAVE_FFTW
     call dfftw_execute_dft_r2c(plan_z,val1,spec_z)
     call transpose_z_to_y(spec_z,spec_y,dft_info)
@@ -1127,12 +1127,13 @@ contains
     endif
 #endif
 
+    norm = real(nz*nz*nx*nx,kind=mytype)
     spec_2d(:,:,:) = zero
     do k = 1, dft_info%xsz(3)
       do j = 1, dft_info%xsz(2)
         do i = 1, dft_info%xsz(1)
           
-          spec_2d(i,j,k) = spec1(i,j,k)*conjg(spec2(i,j,k))/real(nz*nx,kind=mytype)
+          spec_2d(i,j,k) = spec1(i,j,k)*conjg(spec2(i,j,k))/norm
 
         enddo
       enddo
@@ -1170,7 +1171,7 @@ contains
     endif
 #endif
     ! calculate spectra of local rank
-  norm = real(nz,kind=mytype)
+    norm = real(nz*nz,kind=mytype)
 
     do k = 1, zdft_size
       do j = 1,zsize(2)
