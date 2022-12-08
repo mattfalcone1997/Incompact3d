@@ -267,13 +267,13 @@ subroutine parameter(input_i3d)
          call MPI_Abort(MPI_COMM_WORLD,1,ierr)
       endif
    endif
+  endif
 
    if (itempaccel == 0) then
       istatout = icheckpoint
       ispectout = icheckpoint
    endif
 
-  endif
   if (itype.eq.itype_abl) then
      read(10, nml=ABL); rewind(10)
   endif
