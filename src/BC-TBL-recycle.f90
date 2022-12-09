@@ -25,11 +25,11 @@ module tbl_recy
   logical, parameter :: write_logs = .true.
   
   abstract interface 
-  subroutine u_infty_interface(index,u_infty, u_infty_grad)
+  subroutine u_infty_interface(index,u_infty, u_infty_grad, norelax)
      import mytype
      integer, intent(in) :: index
      real(mytype), intent(out) :: u_infty, u_infty_grad
-
+     logical, optional :: norelax
   end subroutine
    end interface
 
@@ -55,7 +55,7 @@ module tbl_recy
   PUBLIC :: init_tbl_recy, boundary_conditions_tbl_recy,&
             postprocess_tbl_recy, visu_tbl_recy, &
             visu_tbl_recy_init, momentum_forcing_tbl_recy,&
-            u_infty_calc, restart_tbl_recy
+            u_infty_calc, restart_tbl_recy, tbl_recy_tripping
 
 contains
 
@@ -265,17 +265,17 @@ contains
    allocate(inlt_mean_z(3,ny))
 
    if (iimplicit.ne.0.and.iaccel/=0) then
-      write(*,*) "Cannot use iimplicit /= 0 with accelerations"
+      if (nrank ==0) write(*,*) "Cannot use iimplicit /= 0 with accelerations"
       call MPI_Abort(MPI_COMM_WORLD,1,ierror)
    endif
 
    if (plane_location.gt.xlx.and. nrank.eq.0) then
-      write(*,*) "Plane location must be less than domain size"
+      if (nrank ==0) write(*,*) "Plane location must be less than domain size"
       call MPI_Abort(MPI_COMM_WORLD,1,ierror)
     endif
 
     if (plane_location.le.0.and. nrank.eq.0) then
-      write(*,*) "Plane location must be more than 0"
+      if (nrank ==0) write(*,*) "Plane location must be more than 0"
       call MPI_Abort(MPI_COMM_WORLD,1,ierror)
     endif
 
@@ -321,11 +321,9 @@ contains
       enddo
       u_infty_calc => file_BL
    else
-      write(*,*) "Invalid iaccel value"
+      if (nrank ==0) write(*,*) "Invalid iaccel value"
       call MPI_Abort(MPI_COMM_WORLD, 1,ierror)
    endif
-
-   call accel_source
 
 #ifdef BL_DEBG   
   
@@ -406,33 +404,39 @@ contains
 
   end subroutine
 
-  subroutine zpg_BL(index,u_infty, u_infty_grad)
+  subroutine zpg_BL(index,u_infty, u_infty_grad,norelax)
    use param
    use variables
    use dbg_schemes, only : tanh_prec, cosh_prec
 
    integer, intent(in) :: index
    real(mytype), intent(out) :: u_infty, u_infty_grad
+   logical, optional :: norelax
 
    u_infty = one
    u_infty_grad = zero
 
    end subroutine
 
-   subroutine tanh_BL(index,u_infty, u_infty_grad)
+   subroutine tanh_BL(index,u_infty, u_infty_grad, norelax)
       use param
       use variables
       use dbg_schemes, only : tanh_prec, cosh_prec
    
       integer, intent(in) :: index
       real(mytype), intent(out) :: u_infty, u_infty_grad
-      
-      real(mytype) :: x_coord, eps
+      logical, optional :: norelax
 
-      if (t<50) then
-         eps = t/fifty
-      else
+      real(mytype) :: x_coord, eps
+      logical :: force
+
+      if(present(norelax)) force = norelax
+      if(.not.present(norelax)) force = .false.
+
+      if (t>=50.or.force) then
          eps = one
+      else
+         eps = t/fifty
       endif
       x_coord = real(index - 1, mytype) * dx
    
@@ -444,7 +448,7 @@ contains
                       - accel_centre ) )**(-two)
    end subroutine
 
-   subroutine tanh_cubic_BL(index,u_infty, u_infty_grad)
+   subroutine tanh_cubic_BL(index,u_infty, u_infty_grad, norelax)
       use param
       use variables
       use var, only : t
@@ -452,13 +456,19 @@ contains
       use MPI
       integer, intent(in) :: index
       real(mytype), intent(out) :: u_infty, u_infty_grad
+      logical, optional :: norelax
+
       real(mytype) :: x, x_1, x_2, eps, a, b, c, d, inflection
       integer :: code
+      logical :: force
 
-      if (t<50) then
-         eps = t/fifty
-      else
+      if(present(norelax)) force = norelax
+      if(.not.present(norelax)) force = .false.
+
+      if (t>=50.or.force) then
          eps = one
+      else
+         eps = t/fifty
       endif
 
       x = real(index - 1, mytype) * dx
@@ -505,17 +515,23 @@ contains
       endif
    end subroutine
 
-   subroutine file_BL(index,u_infty, u_infty_grad)
+   subroutine file_BL(index,u_infty, u_infty_grad, norelax)
       use param, only : dx
       use var, only : t
+
       integer, intent(in) :: index
       real(mytype), intent(out) :: u_infty, u_infty_grad
-
+      logical, optional :: norelax
+      logical :: force
       real(mytype) :: eps
-      if (t<50) then
-         eps = t/fifty
-      else
+      
+      if(present(norelax)) force = norelax
+      if(.not.present(norelax)) force = .false.
+
+      if (t>=50.or.force) then
          eps = one
+      else
+         eps = t/fifty
       endif
 
       u_infty = u_infty_file(1) + eps*(u_infty_file(index) - u_infty_file(1))
@@ -529,46 +545,35 @@ contains
       endif
 
    end subroutine
-
-  subroutine accel_source
-   use param
-   use variables
-   use dbg_schemes
-   implicit none
-
-   real(mytype) :: x_coord, u_infty, u_infty_grad, t_tmp
-   integer :: i
-
-   t_tmp = t
-   t = 50.0
-   call alloc_x(source)
-   do i = 1, nx
-      call u_infty_calc(i, u_infty, u_infty_grad)
-
-      source(i,:,:) = u_infty*u_infty_grad
-   enddo
-
-   if (nrank .eq.0) then
-      open(unit=13,file='u_infty.csv',action='write', status='replace')
-
-      write(13,*) "i, x, u_infty, u_infty_grad, source"
-      do i = 1, nx
-         x_coord = real(i-1, mytype)*dx
-         call u_infty_calc(i, u_infty, u_infty_grad)
-
-         write(13,"(I0,*(',',g0))") i, x_coord, u_infty, u_infty_grad, source(i,1,1)
-      enddo
-      close(13)
-   endif
-   t = t_tmp
-
-   end subroutine
-
   subroutine momentum_forcing_tbl_recy(dux1, duy1, duz1, ux1, uy1, uz1)
    real(mytype), intent(in), dimension(xsize(1), xsize(2), xsize(3)) :: ux1, uy1, uz1
    real(mytype), dimension(xsize(1), xsize(2), xsize(3), ntime) :: dux1, duy1, duz1
 
   end subroutine momentum_forcing_tbl_recy
+
+  subroutine tbl_recy_tripping(tb,ta)
+   use variables 
+   use param
+   implicit none
+ 
+   real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: tb, ta
+   integer :: i
+   real(mytype) :: u_infty,dudx
+   if (t>t_trip) return
+
+   x_tr_tbl_tmp = x0_tr_tbl
+   do 
+      call tbl_tripping(tb,ta)
+
+      call u_infty_calc(int(x0_tr_tbl/dx),u_infty,dudx,norelax=.true.)
+      x0_tr_tbl = x0_tr_tbl + u_infty*zptwofive*t_trip
+      
+      if (x0_tr_tbl > xlx) exit
+   enddo
+   x0_tr_tbl = x_tr_tbl_tmp
+   
+end subroutine tbl_recy_tripping
+
   !********************************************************************
   subroutine boundary_conditions_tbl_recy (ux,uy,uz,phi)
     use navier, only : tbl_flrt

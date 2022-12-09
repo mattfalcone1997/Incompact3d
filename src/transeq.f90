@@ -74,6 +74,7 @@ contains
     use var, only : FTx, FTy, FTz, Fdiscx, Fdiscy, Fdiscz
     use ibm_param, only : ubcx,ubcy,ubcz
     use les, only : compute_SGS
+    use tbl_recy, only: tbl_recy_tripping
 #ifdef DEBG 
     use tools, only : avg3d
 #endif
@@ -578,16 +579,9 @@ contains
          call tbl_tripping(duy1(:,:,:,1),td1)
          if ((nrank==0).and.(mod(itime,ilist)==0)) write(*,*) 'TRIPPING!!'
       endif
-      if (itype.eq.itype_tbl_recy .and. t < t_trip) then
+      if (itype.eq.itype_tbl_recy) then
          ! Use mutliple tripping locations for recycling method
-         x_tr_tbl_tmp = x0_tr_tbl
-         do i = 0, int(four*xlx/t_trip)
-            x0_tr_tbl = x_tr_tbl_tmp + real(i,mytype)*zptwofive*t_trip
-            
-            if (x0_tr_tbl > xlx) exit
-            call tbl_tripping(duy1(:,:,:,1),td1)
-         enddo
-         x0_tr_tbl = x_tr_tbl_tmp
+         call tbl_recy_tripping(duy1(:,:,:,1),td1)
          if ((nrank==0).and.(mod(itime,ilist)==0)) write(*,*) 'TRIPPING!!'
       endif
     endif

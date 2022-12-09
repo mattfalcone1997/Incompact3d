@@ -410,11 +410,9 @@ subroutine write_params_json
    write(fl,'(A)') "  },"
 
    if (itype .eq. itype_tbl_recy) then
-      t_tmp = t; t = 50.0
       do i =1, nx
-         call u_infty_calc(i,u_infty(i),u_infty_grad)
+         call u_infty_calc(i,u_infty(i),u_infty_grad,norelax=.true.)
       enddo
-      t = t_tmp
       write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nx-1,"(',',g0),']')"
       
       write(fl,"(A ,': {')") '  "tbl_recy"'
