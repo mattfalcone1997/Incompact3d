@@ -11,7 +11,7 @@ module time_integrators
 
 contains
 
-  subroutine intt(var1,dvar1,npaire,isc,forcing1)
+  subroutine intt(var1,dvar1,npaire,isc,id,forcing1)
 
     use MPI
     use param
@@ -30,7 +30,7 @@ contains
 
     !! INPUTS
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)), intent(in), optional :: forcing1
-    integer, intent(in), optional :: npaire, isc
+    integer, intent(in), optional :: npaire, isc, id
 
     !! LOCAL
     integer :: is, code, ierror
@@ -59,10 +59,10 @@ contains
        else
           is = 0
        endif
-       if (present(npaire).and.present(forcing1)) then
-          call inttimp(var1, dvar1, npaire=npaire, isc=is, forcing1=forcing1)
-       else if (present(npaire)) then
-          call inttimp(var1, dvar1, npaire=npaire, isc=is)
+       if (present(npaire).and.present(forcing1).and.present(id)) then
+          call inttimp(var1, dvar1, npaire=npaire, isc=is,id=id, forcing1=forcing1)
+       else if (present(npaire).and.present(id)) then
+          call inttimp(var1, dvar1, npaire=npaire, isc=is,id=id)
        else
           if (nrank  == 0) write(*,*) "Error in intt call."
           call MPI_ABORT(MPI_COMM_WORLD,code,ierror); stop
@@ -336,9 +336,9 @@ contains
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),ntime) :: dux1, duy1, duz1
 
     if (iimplicit.ge.1) then
-       call intt(ux1, dux1, npaire=1, isc=0, forcing1=px1)
-       call intt(uy1, duy1, npaire=0, isc=0, forcing1=py1)
-       call intt(uz1, duz1, npaire=1, isc=0, forcing1=pz1)
+       call intt(ux1, dux1, npaire=1, isc=0, id=1,forcing1=px1)
+       call intt(uy1, duy1, npaire=0, isc=0, id=2,forcing1=py1)
+       call intt(uz1, duz1, npaire=1, isc=0, id=3,forcing1=pz1)
     else
        call intt(ux1, dux1)
        call intt(uy1, duy1)

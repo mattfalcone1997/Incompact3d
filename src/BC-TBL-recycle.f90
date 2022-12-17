@@ -25,11 +25,10 @@ module tbl_recy
   logical, parameter :: write_logs = .true.
   
   abstract interface 
-  subroutine u_infty_interface(index,u_infty, u_infty_grad, norelax)
+  subroutine u_infty_interface(index,u_infty, u_infty_grad)
      import mytype
      integer, intent(in) :: index
      real(mytype), intent(out) :: u_infty, u_infty_grad
-     logical, optional :: norelax
   end subroutine
    end interface
 
@@ -265,8 +264,7 @@ contains
    allocate(inlt_mean_z(3,ny))
 
    if (iimplicit.ne.0.and.iaccel/=0) then
-      if (nrank ==0) write(*,*) "Cannot use iimplicit /= 0 with accelerations"
-      call MPI_Abort(MPI_COMM_WORLD,1,ierror)
+      if (nrank ==0) write(*,*) "WARNING: implicit spatial acceleration is being tested"
    endif
 
    if (plane_location.gt.xlx.and. nrank.eq.0) then
@@ -404,51 +402,39 @@ contains
 
   end subroutine
 
-  subroutine zpg_BL(index,u_infty, u_infty_grad,norelax)
+  subroutine zpg_BL(index,u_infty, u_infty_grad)
    use param
    use variables
    use dbg_schemes, only : tanh_prec, cosh_prec
 
    integer, intent(in) :: index
    real(mytype), intent(out) :: u_infty, u_infty_grad
-   logical, optional :: norelax
 
    u_infty = one
    u_infty_grad = zero
 
    end subroutine
 
-   subroutine tanh_BL(index,u_infty, u_infty_grad, norelax)
+   subroutine tanh_BL(index,u_infty, u_infty_grad)
       use param
       use variables
       use dbg_schemes, only : tanh_prec, cosh_prec
    
       integer, intent(in) :: index
       real(mytype), intent(out) :: u_infty, u_infty_grad
-      logical, optional :: norelax
 
-      real(mytype) :: x_coord, eps
-      logical :: force
-
-      if(present(norelax)) force = norelax
-      if(.not.present(norelax)) force = .false.
-
-      if (t>=50.or.force) then
-         eps = one
-      else
-         eps = t/fifty
-      endif
+      real(mytype) :: x_coord
       x_coord = real(index - 1, mytype) * dx
    
-      u_infty = one +  eps*half *(U_ratio - one)*(&
+      u_infty = one +  half *(U_ratio - one)*(&
                   tanh_prec( alpha_accel*(x_coord - accel_centre )) &
                      + one )
    
-      u_infty_grad = eps*half*alpha_accel*(U_ratio-one)*cosh_prec( alpha_accel*(x_coord &
+      u_infty_grad = half*alpha_accel*(U_ratio-one)*cosh_prec( alpha_accel*(x_coord &
                       - accel_centre ) )**(-two)
    end subroutine
 
-   subroutine tanh_cubic_BL(index,u_infty, u_infty_grad, norelax)
+   subroutine tanh_cubic_BL(index,u_infty, u_infty_grad)
       use param
       use variables
       use var, only : t
@@ -456,20 +442,9 @@ contains
       use MPI
       integer, intent(in) :: index
       real(mytype), intent(out) :: u_infty, u_infty_grad
-      logical, optional :: norelax
 
-      real(mytype) :: x, x_1, x_2, eps, a, b, c, d, inflection
+      real(mytype) :: x, x_1, x_2, a, b, c, d, inflection
       integer :: code
-      logical :: force
-
-      if(present(norelax)) force = norelax
-      if(.not.present(norelax)) force = .false.
-
-      if (t>=50.or.force) then
-         eps = one
-      else
-         eps = t/fifty
-      endif
 
       x = real(index - 1, mytype) * dx
 
@@ -507,41 +482,29 @@ contains
          call tanh_BL(index,u_infty, u_infty_grad)
       
       else if (x>x_1) then
-         U_infty = one - eps + eps*(a*x**three + b*x**two + c*x + d)
-         U_infty_grad = eps*(three*a*x**two + two*b*x + c)
+         U_infty = one + a*x**three + b*x**two + c*x + d
+         U_infty_grad = three*a*x**two + two*b*x + c
       else
          u_infty = one
          u_infty_grad = zero
       endif
    end subroutine
 
-   subroutine file_BL(index,u_infty, u_infty_grad, norelax)
+   subroutine file_BL(index,u_infty, u_infty_grad)
       use param, only : dx
       use var, only : t
 
       integer, intent(in) :: index
       real(mytype), intent(out) :: u_infty, u_infty_grad
-      logical, optional :: norelax
-      logical :: force
-      real(mytype) :: eps
-      
-      if(present(norelax)) force = norelax
-      if(.not.present(norelax)) force = .false.
 
-      if (t>=50.or.force) then
-         eps = one
-      else
-         eps = t/fifty
-      endif
-
-      u_infty = u_infty_file(1) + eps*(u_infty_file(index) - u_infty_file(1))
+      u_infty = u_infty_file(index)
 
       if (index == 1) then
-         u_infty_grad = eps*(u_infty_file(2)-u_infty_file(1))/dx
+         u_infty_grad = (u_infty_file(2)-u_infty_file(1))/dx
       else if (index == nx) then
-         u_infty_grad = eps*(u_infty_file(nx)-u_infty_file(nx-1))/dx
+         u_infty_grad = (u_infty_file(nx)-u_infty_file(nx-1))/dx
       else
-         u_infty_grad = eps*0.5*(u_infty_file(index+1)-u_infty_file(index-1))/dx
+         u_infty_grad = 0.5*(u_infty_file(index+1)-u_infty_file(index-1))/dx
       endif
 
    end subroutine
@@ -565,7 +528,7 @@ contains
    do 
       call tbl_tripping(tb,ta)
 
-      call u_infty_calc(int(x0_tr_tbl/dx),u_infty,dudx,norelax=.true.)
+      call u_infty_calc(int(x0_tr_tbl/dx),u_infty,dudx)
       x0_tr_tbl = x0_tr_tbl + u_infty*zptwofive*t_trip
       
       if (x0_tr_tbl > xlx) exit

@@ -411,7 +411,7 @@ subroutine write_params_json
 
    if (itype .eq. itype_tbl_recy) then
       do i =1, nx
-         call u_infty_calc(i,u_infty(i),u_infty_grad,norelax=.true.)
+         call u_infty_calc(i,u_infty(i),u_infty_grad)
       enddo
       write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nx-1,"(',',g0),']')"
       

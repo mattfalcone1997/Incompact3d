@@ -544,7 +544,7 @@ module ydiff_implicit
 !    isc : 0 for momentum, id of the scalar otherwise
 !    forcing1 : r.h.s. term not present in dvar1 (pressure gradient)
 !
-subroutine  inttimp (var1,dvar1,npaire,isc,forcing1)
+subroutine  inttimp (var1,dvar1,npaire,isc,forcing1,id)
 
   USE MPI
   USE param
@@ -553,21 +553,23 @@ subroutine  inttimp (var1,dvar1,npaire,isc,forcing1)
   USE decomp_2d
   use derivY
   use matinv
+  use tbl_recy, only : u_infty_calc
 
   implicit none
 
-  integer :: i,j,k,code,ierror
+  integer :: i,j,k,code,ierror,i_loc
 
   !! IN
   real(mytype),dimension(xsize(1),xsize(2),xsize(3)), optional, intent(in) :: forcing1
   integer, intent(in) :: npaire, isc
-
+  integer, intent(in),optional :: id
   !! IN/OUT
   real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: var1
   real(mytype),dimension(xsize(1),xsize(2),xsize(3),ntime) :: dvar1
 
   !! LOCAL
   real(mytype),dimension(ysize(1),ysize(3)) :: bctop, bcbot
+  real(mytype) :: u_infty,dudx
 
   if (itimescheme.eq.1) then
      !>>> Explicit Euler
@@ -650,10 +652,30 @@ subroutine  inttimp (var1,dvar1,npaire,isc,forcing1)
   ! Specific cases first
   ! This is the location for exotic / nonhomogeneous boundary conditions
   !
-  if ((itype.eq.itype_tbl.or.itype.eq.itype_tbl_recy) .and. isc.eq.0) then
+  if ((itype.eq.itype_tbl) .and. isc.eq.0) then
      bcbot(:,:) = zero
      bctop(:,:) = tb2(:,ny-1,:)
      !in order to mimick a Neumann BC at the top of the domain for the TBL
+  else if ((itype.eq.itype_tbl_recy) .and. isc.eq.0) then
+
+   if (.not.present(id)) then
+      if (nrank == 0) write(*,*) "id must be present"
+      call MPI_Abort(MPI_COMM_WORLD,1,code)
+   endif
+   
+   bcbot(:,:) = zero
+   if (id.eq.2) then
+      do k =1, ysize(3)
+         do i = 1, ysize(1)
+            i_loc = ystart(1) + i -1
+            call u_infty_calc(i_loc,u_infty,dudx)
+
+            bctop(i,k) = tb2(i,ny-1,k) - dudx*(yp(ny) - yp(ny-1))
+         enddo
+      enddo
+   else
+      bctop(:,:) = tb2(:,ny-1,:)
+   endif
   !
   ! Generic homogeneous cases after
   !
