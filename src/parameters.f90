@@ -62,7 +62,7 @@ subroutine parameter(input_i3d)
        alpha_sc, beta_sc, g_sc, Tref
   NAMELIST /LESModel/ jles, smagcst, smagwalldamp, nSmag, walecst, maxdsmagcst, iwall
   NAMELIST /WallModel/ smagwalldamp
-  NAMELIST /Tripping/ itrip,A_tr,xs_tr_tbl,ys_tr_tbl,ts_tr_tbl,x0_tr_tbl, y0_tr_tbl
+  NAMELIST /Tripping/ itrip,A_tr,xs_tr_tbl,ys_tr_tbl,ts_tr_tbl,x0_tr_tbl, y0_tr_tbl,x_tr_stop
   NAMELIST /ibmstuff/ cex,cey,cez,ra,nobjmax,nraf,nvol,iforces, npif, izap, ianal, imove, thickness, chord, omega ,ubcx,ubcy,ubcz,rads, c_air
   NAMELIST /ForceCVs/ xld, xrd, yld, yud!, zld, zrd
   NAMELIST /LMN/ dens1, dens2, prandtl, ilmn_bound, ivarcoeff, ilmn_solve_temp, &
@@ -237,6 +237,10 @@ subroutine parameter(input_i3d)
       endif
 
    endif
+  
+   if (x_tr_stop .le. zero) then
+    x_tr_stop = xlx
+  endif
 
   if(itype==itype_channel) then
    read(10,nml=bodyForce,iostat=iostat); rewind(10)
@@ -795,7 +799,7 @@ subroutine parameter_defaults()
   ts_tr_tbl=1.402033_mytype
   x0_tr_tbl=3.505082_mytype
   y0_tr_tbl=0.05_mytype
-   
+  x_tr_stop=- one
   ! Accel
   iaccel = 0
   U_ratio = one

@@ -531,7 +531,7 @@ contains
       call u_infty_calc(int(x0_tr_tbl/dx),u_infty,dudx)
       x0_tr_tbl = x0_tr_tbl + u_infty*zptwofive*t_trip
       
-      if (x0_tr_tbl > xlx) exit
+      if (x0_tr_tbl > x_tr_stop) exit
    enddo
    x0_tr_tbl = x_tr_tbl_tmp
    
