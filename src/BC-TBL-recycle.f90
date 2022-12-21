@@ -1645,7 +1645,7 @@ end subroutine tbl_recy_tripping
     use decomp_2d, only : mytype
     use decomp_2d_io, only : decomp_2d_register_variable
     use visu, only : io_name, output2D
-    use param, only : istatlambda2
+    use param, only : istatlambda2, jles
     
     implicit none
 
@@ -1653,6 +1653,10 @@ end subroutine tbl_recy_tripping
 
     if (istatlambda2) then
        call decomp_2d_register_variable(io_name, "lambda2", 1, 0, output2D, mytype)
+    endif
+
+    if (jles == 2 .or. jles == 0 .or. jles == 1) then
+      call decomp_2d_register_variable(io_name, "nut_les", 1, 0, output2D, mytype)
     endif
     visu_initialised = .true.
 
@@ -1668,8 +1672,8 @@ end subroutine tbl_recy_tripping
 
     use visu, only : write_field
     use stats, only : lambda2
-    use param, only : istatlambda2, initstat
-    use var, ONLY : nxmsize, nymsize, nzmsize, ta1, ta2, itime
+    use param, only : istatlambda2, initstat, jles
+    use var, ONLY : nxmsize, nymsize, nzmsize, ta1, ta2, itime, nut1
     use decomp_2d
     implicit none
 
@@ -1685,6 +1689,10 @@ end subroutine tbl_recy_tripping
       call transpose_y_to_x(ta2,ta1)
       call write_field(ta1, ".", "lambda2", trim(num), flush=.true.) ! Reusing temporary array, force flush
    endif
+
+   if (jles == 2 .or. jles == 0 .or. jles == 1) then
+      call write_field(nut1, ".", "nut_les", trim(num), flush=.true.) ! Reusing temporary array, force flush
+    endif
   end subroutine visu_tbl_recy
 
 #ifdef BL_DEBG

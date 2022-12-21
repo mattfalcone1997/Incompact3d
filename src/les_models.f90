@@ -1025,10 +1025,11 @@ contains
   enddo
   call transpose_y_to_x(nut2, nut1)
 
-  if (nrank==0) write(*,*) "WALE SS min max= ", minval(srt_wale), maxval(srt_wale)
-  if (nrank==0) write(*,*) "WALE SdSd min max= ", minval(srt_wale3), maxval(srt_wale3)
-  if (nrank==0) write(*,*) "WALE nut1     min max= ", minval(nut1), maxval(nut1)
-
+  if (mod(itime,ilist)==0) then
+      if (nrank==0) write(*,*) "WALE SS min max= ", minval(srt_wale), maxval(srt_wale)
+      if (nrank==0) write(*,*) "WALE SdSd min max= ", minval(srt_wale3), maxval(srt_wale3)
+      if (nrank==0) write(*,*) "WALE nut1     min max= ", minval(nut1), maxval(nut1)
+  endif
   if (mod(itime, ioutput).eq.0) then
 
      write(filename, "(I0)") itime / ioutput
