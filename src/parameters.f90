@@ -27,7 +27,7 @@ subroutine parameter(input_i3d)
   use var, only : dphi1
 
   use lockexch, only : pfront
-  use stats, only : h_quads, spectra_level
+  use stats, only : h_quads, spectra_level, autocorr_max_sep,autocorr_xlocs
   use probes, only : nprobes, setup_probes, flag_all_digits, flag_extra_probes, xyzprobes
   use visu, only : output2D
   use forces, only : iforces, nvol, xld, xrd, yld, yud!, zld, zrd
@@ -54,7 +54,8 @@ subroutine parameter(input_i3d)
        ninflows, ntimesteps, inflowpath, ioutflow, output2D, nprobes, log_cputime
   NAMELIST /Statistics/ wrotation,spinup_time, nstat, initstat, &
             istatcalc, istatbudget,istatpstrain,istatlambda2, initstat2,&
-            istatquadrant, nquads, istatflatness, istatspectra,spectra_level
+            istatquadrant, nquads, istatflatness, istatspectra,spectra_level,&
+            istatautocorr, autocorr_max_sep,autocorr_xlocs
   NAMELIST /ProbesParam/ flag_all_digits, flag_extra_probes, xyzprobes
   NAMELIST /ScalarParam/ sc, ri, uset, cp, &
        nclxS1, nclxSn, nclyS1, nclySn, nclzS1, nclzSn, &
@@ -123,6 +124,17 @@ subroutine parameter(input_i3d)
   if (istatspectra) then
    if (spectra_level.lt.1) then
       write(*,*) "spectra_level must be set"
+      call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+   endif
+  endif
+
+  if (istatautocorr) then
+   if(autocorr_max_sep<0) then
+      write(*,*) "max sep must be set"
+      call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+   endif
+   if(autocorr_xlocs<0) then
+      write(*,*) "xlocs must be set"
       call MPI_Abort(MPI_COMM_WORLD,1,ierr)
    endif
   endif
@@ -671,7 +683,7 @@ subroutine parameter_defaults()
   use probes, only : nprobes, flag_all_digits, flag_extra_probes
   use visu, only : output2D
   use forces, only : iforces, nvol
-  use stats, only : spectra_level
+  use stats, only : spectra_level, autocorr_max_sep, autocorr_xlocs
 
   implicit none
 
@@ -824,8 +836,11 @@ subroutine parameter_defaults()
   istatlambda2 = .false.
   istatquadrant = .false.
   istatspectra = .false.
+  istatautocorr = .false.
   istatflatness = .false.
   istatout = -1
   ispectout = -1
   spectra_level=-1
+  autocorr_max_sep = -1
+  autocorr_xlocs = -1
 end subroutine parameter_defaults

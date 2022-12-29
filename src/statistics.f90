@@ -27,6 +27,7 @@ module stats
 
   real(mytype), dimension(:,:,:), allocatable :: uv_quadrant_mean
   real(mytype), dimension(:,:,:), allocatable :: uuuu_mean
+  real(mytype), dimension(:,:,:), allocatable :: autocorr_mean
 
   complex(mytype), dimension(:,:,:,:), allocatable :: spectra_2d_mean
   complex(mytype), dimension(:,:,:,:), allocatable :: spectra_z_z_mean
@@ -56,9 +57,13 @@ module stats
   integer(8) :: plan_x, plan_z
   integer :: zdft_size,xdft_size
 
+  real(mytype) :: autocorr_xlocs
+  real(mytype) :: autocorr_max_sep
+  integer, dimension(:), allocatable :: autocorr_x_indices
 
   private
-  public :: overall_statistic, h_quads, spectra_level, lambda2
+  public :: overall_statistic, h_quads, spectra_level, lambda2,&
+            autocorr_max_sep, autocorr_xlocs
 
 contains
 
@@ -127,7 +132,7 @@ contains
 
     use param, only : zero, iscalar, istatbudget, istatpstrain
     use param, only : istatquadrant, istatlambda2, nquads, istatspectra
-    use param, only : istatflatness
+    use param, only : istatflatness, istatautocorr
     use variables, only : nx, ny, nz
     use decomp_2d, only : zsize, decomp_info_init
     use MPI
@@ -194,7 +199,11 @@ contains
 #endif      
       call init_spectra
     endif
-  
+    
+    if (istatautocorr) then
+      call init_autocorrelation
+    endif
+
     call decomp_info_init(nx, ny, 4, uvwp_info)
     call decomp_info_init(nx, ny, 6, uu_info)
     call decomp_info_init(nx, ny, 3, pu_info)
@@ -282,13 +291,47 @@ contains
     deallocate(spectra_z_in,spectra_z_out)
 #endif    
   end subroutine
+
+  subroutine init_autocorrelation
+    use param
+    use decomp_2d
+    use var, only : ny
+
+    integer :: nlocs, xlocs, x_ref
+    integer :: i, j, k, fl
+    character(len=80) :: xfmt
+    nlocs = (xlx - two*autocorr_max_sep) / autocorr_xlocs +1
+    xlocs = int(two*autocorr_max_sep/real(dx)) + 1
+
+    allocate(autocorr_mean(xlocs,xsize(2),nlocs))
+    allocate(autocorr_x_indices(nlocs))
+    do i = 1, nlocs
+      autocorr_x_indices(i) = int(autocorr_max_sep/dx) + int((i-1)*autocorr_xlocs/dx,kind=mytype)
+    enddo
+
+    if (nrank ==0) then
+      open(newunit=fl,file='parameters.json',status='old',action='readwrite',position='append')
+      backspace(fl)
+      write(fl,"(A ,' : {')") '  "autocorrelation"'
+      if (nlocs>1) then
+        write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nlocs-1,"(',',g0),']')"
+      else
+        write(xfmt,'(A,I0,A)') "( A, ': [',g0,']')"
+      endif
+      write(fl,"(A ,': [',I0,',',I0,',',I0,'],')") '    "shape"',xlocs, ny, nlocs
+      write(fl,xfmt) '    "x_locs"',(autocorr_x_indices(:)-1)*dx
+      write(fl,'(A)') "  }"
+      write(fl,'(A)') "}"
+      close(fl)
+    endif
+  end subroutine
   !
   ! Read all statistics if possible
   !
   subroutine restart_statistic
 
     use param, only : initstat, irestart, ifirst, itempaccel
-    use param, only: zero,itime, istatspectra,initstat2
+    use param, only: zero,itime, istatspectra,initstat2, istatautocorr
     use variables, only : nstat
     use var, only : tmean, nclx
 
@@ -311,13 +354,18 @@ contains
     ! Read all statistics
     call read_or_write_all_stats(.true.)
 
-    if (istatspectra .and. (itime>initstat2.or.itempaccel==1)) then
+    if (istatspectra .and. (itime>=initstat2.or.itempaccel==1)) then
       if(nclx) then
         call read_write_spectra(.true.,spectra_2d_mean,'spectra_2d',1)
       else
         call read_write_spectra(.true.,spectra_z_z_mean,'spectra_z_z',3)
       endif
     endif
+
+    if (istatautocorr .and. (itime>=initstat2.or.itempaccel==1)) then
+      call read_autocorr('statistics/'//gen_statname("autocorr_mean"))
+    endif
+
   end subroutine restart_statistic
 
   function gen_statname(stat) result(newname)
@@ -402,11 +450,11 @@ contains
       call read_or_write_one_stat(flag_read, gen_statname("uuuu_mean"), uuuu_mean, uuuu_info)
     endif
 
-    if (istatpstrain .and. (itime>initstat2.or.itempaccel==1)) then
+    if (istatpstrain .and. (itime>=initstat2.or.itempaccel==1)) then
       call read_or_write_one_stat(flag_read, gen_statname("pdvdy_q_mean"), pdvdy_q_mean, pdvdy_q_info)
     endif
 
-    if (istatquadrant .and. (itime>initstat2.or.itempaccel==1)) then
+    if (istatquadrant .and. (itime>=initstat2.or.itempaccel==1)) then
       call read_or_write_one_stat(flag_read, gen_statname("uv_quadrant_mean"), uv_quadrant_mean, uv_quadrant_info)
     endif
 
@@ -496,6 +544,93 @@ contains
 
   end subroutine
 
+  subroutine read_autocorr(filename)
+    use decomp_2d
+    use MPI
+    use var
+    use param
+
+    character(len=*) :: filename
+    integer :: sizes(3), subsizes(3), starts(3)
+    integer :: fh, split_comm_z, key, color, newtype, code
+    integer :: nlocs, xlocs
+    integer, dimension(2) :: dims, coords
+    logical, dimension(2) :: periods 
+
+    nlocs = (xlx - two*autocorr_max_sep) / autocorr_xlocs + 1
+    xlocs = int(two*autocorr_max_sep/real(dx)) + 1
+
+    sizes(:) = [xlocs, ny, nlocs]
+    subsizes(:) = [xlocs, xsize(2), nlocs]
+    starts(:) = [0, xstart(2)-1, 0]
+
+    call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, code)
+    key = coords(2)
+    color = coords(1)
+
+    call MPI_Comm_split(DECOMP_2D_COMM_CART_X, key,color, split_comm_z,code)
+
+    call MPI_TYPE_CREATE_SUBARRAY(3, sizes, subsizes, starts,  &
+           MPI_ORDER_FORTRAN, real_type, newtype, code)
+    call MPI_TYPE_COMMIT(newtype,code)
+
+    call MPI_File_open(split_comm_z,filename,MPI_MODE_RDONLY, MPI_INFO_NULL, &
+                      fh, code)
+    call MPI_FILE_SET_VIEW(fh,0_MPI_OFFSET_KIND,real_type, &
+                      newtype,'native',MPI_INFO_NULL,code)
+    call MPI_FILE_READ_ALL(fh, autocorr_mean, &
+                      subsizes(1)*subsizes(2)*subsizes(3), &
+                      real_type, MPI_STATUS_IGNORE, code)
+    call MPI_FILE_CLOSE(fh,code)
+    call MPI_TYPE_FREE(newtype,code)
+
+  end subroutine read_autocorr
+
+  subroutine write_autocorr(filename)
+    use decomp_2d
+    use MPI
+    use var
+    use param
+
+    character(len=*) :: filename
+    integer :: sizes(3), subsizes(3), starts(3)
+    integer :: fh, split_comm_z, key, color, newtype, code
+    integer :: nlocs, xlocs
+    integer, dimension(2) :: dims, coords
+    logical, dimension(2) :: periods 
+    real(mytype), dimension(:), allocatable :: autocorr_g
+    integer, dimension(:), allocatable :: recvcounts, displs
+
+    nlocs = (xlx - two*autocorr_max_sep) / autocorr_xlocs + 1
+    xlocs = int(two*autocorr_max_sep/real(dx)) + 1
+
+    sizes(:) = [xlocs, ny, nlocs]
+    subsizes(:) = [xlocs, xsize(2), nlocs]
+    starts(:) = [0, xstart(2)-1, 0]
+
+    call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, code)
+    key = coords(2)
+    color = coords(1)
+
+    call MPI_Comm_split(DECOMP_2D_COMM_CART_X, key,color, split_comm_z,code)
+
+    call MPI_TYPE_CREATE_SUBARRAY(3, sizes, subsizes, starts,  &
+           MPI_ORDER_FORTRAN, real_type, newtype, code)
+    call MPI_TYPE_COMMIT(newtype,code)
+
+    if (key == 0) then
+      call MPI_File_open(split_comm_z,filename,MPI_MODE_CREATE+MPI_MODE_WRONLY,&
+                        MPI_INFO_NULL, fh, code)
+      call MPI_FILE_SET_SIZE(fh,0_MPI_OFFSET_KIND,code)                        
+      call MPI_FILE_SET_VIEW(fh,0_MPI_OFFSET_KIND,real_type, &
+                        newtype,'native',MPI_INFO_NULL,code)
+      call MPI_FILE_WRITE_ALL(fh, autocorr_mean, &
+                        subsizes(1)*subsizes(2)*subsizes(3), &
+                        real_type, MPI_STATUS_IGNORE, code)
+      call MPI_FILE_CLOSE(fh,code)
+    endif
+    call MPI_TYPE_FREE(newtype,code)    
+  end subroutine write_autocorr
   !
   ! Statistics : Intialize, update and perform IO
   !
@@ -632,23 +767,27 @@ contains
     if (istatflatness) then
       call update_flatness(uuuu_mean,ux3, uy3, uz3,td3)
     endif
-    if (istatpstrain .and. (itime>initstat2.or.itempaccel==1)) then
+    if (istatpstrain .and. (itime>=initstat2.or.itempaccel==1)) then
       call update_pstrain_cond_avg(pdvdy_q_mean(:,:,1),pdvdy_q_mean(:,:,2),&
                                   pdvdy_q_mean(:,:,3),pdvdy_q_mean(:,:,4),&
                                   td3,dvdy,uvwp_mean(:,:,4),dudx_mean(:,:,5),td3)
     endif
 
-    if (istatquadrant .and. (itime>initstat2.or.itempaccel==1)) then
+    if (istatquadrant .and. (itime>=initstat2.or.itempaccel==1)) then
       call update_uv_quad_avg(uv_quadrant_mean, uu_mean(:,:,1), uu_mean(:,:,2),&
                               uvwp_mean(:,:,1), uvwp_mean(:,:,2),ux3,uy3, td3)
     endif
 
-    if (istatspectra.and. (itime>initstat2.or.itempaccel==1)) then
+    if (istatspectra.and. (itime>=initstat2.or.itempaccel==1)) then
       if (nclx) then
         call update_spectra_avg_xz(spectra_2d_mean,ux3,uy3,uz3,td3,ta1,tb2,tc3)
       else
         call update_spectra_avg_z(spectra_z_z_mean,ux3,uy3,uz3,td3,ta1,tb2,tc3)
       endif
+    endif
+
+    if (istatautocorr.and. (itime>=initstat2.or.itempaccel==1)) then
+      call update_autocorr_x(autocorr_mean,ux3)
     endif
 
     if (istatlambda2) then
@@ -660,9 +799,12 @@ contains
     ! Write all statistics
     if (mod(itime,istatout)==0) then
        call read_or_write_all_stats(.false.)
+       if (istatautocorr .and. (itime>=initstat2.or.itempaccel==1)) then
+          call write_autocorr('statistics/'//gen_statname("autocorr_mean"))
+       endif
     endif
 
-    if (istatspectra .and. (itime>initstat2.or.itempaccel==1)) then
+    if (istatspectra .and. (itime>=initstat2.or.itempaccel==1)) then
       if (mod(itime,ispectout)==0) then
 
         if(nclx) then
@@ -1317,6 +1459,81 @@ contains
 
       spec_zm = spec_zm + (spec_z_ml - spec_zm)/ stat_inc
     endif    
+  end subroutine
+
+  subroutine update_autocorr_x(autocorr_m,ux3)
+    use decomp_2d
+    use param
+    use var, only : nz
+    use MPI
+    real(mytype), dimension(:,:,:) :: autocorr_m
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: ux3
+
+    real(mytype), dimension(xsize(1),xsize(2),xsize(3)) :: u_fluct1
+    real(mytype), dimension(ysize(1),ysize(2),ysize(3)) :: u_fluct2
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: u_fluct3
+    real(mytype), dimension(:,:,:), allocatable :: autocorr_ml, autocorr_ml2
+    integer :: i, j, k, l, stat_inc
+    integer :: nlocs, xlocs,autocorr_min
+
+    integer :: split_comm_y, key, color, code
+
+    integer, dimension(2) :: dims, coords
+    logical, dimension(2) :: periods 
+
+    do k = 1, zsize(3)
+      do j = 1, zsize(2)
+        do i = 1, zsize(1)
+          u_fluct3(i,j,k) = ux3(i,j,k) - uvwp_mean(i,j,1)
+        enddo
+      enddo
+    enddo
+
+    call transpose_z_to_y(u_fluct3,u_fluct2)
+    call transpose_y_to_x(u_fluct2,u_fluct1)
+
+    nlocs = (xlx - two*autocorr_max_sep) / autocorr_xlocs + 1
+    xlocs = int(two*autocorr_max_sep/real(dx)) + 1
+    
+    allocate(autocorr_ml(xlocs,xsize(2),nlocs))
+    allocate(autocorr_ml2(xlocs,xsize(2),nlocs))
+
+    autocorr_ml(:,:,:) = zero
+
+    do l = 1,xsize(3)
+      do k = 1, nlocs
+        autocorr_min = autocorr_x_indices(k) - int(autocorr_max_sep/real(dx))
+        do j = 1, xsize(2)
+          do i = 1, xlocs
+            autocorr_ml(i,j,k) = autocorr_ml(i,j,k) &
+                                   + u_fluct1(autocorr_x_indices(k),j,l)&
+                                    *u_fluct1(autocorr_min +i,j,l)
+          enddo
+        enddo
+      enddo
+    enddo
+    autocorr_ml(:,:,:) = autocorr_ml(:,:,:)/real(nz,kind=mytype)
+
+    call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, code)
+    key = coords(1)
+    color = coords(2)
+
+    call MPI_Comm_split(DECOMP_2D_COMM_CART_X, key,color, split_comm_y,code)
+
+    call MPI_Allreduce(autocorr_ml,autocorr_ml2,size(autocorr_ml),&
+                       real_type,MPI_SUM,split_comm_y,code)
+
+
+    if (itempaccel==1) then
+      autocorr_m = autocorr_ml2
+
+    else
+      stat_inc = real((itime-initstat2)/istatcalc+1, kind=mytype)
+
+      autocorr_m = autocorr_m + (autocorr_ml2 - autocorr_m)/ stat_inc
+    endif                           
+
+    deallocate(autocorr_ml,autocorr_ml2)
   end subroutine
   subroutine grad_init
     use param, only : zpfive, one, three,onepfive, two

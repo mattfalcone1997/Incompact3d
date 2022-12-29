@@ -483,7 +483,11 @@ subroutine write_params_json
       write(fl,'(A)') "  },"
    endif
    write(fl,"(A ,':',g0,',')") '  "re"',re
-   write(fl,"(A ,':',g0)") '  "dt"',dt
+   if (istatautocorr) then
+      write(fl,'(A," : ",g0,",")') '    "dt"',dt
+   else
+      write(fl,'(A," : ",g0)') '    "dt"',dt
+   endif   
    write(fl,'(A)') "}"
 
    close(fl)

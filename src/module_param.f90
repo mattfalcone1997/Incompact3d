@@ -297,7 +297,7 @@ module param
   integer :: npif,izap,ianal
   integer :: ivisu, ipost, initstat,initstat2,istatcalc, istatout, nquads, ispectout
   logical :: istatbudget, istatpstrain, istatlambda2, istatquadrant, istatspectra
-  logical :: istatflatness
+  logical :: istatflatness, istatautocorr
   logical :: log_cputime
   integer :: ifilter
   
