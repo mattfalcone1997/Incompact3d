@@ -245,7 +245,7 @@ contains
     if (spectra_level == 1) then
       nspectra = 4
     else if (spectra_level == 2) then
-      nspectra = 5
+      nspectra = 8
     else
       write(*,*) "Invalid spectra level"
     call MPI_Abort(MPI_COMM_WORLD,1,code)
@@ -518,7 +518,7 @@ contains
     character(len=80) :: fn
     
 
-    if (nspectra.ge.4) then
+    if (spectra_level.ge.1) then
       if (flag_read) then
 
         fn = gen_statname('statistics/'//trim(file_base)//'_uu')
@@ -538,6 +538,30 @@ contains
         call decomp_2d_write_one(ipencil,array(:,:,:,3),fn,opt_decomp=dft_info)
         fn = gen_statname('statistics/'//trim(file_base)//'_uv')
         call decomp_2d_write_one(ipencil,array(:,:,:,4),fn,opt_decomp=dft_info)
+
+      endif 
+    endif
+
+    if (spectra_level.ge.2) then
+      if (flag_read) then
+
+        fn = gen_statname('statistics/'//trim(file_base)//'_omega_y')
+        call decomp_2d_read_one(ipencil,array(:,:,:,5),fn,opt_decomp=dft_info)
+        fn = gen_statname('statistics/'//trim(file_base)//'_pdudx')
+        call decomp_2d_read_one(ipencil,array(:,:,:,6),fn,opt_decomp=dft_info)
+        fn = gen_statname('statistics/'//trim(file_base)//'_pdvdy')
+        call decomp_2d_read_one(ipencil,array(:,:,:,7),fn,opt_decomp=dft_info)
+        fn = gen_statname('statistics/'//trim(file_base)//'_pdwdz')
+        call decomp_2d_read_one(ipencil,array(:,:,:,8),fn,opt_decomp=dft_info)
+      else
+        fn = gen_statname('statistics/'//trim(file_base)//'_omega_y')
+        call decomp_2d_write_one(ipencil,array(:,:,:,5),fn,opt_decomp=dft_info)
+        fn = gen_statname('statistics/'//trim(file_base)//'_pdudx')
+        call decomp_2d_write_one(ipencil,array(:,:,:,6),fn,opt_decomp=dft_info)
+        fn = gen_statname('statistics/'//trim(file_base)//'_pdvdy')
+        call decomp_2d_write_one(ipencil,array(:,:,:,7),fn,opt_decomp=dft_info)
+        fn = gen_statname('statistics/'//trim(file_base)//'_pdwdz')
+        call decomp_2d_write_one(ipencil,array(:,:,:,8),fn,opt_decomp=dft_info)
 
       endif 
     endif
@@ -780,9 +804,9 @@ contains
 
     if (istatspectra.and. (itime>=initstat2.or.itempaccel==1)) then
       if (nclx) then
-        call update_spectra_avg_xz(spectra_2d_mean,ux3,uy3,uz3,td3,ta1,tb2,tc3)
+        call update_spectra_avg_xz(spectra_2d_mean,ux3,uy3,uz3,td3,dvdy, ta3, dwdx)
       else
-        call update_spectra_avg_z(spectra_z_z_mean,ux3,uy3,uz3,td3,ta1,tb2,tc3)
+        call update_spectra_avg_z(spectra_z_z_mean,ux3,uy3,uz3,td3,dudx, dvdy, ta3,dwdx)
       endif
     endif
 
@@ -1232,42 +1256,41 @@ contains
     call update_average_scalar(lambda22m, lambda2*lambda2, ep)
   end subroutine
 
-  subroutine spectra_2d_calc(spec_2d,val1, val2)
+  subroutine fft_2d_calc(fft_2d,val)
     use variables, only: nx,nz
     use param
     use decomp_2d
     use MPI
     use param, only: zero
 
-    real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: val1
-    real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in), optional :: val2
-    complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3)), intent(out) :: spec_2d
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: val
+    complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3)), intent(out) :: fft_2d
 
     complex(mytype), dimension(dft_info%zsz(1),dft_info%zsz(2),dft_info%zsz(3)) :: spec_z
     complex(mytype), dimension(dft_info%ysz(1),dft_info%ysz(2),dft_info%ysz(3)) :: spec_y
     complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3)) :: spec_x
-    complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3)) :: spec1, spec2
 
-    integer :: i,j,k
-    real(mytype) :: norm
 #ifdef HAVE_FFTW
-    call dfftw_execute_dft_r2c(plan_z,val1,spec_z)
+    call dfftw_execute_dft_r2c(plan_z,val,spec_z)
     call transpose_z_to_y(spec_z,spec_y,dft_info)
     call transpose_y_to_x(spec_y,spec_x,dft_info)
 
-    call dfftw_execute_dft(plan_x,spec_x,spec1)
-
-    if (present(val2)) then
-      call dfftw_execute_dft_r2c(plan_z,val2,spec_z)
-
-      call transpose_z_to_y(spec_z,spec_y,dft_info)
-      call transpose_y_to_x(spec_y,spec_x,dft_info)
-  
-      call dfftw_execute_dft(plan_x,spec_x,spec2)
-    else
-      spec2(:,:,:) = spec1(:,:,:)
-    endif
+    call dfftw_execute_dft(plan_x,spec_x,fft_2d)
 #endif
+  end subroutine
+  subroutine spectra_2d_calc(spec_2d,spec1, spec2)
+    use variables, only: nx,nz
+    use param
+    use decomp_2d
+    use MPI
+    use param, only: zero
+
+    complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3)), intent(in) :: spec1
+    complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3)), intent(in) :: spec2
+    complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3)), intent(out) :: spec_2d
+
+    integer :: i,j,k
+    real(mytype) :: norm
 
     norm = real(nz*nz*nx*nx,kind=mytype)
     spec_2d(:,:,:) = zero
@@ -1282,7 +1305,7 @@ contains
     enddo
 
   end subroutine
-  subroutine spectra_z_calc(spec_zm,val1,val2)
+  subroutine spectra_z_calc(spec_zm,val1_spec,val2_spec)
     use variables, only: nx,nz
     use param
     use decomp_2d
@@ -1290,28 +1313,11 @@ contains
     use param, only: zero
 
     complex(mytype), dimension(dft_info%zsz(1),dft_info%zsz(2),dft_info%zsz(3)) :: spec_zm
-    real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: val1
-    real(mytype), dimension(zsize(1),zsize(2),zsize(3)), optional :: val2
+    complex(mytype), dimension(dft_info%zsz(1),dft_info%zsz(2),dft_info%zsz(3)), intent(in) :: val1_spec, val2_spec
 
     ! local args
-    complex(mytype), dimension(dft_info%zsz(1),dft_info%zsz(2),dft_info%zsz(3)) :: val1_spec, val2_spec
-    integer :: i, j, k, code
-
-    integer :: color, key
-    integer, dimension(2) :: dims, coords
-    logical, dimension(2) :: periods 
-    integer :: split_comm_y
     real(mytype) :: norm
-
-#ifdef HAVE_FFTW
-    ! perform fft
-    call dfftw_execute_dft_r2c(plan_z,val1,val1_spec)
-    if (.not.present(val2)) then
-      val2_spec = val1_spec
-    else
-      call dfftw_execute_dft_r2c(plan_z,val2,val2_spec)
-    endif
-#endif
+    integer :: i, j, k
     ! calculate spectra of local rank
     norm = real(nz*nz,kind=mytype)
 
@@ -1326,46 +1332,74 @@ contains
     
   end subroutine
 
-  subroutine update_spectra_avg_xz(spec_2d_m, ux3, uy3, uz3, p3,dudx1, dvdy2, dwdz3)
+  subroutine update_spectra_avg_xz(spec_2d_m, ux3, uy3, uz3, p3,dvdy3, dudz3, dwdx3)
     use MPI
     use decomp_2d
     use variables, only : nx, nz
     use param, only : itime, initstat,initstat2, istatcalc, itempaccel, initstat2
-
+    use var, only: ta3, tb3, tc3
 
     complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3),nspectra) :: spec_2d_m
 
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: ux3, uy3, uz3, p3
-    real(mytype), dimension(xsize(1),xsize(2),xsize(3)) :: dudx1
-    real(mytype), dimension(ysize(1),ysize(2),ysize(3)) :: dvdy2
-    real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: dwdz3
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: dudz3,dvdy3,dwdx3
 
     complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3),nspectra) :: spec_2d_ml
-    real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: u_f, v_f, w_f
-    real(mytype), dimension(zsize(2),3) :: uvw_m
+    complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3)) :: u_spec, v_spec, w_spec, p_spec
+    complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3)) :: u_spec1, w_spec1,dvdy_spec, omega_spec
+
+    real(mytype), dimension(zsize(2),6) :: uvw_m
     real(mytype) :: stat_inc
     integer :: i,j,k
 
-    if (nspectra.ge.4) then
+    call compute_avg_xz_u(uvw_m)
+    if (spectra_level.ge.1) then
 
-      call compute_avg_xz_u(uvw_m)
       do k =1, zsize(3)
         do j =1, zsize(2)
           do i =1, zsize(1)
-            u_f(i,j,k) = ux3(i,j,k) - uvw_m(j,1)
-            v_f(i,j,k) = uy3(i,j,k) - uvw_m(j,2)
-            w_f(i,j,k) = uz3(i,j,k) - uvw_m(j,3)
+            ta3(i,j,k) = ux3(i,j,k) - uvw_m(j,1)
+            tb3(i,j,k) = uy3(i,j,k) - uvw_m(j,2)
+            tc3(i,j,k) = uz3(i,j,k) - uvw_m(j,3)
           enddo
         enddo
       enddo
 
-      call spectra_2d_calc(spec_2d_ml(:,:,:,1),u_f)
-      call spectra_2d_calc(spec_2d_ml(:,:,:,2),v_f)
-      call spectra_2d_calc(spec_2d_ml(:,:,:,3),w_f)
-      call spectra_2d_calc(spec_2d_ml(:,:,:,4),u_f,v_f)
+      call fft_2d_calc(u_spec,ta3)
+      call fft_2d_calc(v_spec,tb3)
+      call fft_2d_calc(w_spec,tc3)
+
+      call spectra_2d_calc(spec_2d_ml(:,:,:,1),u_spec,u_spec)
+      call spectra_2d_calc(spec_2d_ml(:,:,:,2),v_spec,v_spec)
+      call spectra_2d_calc(spec_2d_ml(:,:,:,3),w_spec,w_spec)
+      call spectra_2d_calc(spec_2d_ml(:,:,:,4),u_spec,v_spec)
     
     endif
 
+    if (spectra_level .ge.2) then
+      do k =1, zsize(3)
+        do j =1, zsize(2)
+          do i =1, zsize(1)
+            ta3(i,j,k) = p3(i,j,k) - uvw_m(j,4)
+            tb3(i,j,k) = dvdy3(i,j,k) - uvw_m(j,5)
+            tc3(i,j,k) = dudz3(i,j,k) - dwdx3(i,j,k) - uvw_m(j,6)
+          enddo
+        enddo
+      enddo
+
+      call fft_2d_calc(p_spec,ta3)
+      call fft_2d_calc(dvdy_spec,tb3)
+      call fft_2d_calc(omega_spec,tc3)
+
+      u_spec1 = cmplx(-aimag(u_spec),real(u_spec))
+      w_spec1 = cmplx(-aimag(w_spec),real(w_spec))
+
+      call spectra_2d_calc(spec_2d_ml(:,:,:,5),v_spec,omega_spec)
+      call spectra_2d_calc(spec_2d_ml(:,:,:,6),p_spec,u_spec1)
+      call spectra_2d_calc(spec_2d_ml(:,:,:,7),p_spec,dvdy_spec)
+      call spectra_2d_calc(spec_2d_ml(:,:,:,8),p_spec,w_spec1)
+
+    endif
     if (itempaccel==1) then
       spec_2d_m = spec_2d_ml
 
@@ -1382,8 +1416,8 @@ contains
     use decomp_2d
     use var, only: nx
     use param, only: zero
-    real(mytype), dimension(zsize(2),3), intent(out) :: uvw_m
-    real(mytype), dimension(zsize(2),3) :: uvw_l
+    real(mytype), dimension(zsize(2),6), intent(out) :: uvw_m
+    real(mytype), dimension(zsize(2),6) :: uvw_l
     
     integer :: color, key
     integer, dimension(2) :: dims, coords
@@ -1400,6 +1434,11 @@ contains
       enddo
     enddo
 
+    if (spectra_level.ge.2) then
+      uvw_l(j,4) = uvw_l(j,4) + uvwp_mean(i,j,4)
+      uvw_l(j,5) = uvw_l(j,5) + dudx_mean(i,j,5)
+      uvw_l(j,6) = uvw_l(j,6) + dudx_mean(i,j,3) - dudx_mean(i,j,7)
+    endif
     uvw_l(:,:) = uvw_l(:,:)/real(nx,kind=mytype)
 
     call MPI_CART_GET(DECOMP_2D_COMM_CART_Z, 2, dims, periods, coords, code)
@@ -1408,49 +1447,81 @@ contains
 
     call MPI_Comm_split(DECOMP_2D_COMM_CART_Z, key,color, split_comm_y,code)
 
-    call MPI_Allreduce(uvw_l,uvw_m,zsize(2)*3,&
+    call MPI_Allreduce(uvw_l,uvw_m,size(uvw_m),&
                        real_type,MPI_SUM,split_comm_y,code)
 
   end subroutine
   
-  subroutine update_spectra_avg_z(spec_zm, ux3, uy3, uz3,p3,dudx1, dvdy2, dwdz3)
+  subroutine update_spectra_avg_z(spec_zm, ux3, uy3, uz3,p3,dudx3, dvdy3, dudz3,dwdx3)
     use MPI
     use decomp_2d
     use variables, only : nx, nz
     use param, only : itime, initstat,initstat2, istatcalc, itempaccel, initstat2
+    use var, only : ta3, tb3, tc3, td3
     implicit none
 
     complex(mytype), dimension(dft_info%zsz(1),dft_info%zsz(2),dft_info%zsz(3),nspectra) :: spec_zm
 
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: ux3, uy3, uz3, p3
-    real(mytype), dimension(xsize(1),xsize(2),xsize(3)) :: dudx1
-    real(mytype), dimension(ysize(1),ysize(2),ysize(3)) :: dvdy2
-    real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: dwdz3
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: dudx3,dvdy3,dudz3,dwdx3
     
     complex(mytype), dimension(dft_info%zsz(1),dft_info%zsz(2),dft_info%zsz(3),nspectra) :: spec_z_ml
-    real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: u_f, v_f, w_f
+    complex(mytype), dimension(dft_info%zsz(1),dft_info%zsz(2),dft_info%zsz(3)) :: u_spec, v_spec, w_spec, w_spec1
+    complex(mytype), dimension(dft_info%zsz(1),dft_info%zsz(2),dft_info%zsz(3)) :: p_spec, omega_spec,dudx_spec, dvdy_spec
+
     real(mytype) :: stat_inc
     integer :: i,j,k
 
-    if (nspectra.ge.4) then
+    if (spectra_level.ge.1) then
 
       do k =1, zsize(3)
         do j =1, zsize(2)
           do i =1, zsize(1)
-            u_f(i,j,k) = ux3(i,j,k) - uvwp_mean(i,j,1)
-            v_f(i,j,k) = uy3(i,j,k) - uvwp_mean(i,j,2)
-            w_f(i,j,k) = uz3(i,j,k) - uvwp_mean(i,j,3)
+            ta3(i,j,k) = ux3(i,j,k) - uvwp_mean(i,j,1)
+            tb3(i,j,k) = uy3(i,j,k) - uvwp_mean(i,j,2)
+            tc3(i,j,k) = uz3(i,j,k) - uvwp_mean(i,j,3)
           enddo
         enddo
       enddo
 
-      call spectra_z_calc(spec_z_ml(:,:,:,1),u_f)
-      call spectra_z_calc(spec_z_ml(:,:,:,2),v_f)
-      call spectra_z_calc(spec_z_ml(:,:,:,3),w_f)
-      call spectra_z_calc(spec_z_ml(:,:,:,4),u_f,v_f)
+#ifdef HAVE_FFTW
+      call dfftw_execute_dft_r2c(plan_z,ta3,u_spec)
+      call dfftw_execute_dft_r2c(plan_z,tb3,v_spec)
+      call dfftw_execute_dft_r2c(plan_z,tc3,w_spec)
+#endif
+
+      call spectra_z_calc(spec_z_ml(:,:,:,1),u_spec,u_spec)
+      call spectra_z_calc(spec_z_ml(:,:,:,2),v_spec,v_spec)
+      call spectra_z_calc(spec_z_ml(:,:,:,3),w_spec,w_spec)
+      call spectra_z_calc(spec_z_ml(:,:,:,4),u_spec,v_spec)
     
     endif
 
+    if (spectra_level .ge. 2) then
+
+      do k =1, zsize(3)
+        do j =1, zsize(2)
+          do i =1, zsize(1)
+            ta3(i,j,k) = p3(i,j,k) - uvwp_mean(i,j,4)
+            tb3(i,j,k) = dudx3(i,j,k) - dudx_mean(i,j,1)
+            tc3(i,j,k) = dvdy3(i,j,k) - dudx_mean(i,j,5)
+            td3(i,j,k) = dudz3(i,j,k) - dwdx3(i,j,k) - dudx_mean(i,j,3) + dudx_mean(i,j,7)
+          enddo
+        enddo
+      enddo
+      
+      w_spec1 = cmplx(-aimag(w_spec),real(w_spec))
+      call dfftw_execute_dft_r2c(plan_z,ta3,p_spec)
+      call dfftw_execute_dft_r2c(plan_z,td3,omega_spec)
+      call dfftw_execute_dft_r2c(plan_z,tb3,dudx_spec)
+      call dfftw_execute_dft_r2c(plan_z,tc3,dvdy_spec)
+
+      call spectra_z_calc(spec_z_ml(:,:,:,5),v_spec,omega_spec)
+      call spectra_z_calc(spec_z_ml(:,:,:,6),p_spec,dudx_spec)
+      call spectra_z_calc(spec_z_ml(:,:,:,7),p_spec,dvdy_spec)
+      call spectra_z_calc(spec_z_ml(:,:,:,8),p_spec,w_spec1)
+
+    endif
     if (itempaccel==1) then
       spec_zm = spec_z_ml
 
