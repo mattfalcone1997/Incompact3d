@@ -608,6 +608,8 @@ contains
     call MPI_FILE_CLOSE(fh,code)
     call MPI_TYPE_FREE(newtype,code)
 
+    call MPI_Comm_free(split_comm_z,code)
+
   end subroutine read_autocorr
 
   subroutine write_autocorr(filename)
@@ -653,7 +655,9 @@ contains
                         real_type, MPI_STATUS_IGNORE, code)
       call MPI_FILE_CLOSE(fh,code)
     endif
-    call MPI_TYPE_FREE(newtype,code)    
+    call MPI_TYPE_FREE(newtype,code)
+    call MPI_Comm_free(split_comm_z,code)
+  
   end subroutine write_autocorr
   !
   ! Statistics : Intialize, update and perform IO
@@ -1449,6 +1453,7 @@ contains
 
     call MPI_Allreduce(uvw_l,uvw_m,size(uvw_m),&
                        real_type,MPI_SUM,split_comm_y,code)
+    call MPI_Comm_free(split_comm_y,code)
 
   end subroutine
   
@@ -1594,6 +1599,7 @@ contains
     call MPI_Allreduce(autocorr_ml,autocorr_ml2,size(autocorr_ml),&
                        real_type,MPI_SUM,split_comm_y,code)
 
+    call MPI_Comm_free(split_comm_y,code)
 
     if (itempaccel==1) then
       autocorr_m = autocorr_ml2
