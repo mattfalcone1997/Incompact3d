@@ -1361,13 +1361,7 @@ end subroutine tbl_recy_tripping
                                  "u_tau_inlt","delta_v_recy","delta_v_inlt"
       
       else if (itime == ifirst) then
-         open(newunit=tbl_recy_log,file='tbl_recy.log',status='old',action='readwrite')
-         rewind(tbl_recy_log)
-         nreads = itime/ilist + 1
-         if (ilist==1) nreads = itime/ilist - 1
-         do i = 1, nreads
-            read(tbl_recy_log,*)
-         enddo
+         open(newunit=tbl_recy_log,file='tbl_recy.log',status='old',action='readwrite',position='append')
       endif
 
       if ((mod(itime,ilist)==0.or.itime==1) .and. itr.eq.1) then
