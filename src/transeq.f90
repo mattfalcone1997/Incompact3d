@@ -581,8 +581,10 @@ contains
       endif
       if (itype.eq.itype_tbl_recy) then
          ! Use mutliple tripping locations for recycling method
-         call tbl_recy_tripping(duy1(:,:,:,1),td1)
-         if ((nrank==0).and.(mod(itime,ilist)==0)) write(*,*) 'TRIPPING!!'
+         if (t<=t_trip) then
+            call tbl_recy_tripping(duy1(:,:,:,1),td1)
+            if ((nrank==0).and.(mod(itime,ilist)==0)) write(*,*) 'TRIPPING!!'
+         endif
       endif
     endif
 #ifdef DEBG

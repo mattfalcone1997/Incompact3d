@@ -522,8 +522,7 @@ contains
    real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: tb, ta
    integer :: i
    real(mytype) :: u_infty,dudx
-   if (t>t_trip) return
-
+   
    x_tr_tbl_tmp = x0_tr_tbl
    do 
       call tbl_tripping(tb,ta)

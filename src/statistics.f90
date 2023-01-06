@@ -517,6 +517,14 @@ contains
     integer,intent(in) :: ipencil
     character(len=80) :: fn
     
+    if (nrank==0) then
+      print *,'==========================================================='
+      if (flag_read) then
+        print *,'Reading spectra files', stats_time
+      else
+        print *,'Writing spectra files', stats_time
+      endif
+    endif
 
     if (spectra_level.ge.1) then
       if (flag_read) then
@@ -566,6 +574,14 @@ contains
       endif 
     endif
 
+    if (nrank==0) then
+      if (flag_read) then
+        print *,'Read spectra done!'
+      else
+        print *,'Write spectra done!'
+      endif
+      print *,'==========================================================='
+    endif
   end subroutine
 
   subroutine read_autocorr(filename)
@@ -580,6 +596,11 @@ contains
     integer :: nlocs, xlocs
     integer, dimension(2) :: dims, coords
     logical, dimension(2) :: periods 
+
+    if (nrank==0) then
+      print *,'==========================================================='
+      print *,'Reading autocorrelation files', stats_time
+    endif
 
     nlocs = (xlx - two*autocorr_max_sep) / autocorr_xlocs + 1
     xlocs = int(two*autocorr_max_sep/real(dx)) + 1
@@ -610,6 +631,11 @@ contains
 
     call MPI_Comm_free(split_comm_z,code)
 
+    if (nrank==0) then
+      print *,'Read autocorrelation done!'
+      print *,'==========================================================='
+    endif
+
   end subroutine read_autocorr
 
   subroutine write_autocorr(filename)
@@ -626,6 +652,11 @@ contains
     logical, dimension(2) :: periods 
     real(mytype), dimension(:), allocatable :: autocorr_g
     integer, dimension(:), allocatable :: recvcounts, displs
+
+    if (nrank==0) then
+      print *,'==========================================================='
+      print *,'writing autocorrelation files', stats_time
+    endif
 
     nlocs = (xlx - two*autocorr_max_sep) / autocorr_xlocs + 1
     xlocs = int(two*autocorr_max_sep/real(dx)) + 1
@@ -658,6 +689,10 @@ contains
     call MPI_TYPE_FREE(newtype,code)
     call MPI_Comm_free(split_comm_z,code)
   
+    if (nrank==0) then
+      print *,'write autocorrelation done!'
+      print *,'==========================================================='
+    endif
   end subroutine write_autocorr
   !
   ! Statistics : Intialize, update and perform IO
@@ -670,7 +705,7 @@ contains
     use decomp_2d_io
     use tools, only : rescale_pressure
     USE var, only : ta1,tb1,tc1,td1,te1,tf1,tg1,th1,ti1,di1
-    USE var, only : ta2,tb2,tc2,td2,te2,tf2,di2,ta3,tb3,tc3,td3,te3,tf3,di3
+    USE var, only : ta2,tb2,tc2,td2,te2,tf2,di2,ta3,tb3,tc3,td3,di3
     use ibm_param, only : ubcx, ubcy, ubcz
     use var, only : ux2, ux3, uy2, uy3, uz2, uz3
     use var, only : ta2
@@ -1341,7 +1376,7 @@ contains
     use decomp_2d
     use variables, only : nx, nz
     use param, only : itime, initstat,initstat2, istatcalc, itempaccel, initstat2
-    use var, only: ta3, tb3, tc3
+    use var, only: te3, tf3, tg3
 
     complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3),nspectra) :: spec_2d_m
 
@@ -1362,16 +1397,16 @@ contains
       do k =1, zsize(3)
         do j =1, zsize(2)
           do i =1, zsize(1)
-            ta3(i,j,k) = ux3(i,j,k) - uvw_m(j,1)
-            tb3(i,j,k) = uy3(i,j,k) - uvw_m(j,2)
-            tc3(i,j,k) = uz3(i,j,k) - uvw_m(j,3)
+            te3(i,j,k) = ux3(i,j,k) - uvw_m(j,1)
+            tf3(i,j,k) = uy3(i,j,k) - uvw_m(j,2)
+            tg3(i,j,k) = uz3(i,j,k) - uvw_m(j,3)
           enddo
         enddo
       enddo
 
-      call fft_2d_calc(u_spec,ta3)
-      call fft_2d_calc(v_spec,tb3)
-      call fft_2d_calc(w_spec,tc3)
+      call fft_2d_calc(u_spec,te3)
+      call fft_2d_calc(v_spec,tf3)
+      call fft_2d_calc(w_spec,tg3)
 
       call spectra_2d_calc(spec_2d_ml(:,:,:,1),u_spec,u_spec)
       call spectra_2d_calc(spec_2d_ml(:,:,:,2),v_spec,v_spec)
@@ -1384,19 +1419,25 @@ contains
       do k =1, zsize(3)
         do j =1, zsize(2)
           do i =1, zsize(1)
-            ta3(i,j,k) = p3(i,j,k) - uvw_m(j,4)
-            tb3(i,j,k) = dvdy3(i,j,k) - uvw_m(j,5)
-            tc3(i,j,k) = dudz3(i,j,k) - dwdx3(i,j,k) - uvw_m(j,6)
+            te3(i,j,k) = p3(i,j,k) - uvw_m(j,4)
+            tf3(i,j,k) = dvdy3(i,j,k) - uvw_m(j,5)
+            tg3(i,j,k) = dudz3(i,j,k) - dwdx3(i,j,k) - uvw_m(j,6)
           enddo
         enddo
       enddo
 
-      call fft_2d_calc(p_spec,ta3)
-      call fft_2d_calc(dvdy_spec,tb3)
-      call fft_2d_calc(omega_spec,tc3)
+      call fft_2d_calc(p_spec,te3)
+      call fft_2d_calc(dvdy_spec,tf3)
+      call fft_2d_calc(omega_spec,tg3)
 
-      u_spec1 = cmplx(-aimag(u_spec),real(u_spec))
-      w_spec1 = cmplx(-aimag(w_spec),real(w_spec))
+      do k = 1, dft_info%xsz(3)
+        do j = 1, dft_info%xsz(2)
+          do i = 1, dft_info%xsz(1)
+            u_spec1(i,j,k) = u_spec(i,j,k)*cmplx(0,1,kind=mytype)
+            w_spec1(i,j,k) = w_spec(i,j,k)*cmplx(0,1,kind=mytype)
+          enddo
+        enddo
+      enddo
 
       call spectra_2d_calc(spec_2d_ml(:,:,:,5),v_spec,omega_spec)
       call spectra_2d_calc(spec_2d_ml(:,:,:,6),p_spec,u_spec1)
@@ -1462,7 +1503,7 @@ contains
     use decomp_2d
     use variables, only : nx, nz
     use param, only : itime, initstat,initstat2, istatcalc, itempaccel, initstat2
-    use var, only : ta3, tb3, tc3, td3
+    use var, only : te3, tf3, tg3, th3
     implicit none
 
     complex(mytype), dimension(dft_info%zsz(1),dft_info%zsz(2),dft_info%zsz(3),nspectra) :: spec_zm
@@ -1482,17 +1523,17 @@ contains
       do k =1, zsize(3)
         do j =1, zsize(2)
           do i =1, zsize(1)
-            ta3(i,j,k) = ux3(i,j,k) - uvwp_mean(i,j,1)
-            tb3(i,j,k) = uy3(i,j,k) - uvwp_mean(i,j,2)
-            tc3(i,j,k) = uz3(i,j,k) - uvwp_mean(i,j,3)
+            te3(i,j,k) = ux3(i,j,k) - uvwp_mean(i,j,1)
+            tf3(i,j,k) = uy3(i,j,k) - uvwp_mean(i,j,2)
+            tg3(i,j,k) = uz3(i,j,k) - uvwp_mean(i,j,3)
           enddo
         enddo
       enddo
 
 #ifdef HAVE_FFTW
-      call dfftw_execute_dft_r2c(plan_z,ta3,u_spec)
-      call dfftw_execute_dft_r2c(plan_z,tb3,v_spec)
-      call dfftw_execute_dft_r2c(plan_z,tc3,w_spec)
+      call dfftw_execute_dft_r2c(plan_z,te3,u_spec)
+      call dfftw_execute_dft_r2c(plan_z,tf3,v_spec)
+      call dfftw_execute_dft_r2c(plan_z,tg3,w_spec)
 #endif
 
       call spectra_z_calc(spec_z_ml(:,:,:,1),u_spec,u_spec)
@@ -1507,19 +1548,19 @@ contains
       do k =1, zsize(3)
         do j =1, zsize(2)
           do i =1, zsize(1)
-            ta3(i,j,k) = p3(i,j,k) - uvwp_mean(i,j,4)
-            tb3(i,j,k) = dudx3(i,j,k) - dudx_mean(i,j,1)
-            tc3(i,j,k) = dvdy3(i,j,k) - dudx_mean(i,j,5)
-            td3(i,j,k) = dudz3(i,j,k) - dwdx3(i,j,k) - dudx_mean(i,j,3) + dudx_mean(i,j,7)
+            te3(i,j,k) = p3(i,j,k) - uvwp_mean(i,j,4)
+            tf3(i,j,k) = dudx3(i,j,k) - dudx_mean(i,j,1)
+            tg3(i,j,k) = dvdy3(i,j,k) - dudx_mean(i,j,5)
+            th3(i,j,k) = dudz3(i,j,k) - dwdx3(i,j,k) - dudx_mean(i,j,3) + dudx_mean(i,j,7)
           enddo
         enddo
       enddo
       
       w_spec1 = cmplx(-aimag(w_spec),real(w_spec))
-      call dfftw_execute_dft_r2c(plan_z,ta3,p_spec)
-      call dfftw_execute_dft_r2c(plan_z,td3,omega_spec)
-      call dfftw_execute_dft_r2c(plan_z,tb3,dudx_spec)
-      call dfftw_execute_dft_r2c(plan_z,tc3,dvdy_spec)
+      call dfftw_execute_dft_r2c(plan_z,te3,p_spec)
+      call dfftw_execute_dft_r2c(plan_z,tf3,omega_spec)
+      call dfftw_execute_dft_r2c(plan_z,tg3,dudx_spec)
+      call dfftw_execute_dft_r2c(plan_z,th3,dvdy_spec)
 
       call spectra_z_calc(spec_z_ml(:,:,:,5),v_spec,omega_spec)
       call spectra_z_calc(spec_z_ml(:,:,:,6),p_spec,dudx_spec)
