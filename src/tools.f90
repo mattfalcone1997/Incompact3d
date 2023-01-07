@@ -149,7 +149,7 @@ contains
     use simulation_stats
     use var
     use MPI
-    use param, only : log_cputime
+    use param, only : log_cputime, initstat, istatcalc
 
     implicit none
 
@@ -161,6 +161,8 @@ contains
        trank=zero
        tranksum=zero
        ttotal=zero
+       tstats=zero
+       tstep=zero
        call cpu_time(tstart)
        if (nrank==0.and.log_cputime) call output_cputime(1.0,reset=.true.)
     else if (iwhen == 2) then !AT THE START OF A TIME STEP
@@ -172,8 +174,8 @@ contains
     else if ((iwhen == 3).and.(itime > ifirst)) then !AT THE END OF A TIME STEP
        if (nrank == 0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime==ilast)) then
           call cpu_time(trank)
-          
-          if (nrank==0) write(*,*) 'Time for this time step (s):',real(trank-time1)
+          tstep = trank-time1
+          if (nrank==0) write(*,*) 'Time for this time step (s):',tstep
           if (nrank==0.and.log_cputime) call output_cputime(real(trank-time1))
 
           telapsed = (trank-tstart)/threethousandsixhundred
@@ -201,6 +203,12 @@ contains
           write(*,*) 'Total wallclock (h):',real(ttotal/threethousandsixhundred,4)
           write(*,*) '                                                           '
        endif
+      else if (iwhen ==5 .and. itime>=initstat) then
+         if (nrank == 0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime==ilast)) then
+            call cpu_time(trank)
+            tstats = (trank - time1 - tstep)/real(istatcalc)
+            write(*,*) 'Post-processing time for time step (s):',tstats
+         endif
     endif
 
   end subroutine simu_stats

@@ -635,7 +635,7 @@ end module parfiZ
 !############################################################################
 !############################################################################
 module simulation_stats
-  real(8) :: tstart,time1,trank,tranksum,ttotal,tremaining,telapsed
+  real(8) :: tstart,time1,trank,tranksum,ttotal,tremaining,telapsed,tstats,tstep
 end module simulation_stats
 !############################################################################
 !############################################################################
