@@ -172,9 +172,11 @@ contains
           write(*,"(' Time step =',i7,'/',i7,', Time unit =',F9.4)") itime,ilast,t
        endif
     else if ((iwhen == 3).and.(itime > ifirst)) then !AT THE END OF A TIME STEP
+       if (nrank == 0 .and.(mod(itime, ilist) == 0.or.mod(itime,istatcalc)==0)) then
+         call cpu_time(trank)
+         tstep = trank-time1
+       endif
        if (nrank == 0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime==ilast)) then
-          call cpu_time(trank)
-          tstep = trank-time1
           if (nrank==0) write(*,*) 'Time for this time step (s):',tstep
           if (nrank==0.and.log_cputime) call output_cputime(real(trank-time1))
 
@@ -204,10 +206,15 @@ contains
           write(*,*) '                                                           '
        endif
       else if (iwhen ==5 .and. itime>=initstat) then
-         if (nrank == 0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime==ilast)) then
-            call cpu_time(trank)
-            tstats = (trank - time1 - tstep)/real(istatcalc)
-            write(*,*) 'Post-processing time for time step (s):',tstats
+         if (nrank == 0) then
+            if  (mod(itime,istatcalc) == 0) then
+               call cpu_time(trank)
+               tstats = (trank - time1 - tstep)/real(istatcalc)
+            endif
+            if ((mod(itime, ilist) == 0 .or. itime == ifirst .or. itime==ilast)) then
+
+               write(*,*) 'Post-processing time for time step (s):',tstats
+            endif
          endif
     endif
 
