@@ -27,7 +27,8 @@ subroutine parameter(input_i3d)
   use var, only : dphi1
 
   use lockexch, only : pfront
-  use stats, only : h_quads, spectra_level, autocorr_max_sep,autocorr_xlocs
+  use stats, only : h_quads, spectra_level, autocorr_max_sep,autocorr_xlocs,&
+                    spectra_corr_nlocs,spectra_corr_ylocs
   use probes, only : nprobes, setup_probes, flag_all_digits, flag_extra_probes, xyzprobes
   use visu, only : output2D
   use forces, only : iforces, nvol, xld, xrd, yld, yud!, zld, zrd
@@ -55,7 +56,7 @@ subroutine parameter(input_i3d)
   NAMELIST /Statistics/ wrotation,spinup_time, nstat, initstat, &
             istatcalc, istatbudget,istatpstrain,istatlambda2, initstat2,&
             istatquadrant, nquads, istatflatness, istatspectra,spectra_level,&
-            istatautocorr, autocorr_max_sep,autocorr_xlocs
+            istatautocorr, autocorr_max_sep,autocorr_xlocs, spectra_corr_nlocs
   NAMELIST /ProbesParam/ flag_all_digits, flag_extra_probes, xyzprobes
   NAMELIST /ScalarParam/ sc, ri, uset, cp, &
        nclxS1, nclxSn, nclyS1, nclySn, nclzS1, nclzSn, &
@@ -85,6 +86,7 @@ subroutine parameter(input_i3d)
   NAMELIST/linear_prof/Re_ratio, t_start, t_end
   NAMELIST/spatial_equiv/U_ratio, accel_centre, alpha_accel
   NAMELIST/hquadrant/h_quads
+  NAMELIST/spectra_corr/spectra_corr_ylocs
 
 #ifdef DEBG
   if (nrank == 0) write(*,*) '# parameter start'
@@ -125,6 +127,14 @@ subroutine parameter(input_i3d)
    if (spectra_level.lt.1) then
       write(*,*) "spectra_level must be set"
       call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+   endif
+   if (spectra_level.eq.3) then
+      if (spectra_corr_nlocs<1) then
+         if (nrank ==0 )write(*,*) "spectra_level must be set"
+         call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+      endif
+      allocate(spectra_corr_ylocs(spectra_corr_nlocs))
+      read(10,nml=spectra_corr); rewind(10)
    endif
   endif
 
@@ -683,7 +693,8 @@ subroutine parameter_defaults()
   use probes, only : nprobes, flag_all_digits, flag_extra_probes
   use visu, only : output2D
   use forces, only : iforces, nvol
-  use stats, only : spectra_level, autocorr_max_sep, autocorr_xlocs
+  use stats, only : spectra_level, autocorr_max_sep
+  use stats, only : autocorr_xlocs,spectra_corr_nlocs
 
   implicit none
 
@@ -843,4 +854,5 @@ subroutine parameter_defaults()
   spectra_level=-1
   autocorr_max_sep = -1
   autocorr_xlocs = -1
+  spectra_corr_nlocs = -1
 end subroutine parameter_defaults

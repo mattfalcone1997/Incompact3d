@@ -60,10 +60,13 @@ module stats
   real(mytype) :: autocorr_xlocs
   real(mytype) :: autocorr_max_sep
   integer, dimension(:), allocatable :: autocorr_x_indices
+  integer :: spectra_corr_nlocs, spectra_corr_thisrank, spectra_corr_comm
+  real(mytype), dimension(:), allocatable :: spectra_corr_ylocs
+  integer, dimension(:), allocatable :: spectra_corr_yinds, spectra_corr_ranks
 
   private
   public :: overall_statistic, h_quads, spectra_level, lambda2,&
-            autocorr_max_sep, autocorr_xlocs
+            autocorr_max_sep, autocorr_xlocs, spectra_corr_nlocs, spectra_corr_ylocs
 
 contains
 
@@ -229,11 +232,18 @@ contains
     use decomp_2d
     use dbg_schemes, only : abs_prec
     use MPI
-    use variables, only: nx, nz, ny
+    use variables, only: nx, nz, ny, yp
     real(mytype), dimension(:,:,:), allocatable :: spectra_z_in
     complex(mytype), dimension(:,:,:), allocatable :: spectra_x_out, spectra_z_out, spectra_x_in
     real(mytype) :: x
-    integer :: code, i, j
+    integer :: code, i, j, check, fl
+
+    integer :: color, key
+    integer, dimension(2) :: dims, coords
+    logical, dimension(2) :: periods 
+    integer, allocatable, dimension(:) :: code_list
+    character(len=80) :: xfmt
+
 #ifdef HAVE_FFTW
     integer :: plan_type = FFTW_MEASURE
 
@@ -246,6 +256,88 @@ contains
       nspectra = 4
     else if (spectra_level == 2) then
       nspectra = 8
+    else if (spectra_level == 3) then
+      nspectra = 8 + spectra_corr_nlocs*3
+      allocate(spectra_corr_yinds(spectra_corr_nlocs))
+      allocate(spectra_corr_ranks(spectra_corr_nlocs))
+      
+      ! create communicators
+
+
+      if (nclx) then
+        call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, code)
+        key = coords(2)
+        color = coords(1)
+
+        call MPI_Comm_split(DECOMP_2D_COMM_CART_X, key,color, spectra_corr_comm,code)
+        allocate(code_list(dims(1)))
+
+      else
+        call MPI_CART_GET(DECOMP_2D_COMM_CART_Z, 2, dims, periods, coords, code)
+        key = coords(1)
+        color = coords(2)
+
+        call MPI_Comm_split(DECOMP_2D_COMM_CART_Z, key,color, spectra_corr_comm,code)
+        allocate(code_list(dims(2)))
+
+      endif
+
+      do i = 1, spectra_corr_nlocs
+        if (spectra_corr_ylocs(i)>yp(ny).or.spectra_corr_ylocs(i)<yp(1)) then
+          if (nrank==0) write(*,*) "Invalid y location for spectra"
+          call MPI_Abort(MPI_COMM_WORLD,1,code)
+        endif
+        do j = 1, ny
+          if (spectra_corr_ylocs(i)<yp(j)) then
+            if (abs_prec(spectra_corr_ylocs(i)-yp(j))>abs_prec(spectra_corr_ylocs(i)-yp(j-1))) then
+              spectra_corr_yinds(i) = j-1
+            else
+              spectra_corr_yinds(i) = j
+            endif
+            exit
+          endif
+        enddo
+        ! send rank for data later
+
+        if (nclx) then
+          if (spectra_corr_yinds(i)>=xstart(2).and.spectra_corr_yinds(i)<=xend(2)) then
+            check = 1
+          else
+            check = 0
+          endif
+        else
+          if (spectra_corr_yinds(i)>=zstart(2).and.spectra_corr_yinds(i)<=zend(2)) then
+            check = 1
+          else
+            check = 0
+          endif
+        endif
+
+        call MPI_Allgather(check,1,MPI_INTEGER,code_list,1,MPI_INTEGER,spectra_corr_comm,code)
+
+        do j =0, size(code_list) -1
+          if (code_list(j+1)==1) spectra_corr_ranks(i) = j
+        enddo
+      enddo
+
+      spectra_corr_thisrank = color
+      deallocate(code_list)
+
+      if (nrank ==0) then
+        open(newunit=fl,file='parameters.json',status='old',action='readwrite',position='append')
+        backspace(fl)
+        write(fl,"(A ,' : {')") '  "spectra_corr"'
+        if (spectra_corr_nlocs>1) then
+          write(xfmt,'(A,I0,A)') "( A, ': [',g0,",spectra_corr_nlocs-1,"(',',g0),']')"
+        else
+          write(xfmt,'(A,I0,A)') "( A, ': [',g0,']')"
+        endif
+        write(fl,xfmt) '    "y_locs"',spectra_corr_ylocs
+        if (istatautocorr) write(fl,'(A)') "  },"
+        if (.not.istatautocorr) write(fl,'(A)') "  }"
+          write(fl,'(A)') "}"
+        close(fl)
+      endif
     else
       write(*,*) "Invalid spectra level"
     call MPI_Abort(MPI_COMM_WORLD,1,code)
@@ -515,8 +607,8 @@ contains
     complex(mytype), dimension(:,:,:,:) :: array
     character(len=*) :: file_base
     integer,intent(in) :: ipencil
-    character(len=80) :: fn
-    
+    character(len=80) :: fn, suffix
+    integer :: i
     if (nrank==0) then
       print *,'==========================================================='
       if (flag_read) then
@@ -571,6 +663,33 @@ contains
         fn = gen_statname('statistics/'//trim(file_base)//'_pdwdz')
         call decomp_2d_write_one(ipencil,array(:,:,:,8),fn,opt_decomp=dft_info)
 
+      endif 
+    endif
+    if (spectra_level.ge.3) then
+      if (flag_read) then
+        do i = 1, spectra_corr_nlocs
+          write(suffix,'("_corr",I0)') i
+          fn = gen_statname('statistics/'//trim(file_base)//'_'//'uu'//trim(suffix))
+          call decomp_2d_read_one(ipencil,array(:,:,:,8+3*(i-1)+1),fn,opt_decomp=dft_info)
+
+          fn = gen_statname('statistics/'//trim(file_base)//'_'//'vv'//trim(suffix))
+          call decomp_2d_read_one(ipencil,array(:,:,:,8+3*(i-1)+2),fn,opt_decomp=dft_info)          
+          
+          fn = gen_statname('statistics/'//trim(file_base)//'_'//'ww'//trim(suffix))
+          call decomp_2d_read_one(ipencil,array(:,:,:,8+3*(i-1)+3),fn,opt_decomp=dft_info)
+        enddo
+      else
+        do i = 1, spectra_corr_nlocs
+          write(suffix,'("_corr",I0)') i
+          fn = gen_statname('statistics/'//trim(file_base)//'_'//'uu'//trim(suffix))
+          call decomp_2d_write_one(ipencil,array(:,:,:,8+3*(i-1)+1),fn,opt_decomp=dft_info)
+
+          fn = gen_statname('statistics/'//trim(file_base)//'_'//'vv'//trim(suffix))
+          call decomp_2d_write_one(ipencil,array(:,:,:,8+3*(i-1)+2),fn,opt_decomp=dft_info)          
+          
+          fn = gen_statname('statistics/'//trim(file_base)//'_'//'ww'//trim(suffix))
+          call decomp_2d_write_one(ipencil,array(:,:,:,8+3*(i-1)+3),fn,opt_decomp=dft_info)
+        enddo
       endif 
     endif
 
@@ -1337,14 +1456,14 @@ contains
       do j = 1, dft_info%xsz(2)
         do i = 1, dft_info%xsz(1)
           
-          spec_2d(i,j,k) = spec1(i,j,k)*conjg(spec2(i,j,k))/norm
+          spec_2d(i,j,k) = conjg(spec1(i,j,k))*spec2(i,j,k)/norm
 
         enddo
       enddo
     enddo
 
   end subroutine
-  subroutine spectra_z_calc(spec_zm,val1_spec,val2_spec)
+  subroutine spectra_z_calc(spec_zm,spec1,spec2)
     use variables, only: nx,nz
     use param
     use decomp_2d
@@ -1352,7 +1471,7 @@ contains
     use param, only: zero
 
     complex(mytype), dimension(dft_info%zsz(1),dft_info%zsz(2),dft_info%zsz(3)) :: spec_zm
-    complex(mytype), dimension(dft_info%zsz(1),dft_info%zsz(2),dft_info%zsz(3)), intent(in) :: val1_spec, val2_spec
+    complex(mytype), dimension(dft_info%zsz(1),dft_info%zsz(2),dft_info%zsz(3)), intent(in) :: spec1, spec2
 
     ! local args
     real(mytype) :: norm
@@ -1364,13 +1483,109 @@ contains
       do j = 1,zsize(2)
         do i = 1, zsize(1)
       
-          spec_zm(i,j,k) = val1_spec(i,j,k)*conjg(val2_spec(i,j,k))/norm
+          spec_zm(i,j,k) = conjg(spec1(i,j,k))*spec2(i,j,k)/norm
         enddo
       enddo
     enddo
     
   end subroutine
 
+  subroutine spectra_corr_2d_calc(spec_2d,spec1, spec2,index)
+    use variables, only: nx,nz, yp
+    use param
+    use decomp_2d
+    use MPI
+    use param, only: zero
+
+    complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3)), intent(in) :: spec1
+    complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3)), intent(in) :: spec2
+    complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3)), intent(out) :: spec_2d
+    integer, intent(in) :: index
+    ! local args
+    integer :: i,j,k
+    real(mytype) :: norm
+    integer :: local_index, spec_size, code
+    complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(3)) :: spec_plane
+
+    ! calculate spectra of local rank
+    norm = real(nz*nz*nx*nx,kind=mytype)
+    spec_size = dft_info%xsz(1)*dft_info%xsz(3)
+
+    ! broadcast data
+    if (spectra_corr_ranks(index)==spectra_corr_thisrank) then
+      local_index = spectra_corr_yinds(index) - xstart(2) + 1
+
+      do k = 1, dft_info%xsz(3)
+        do i = 1, dft_info%xsz(1)
+          spec_plane(i,k) = spec1(i,local_index,k)
+        enddo
+      enddo
+    endif
+
+    call MPI_Bcast(spec_plane,spec_size,complex_type,&
+                  spectra_corr_ranks(index),spectra_corr_comm,&
+                  code)
+
+    spec_2d(:,:,:) = zero
+    do k = 1, dft_info%xsz(3)
+      do j = 1, dft_info%xsz(2)
+        do i = 1, dft_info%xsz(1)
+          
+          spec_2d(i,j,k) = conjg(spec_plane(i,k))*spec2(i,j,k)/norm
+
+        enddo
+      enddo
+    enddo
+  end subroutine
+
+  subroutine spectra_corr_z_calc(spec_zm,spec1,spec2, index)
+    use variables, only: nx,nz
+    use param
+    use decomp_2d
+    use MPI
+    use param, only: zero
+
+    complex(mytype), dimension(dft_info%zsz(1),dft_info%zsz(2),dft_info%zsz(3)) :: spec_zm
+    complex(mytype), dimension(dft_info%zsz(1),dft_info%zsz(2),dft_info%zsz(3)), intent(in) :: spec1, spec2
+    integer :: index
+
+    ! local args
+    complex(mytype), dimension(dft_info%zsz(1),dft_info%zsz(3)) :: spec_plane
+    real(mytype) :: norm
+    integer :: i, j, k
+    integer :: local_index, spec_size, code
+
+    ! calculate spectra of local rank
+    norm = real(nz*nz,kind=mytype)
+
+
+    ! calculate spectra of local rank
+    spec_size = dft_info%xsz(1)*dft_info%xsz(3)
+
+    ! broadcast data
+    if (spectra_corr_ranks(index)==spectra_corr_thisrank) then
+      local_index = spectra_corr_yinds(index) - zstart(2) + 1
+
+      do k = 1, dft_info%zsz(3)
+        do i = 1, dft_info%zsz(1)
+          spec_plane(i,k) = spec1(i,local_index,k)
+        enddo
+      enddo
+    endif
+
+    call MPI_Bcast(spec_plane,spec_size,complex_type,&
+                  spectra_corr_ranks(index),spectra_corr_comm,&
+                  code)
+
+    do k = 1, zdft_size
+      do j = 1,zsize(2)
+        do i = 1, zsize(1)
+      
+          spec_zm(i,j,k) = conjg(spec_plane(i,k))*spec2(i,j,k)/norm
+        enddo
+      enddo
+    enddo
+  end subroutine
   subroutine update_spectra_avg_xz(spec_2d_m, ux3, uy3, uz3, p3,dvdy3, dudz3, dwdx3)
     use MPI
     use decomp_2d
@@ -1439,11 +1654,19 @@ contains
         enddo
       enddo
 
-      call spectra_2d_calc(spec_2d_ml(:,:,:,5),v_spec,omega_spec)
+      call spectra_2d_calc(spec_2d_ml(:,:,:,5),omega_spec,v_spec)
       call spectra_2d_calc(spec_2d_ml(:,:,:,6),p_spec,u_spec1)
       call spectra_2d_calc(spec_2d_ml(:,:,:,7),p_spec,dvdy_spec)
       call spectra_2d_calc(spec_2d_ml(:,:,:,8),p_spec,w_spec1)
 
+    endif
+
+    if (spectra_level.ge.3) then
+      do i = 1, spectra_corr_nlocs
+        call spectra_corr_2d_calc(spec_2d_ml(:,:,:,8+3*(i-1)+1),u_spec,u_spec,i)
+        call spectra_corr_2d_calc(spec_2d_ml(:,:,:,8+3*(i-1)+2),v_spec,v_spec,i)
+        call spectra_corr_2d_calc(spec_2d_ml(:,:,:,8+3*(i-1)+3),w_spec,w_spec,i)
+      enddo
     endif
     if (itempaccel==1) then
       spec_2d_m = spec_2d_ml
@@ -1568,6 +1791,15 @@ contains
       call spectra_z_calc(spec_z_ml(:,:,:,8),p_spec,w_spec1)
 
     endif
+
+    if (spectra_level.ge.3) then
+      do i = 1, spectra_corr_nlocs
+        call spectra_corr_z_calc(spec_z_ml(:,:,:,8+3*(i-1)+1),u_spec,u_spec,i)
+        call spectra_corr_z_calc(spec_z_ml(:,:,:,8+3*(i-1)+2),v_spec,v_spec,i)
+        call spectra_corr_z_calc(spec_z_ml(:,:,:,8+3*(i-1)+3),w_spec,w_spec,i)
+      enddo
+    endif
+
     if (itempaccel==1) then
       spec_zm = spec_z_ml
 
