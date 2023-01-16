@@ -78,9 +78,9 @@ else (Fortran_COMPILER_NAME MATCHES "GNU")
   set (CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g")
 endif (Fortran_COMPILER_NAME MATCHES "GNU")
 
-if (CMAKE_BUILD_TYPE MATCHES "DEBUG")
-  add_definitions("-DDEBG")
-endif (CMAKE_BUILD_TYPE MATCHES "DEBUG")
+# if (CMAKE_BUILD_TYPE MATCHES "DEBUG")
+#   add_definitions("-DDEBG")
+# endif (CMAKE_BUILD_TYPE MATCHES "DEBUG")
 
 
 find_package(MPI REQUIRED)

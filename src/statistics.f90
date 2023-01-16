@@ -482,11 +482,12 @@ contains
 
     use param, only : iscalar, itime, istatbudget, istatpstrain, nclx, itempaccel
     use param, only : initstat2, istatlambda2, istatquadrant, istatflatness, istatspectra
+    use param, only : zpfive, zptwofive, two
     use variables, only : numscalar
-    use decomp_2d, only : nrank
+    use decomp_2d, only : nrank, zsize, zstart,zend
     use decomp_2d_io, only : decomp_2d_write_mode, decomp_2d_read_mode, &
          decomp_2d_open_io, decomp_2d_close_io, decomp_2d_start_io, decomp_2d_end_io
-
+    use var ,only: nz, nx
     implicit none
 
     ! Argument
@@ -496,8 +497,8 @@ contains
     integer :: is, it
     character(len=30) :: filename
     integer :: io_mode
-    integer :: ierror
-    
+    integer :: i, j
+    real(mytype) :: factor
 
     ! File ID to read or write
     if (flag_read) then
@@ -550,7 +551,7 @@ contains
       call read_or_write_one_stat(flag_read, gen_statname("uv_quadrant_mean"), uv_quadrant_mean, uv_quadrant_info)
     endif
 
-    if (istatlambda2) then
+    if (istatlambda2.and. (itime>=initstat2.or.itempaccel==1)) then
       call read_or_write_one_stat(flag_read, gen_statname("lambda2mean"), lambda2mean,dstat_plane)
       call read_or_write_one_stat(flag_read, gen_statname("lambda22mean"), lambda22mean,dstat_plane)
     endif
@@ -560,6 +561,39 @@ contains
     call decomp_2d_close_io(io_statistics, stat_dir)
 #endif
     
+  if (flag_read) then
+
+    if (check_stat_correct(gen_statname("pdudx_mean"))) then
+      if (nrank ==0 ) write(*,*) "Correcting gradient means on read!!!!"
+      factor = zpfive*real(nz,kind=mytype)/(real(nz)-two)
+      do j = 1, zsize(2)
+        do i = 1, zsize(1)
+          pdudx_mean(i,j,3) = pdudx_mean(i,j,3)*factor
+
+          dudx_mean(i,j,3) = dudx_mean(i,j,3)*factor
+          dudx_mean(i,j,6) = dudx_mean(i,j,6)*factor
+          dudx_mean(i,j,9) = dudx_mean(i,j,9)*factor
+
+          if (zstart(1)==1.and.i==1) cycle
+          if (zend(1)==nx.and.i==zsize(1)) cycle
+
+          pdudx_mean(i,j,1) = pdudx_mean(i,j,1)*zpfive
+
+          dudx_mean(i,j,1) = dudx_mean(i,j,1)*zpfive
+          dudx_mean(i,j,4) = dudx_mean(i,j,4)*zpfive
+          dudx_mean(i,j,7) = dudx_mean(i,j,7)*zpfive
+
+          dudxdudx_mean(i,j,1) = dudxdudx_mean(i,j,1)*zptwofive
+          dudxdudx_mean(i,j,2) = dudxdudx_mean(i,j,2)*zptwofive
+          dudxdudx_mean(i,j,3) = dudxdudx_mean(i,j,3)*zptwofive
+          dudxdudx_mean(i,j,4) = dudxdudx_mean(i,j,4)*zptwofive
+          dudxdudx_mean(i,j,5) = dudxdudx_mean(i,j,5)*zptwofive
+          dudxdudx_mean(i,j,6) = dudxdudx_mean(i,j,6)*zptwofive
+                    
+        enddo
+      enddo
+    endif
+  endif
     if (nrank==0) then
       if (flag_read) then
         print *,'Read stat done!'
@@ -571,6 +605,34 @@ contains
 
   end subroutine read_or_write_all_stats
 
+  function check_stat_correct(fname) result(update)
+    use decomp_2d
+    use MPI
+
+    character(len=*), intent(in) :: fname
+    integer :: values(13), check
+    integer :: date(9), ref_date(6)
+    integer :: code, i
+    logical :: update
+
+    call stat('statistics/'//trim(fname),values,check)
+    if (check /=0 .and. nrank==0) then
+      write(*,*) "There has been a problem"
+      call MPI_Abort(MPI_COMM_WORLD,1,code)
+    endif
+
+    update = .false.
+
+    ref_date = [0,0,15,13,0,123]
+    call ltime(values(10),date)
+    do i = 6, 1,-1
+      if (ref_date(i)>date(i)) then
+        update = .true.
+        return
+      endif
+    enddo
+
+  end function
   !
   ! Statistics: perform one IO
   !
@@ -972,7 +1034,7 @@ contains
       call update_autocorr_x(autocorr_mean,ux3)
     endif
 
-    if (istatlambda2) then
+    if (istatlambda2.and. (itime>=initstat2.or.itempaccel==1)) then
       call update_lambda2_avg(lambda2mean,lambda22mean,&
                                 dudx,dudy,ta3,dvdx,dvdy,&
                                 tb3,dwdx,dwdy,tc3,td3)
@@ -1410,8 +1472,8 @@ contains
       enddo
     enddo
 
-    call update_average_scalar(lambda2m, lambda2, ep)
-    call update_average_scalar(lambda22m, lambda2*lambda2, ep)
+    call update_average_scalar(lambda2m, lambda2, ep,istat2=.true.)
+    call update_average_scalar(lambda22m, lambda2*lambda2, ep,istat2=.true.)
   end subroutine
 
   subroutine fft_2d_calc(fft_2d,val)
@@ -1703,9 +1765,13 @@ contains
     enddo
 
     if (spectra_level.ge.2) then
-      uvw_l(j,4) = uvw_l(j,4) + uvwp_mean(i,j,4)
-      uvw_l(j,5) = uvw_l(j,5) + dudx_mean(i,j,5)
-      uvw_l(j,6) = uvw_l(j,6) + dudx_mean(i,j,3) - dudx_mean(i,j,7)
+      do j =1, zsize(2)
+        do i =1,zsize(1)
+          uvw_l(j,4) = uvw_l(j,4) + uvwp_mean(i,j,4)
+          uvw_l(j,5) = uvw_l(j,5) + dudx_mean(i,j,5)
+          uvw_l(j,6) = uvw_l(j,6) + dudx_mean(i,j,3) - dudx_mean(i,j,7)
+        enddo
+      enddo
     endif
     uvw_l(:,:) = uvw_l(:,:)/real(nx,kind=mytype)
 
@@ -1780,11 +1846,12 @@ contains
       enddo
       
       w_spec1 = cmplx(-aimag(w_spec),real(w_spec))
+#ifdef HAVE_FFTW
       call dfftw_execute_dft_r2c(plan_z,te3,p_spec)
       call dfftw_execute_dft_r2c(plan_z,tf3,omega_spec)
       call dfftw_execute_dft_r2c(plan_z,tg3,dudx_spec)
       call dfftw_execute_dft_r2c(plan_z,th3,dvdy_spec)
-
+#endif
       call spectra_z_calc(spec_z_ml(:,:,:,5),v_spec,omega_spec)
       call spectra_z_calc(spec_z_ml(:,:,:,6),p_spec,dudx_spec)
       call spectra_z_calc(spec_z_ml(:,:,:,7),p_spec,dvdy_spec)
@@ -1903,11 +1970,11 @@ contains
       coefy(i,3) = ddy1 / (ddy2 * (ddy1 + ddy2))
     enddo
 
-    coefx_b = - one / dx
-    coefx_f = one /dx
+    coefx_b = - zpfive / dx
+    coefx_f = zpfive /dx
 
-    coefz_b = - one/dz
-    coefz_f = one/dz
+    coefz_b = - zpfive/dz
+    coefz_f = zpfive/dz
 
     ddy1 = yp(2) - yp(1)
     ddy2 = yp(3) - yp(2)
