@@ -345,9 +345,10 @@ contains
 
     if (nclx) then
       allocate(spectra_2d_mean(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3),nspectra))
-
+      spectra_2d_mean = zero
     else
       allocate(spectra_z_z_mean(dft_info%zsz(1),dft_info%zsz(2),dft_info%zsz(3),nspectra))
+      spectra_z_z_mean = zero
     endif
 
     allocate(spectra_x_out(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3)))
@@ -396,6 +397,7 @@ contains
     xlocs = int(two*autocorr_max_sep/real(dx)) + 1
 
     allocate(autocorr_mean(xlocs,xsize(2),nlocs))
+    autocorr_mean = zero
     allocate(autocorr_x_indices(nlocs))
     do i = 1, nlocs
       autocorr_x_indices(i) = int(autocorr_max_sep/dx) + int((i-1)*autocorr_xlocs/dx,kind=mytype)
@@ -621,13 +623,16 @@ contains
       call MPI_Abort(MPI_COMM_WORLD,1,code)
     endif
 
-    update = .false.
-
     ref_date = [0,0,15,13,0,123]
     call ltime(values(10),date)
+
     do i = 6, 1,-1
       if (ref_date(i)>date(i)) then
         update = .true.
+        return
+      endif
+      if (ref_date(i)<date(i)) then
+        update = .false.
         return
       endif
     enddo
@@ -1508,7 +1513,7 @@ contains
     complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3)), intent(in) :: spec1
     complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3)), intent(in) :: spec2
     complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(2),dft_info%xsz(3)), intent(out) :: spec_2d
-
+    real(mytype) :: ar, ai, br, bi
     integer :: i,j,k
     real(mytype) :: norm
 
@@ -1518,7 +1523,12 @@ contains
       do j = 1, dft_info%xsz(2)
         do i = 1, dft_info%xsz(1)
           
-          spec_2d(i,j,k) = conjg(spec1(i,j,k))*spec2(i,j,k)/norm
+          ar = spec1(i,j,k)%re
+          ai = spec1(i,j,k)%im
+          br = spec2(i,j,k)%re
+          bi = spec2(i,j,k)%im
+          spec_2d(i,j,k) = cmplx(ar*br + ai*bi,-ai*br + bi*ar)/norm
+          ! spec_2d(i,j,k) = conjg(spec1(i,j,k))*spec2(i,j,k)/norm
 
         enddo
       enddo
@@ -1538,14 +1548,20 @@ contains
     ! local args
     real(mytype) :: norm
     integer :: i, j, k
+    real(mytype) :: ar, ai, br, bi
+
     ! calculate spectra of local rank
     norm = real(nz*nz,kind=mytype)
 
     do k = 1, zdft_size
       do j = 1,zsize(2)
         do i = 1, zsize(1)
-      
-          spec_zm(i,j,k) = conjg(spec1(i,j,k))*spec2(i,j,k)/norm
+          ar = spec1(i,j,k)%re
+          ai = spec1(i,j,k)%im
+          br = spec2(i,j,k)%re
+          bi = spec2(i,j,k)%im
+          spec_zm(i,j,k) = cmplx(ar*br + ai*bi,-ai*br + bi*ar)/norm
+          ! spec_zm(i,j,k) = conjg(spec1(i,j,k))*spec2(i,j,k)/norm
         enddo
       enddo
     enddo
@@ -1568,7 +1584,7 @@ contains
     real(mytype) :: norm
     integer :: local_index, spec_size, code
     complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(3)) :: spec_plane
-
+    real(mytype) :: ar, br, ai, bi
     ! calculate spectra of local rank
     norm = real(nz*nz*nx*nx,kind=mytype)
     spec_size = dft_info%xsz(1)*dft_info%xsz(3)
@@ -1592,8 +1608,13 @@ contains
     do k = 1, dft_info%xsz(3)
       do j = 1, dft_info%xsz(2)
         do i = 1, dft_info%xsz(1)
-          
-          spec_2d(i,j,k) = conjg(spec_plane(i,k))*spec2(i,j,k)/norm
+          ar = spec_plane(i,k)%re
+          ai = spec_plane(i,k)%im
+          br = spec2(i,j,k)%re
+          bi = spec2(i,j,k)%im
+          spec_2d(i,j,k) = cmplx(ar*br + ai*bi,-ai*br + bi*ar)/norm
+
+          ! spec_2d(i,j,k) = conjg(spec_plane(i,k))*spec2(i,j,k)/norm
 
         enddo
       enddo
@@ -1616,6 +1637,8 @@ contains
     real(mytype) :: norm
     integer :: i, j, k
     integer :: local_index, spec_size, code
+    real(mytype) :: ar, ai, br, bi
+
 
     ! calculate spectra of local rank
     norm = real(nz*nz,kind=mytype)
@@ -1642,8 +1665,13 @@ contains
     do k = 1, zdft_size
       do j = 1,zsize(2)
         do i = 1, zsize(1)
-      
-          spec_zm(i,j,k) = conjg(spec_plane(i,k))*spec2(i,j,k)/norm
+          ar = spec_plane(i,k)%re
+          ai = spec_plane(i,k)%im
+          br = spec2(i,j,k)%re
+          bi = spec2(i,j,k)%im
+          spec_zm(i,j,k) = cmplx(ar*br + ai*bi,-ai*br + bi*ar)/norm
+
+          ! spec_zm(i,j,k) = conjg(spec_plane(i,k))*spec2(i,j,k)/norm
         enddo
       enddo
     enddo
