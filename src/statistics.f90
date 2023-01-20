@@ -373,12 +373,12 @@ contains
     call dfftw_plan_many_dft(plan_x, 1, xsize(1), &
         dft_info%xsz(2)*dft_info%xsz(3), spectra_x_in, xsize(1), 1, &
         xsize(1), spectra_x_out, dft_info%xsz(1), 1, dft_info%xsz(1), &
-        plan_type)
+        FFTW_FORWARD, plan_type)
 #else
     call sfftw_plan_many_dft(plan_x, 1, xsize(1), &
         dft_info%xsz(2)*dft_info%xsz(3), spectra_x_in, xsize(1), 1, &
         xsize(1), spectra_x_out, dft_info%xsz(1), 1, dft_info%xsz(1), &
-        plan_type)
+        FFTW_FORWARD, plan_type)
 #endif
     deallocate(spectra_x_in,spectra_x_out)
     deallocate(spectra_z_in,spectra_z_out)
