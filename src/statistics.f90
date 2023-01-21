@@ -1517,7 +1517,7 @@ contains
     integer :: i,j,k
     real(mytype) :: norm
 
-    norm = real(nz*nz*nx*nx,kind=mytype)
+    norm = real(nz,kind=mytype)*real(nz,kind=mytype)*real(nx,kind=mytype)*real(nx,kind=mytype)
     spec_2d(:,:,:) = zero
     do k = 1, dft_info%xsz(3)
       do j = 1, dft_info%xsz(2)
@@ -1551,7 +1551,7 @@ contains
     real(mytype) :: ar, ai, br, bi
 
     ! calculate spectra of local rank
-    norm = real(nz*nz,kind=mytype)
+    norm = real(nz,kind=mytype)*real(nz,kind=mytype)
 
     do k = 1, zdft_size
       do j = 1,zsize(2)
@@ -1586,7 +1586,7 @@ contains
     complex(mytype), dimension(dft_info%xsz(1),dft_info%xsz(3)) :: spec_plane
     real(mytype) :: ar, br, ai, bi
     ! calculate spectra of local rank
-    norm = real(nz*nz*nx*nx,kind=mytype)
+    norm = real(nz,kind=mytype)*real(nz,kind=mytype)*real(nx,kind=mytype)*real(nx,kind=mytype)
     spec_size = dft_info%xsz(1)*dft_info%xsz(3)
 
     ! broadcast data
@@ -1641,7 +1641,7 @@ contains
 
 
     ! calculate spectra of local rank
-    norm = real(nz*nz,kind=mytype)
+    norm = real(nz,kind=mytype)*real(nz,kind=mytype)
 
 
     ! calculate spectra of local rank
