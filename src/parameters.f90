@@ -82,7 +82,7 @@ subroutine parameter(input_i3d)
   NAMELIST/fileAccel/accel_file
   NAMELIST/bodyForce/ibodyforces,ibftype
   NAMELIST/linearBodyF/linear_amp,linear_ext
-  NAMELIST/tempAccel/itempaccel, iacceltype, istatout,ispectout
+  NAMELIST/tempAccel/itempaccel, iacceltype, istatout,ispectout,ispectstart
   NAMELIST/linear_prof/Re_ratio, t_start, t_end
   NAMELIST/spatial_equiv/U_ratio, accel_centre, alpha_accel
   NAMELIST/hquadrant/h_quads
@@ -292,6 +292,18 @@ subroutine parameter(input_i3d)
                      "ispectout must be specified and valid"
          call MPI_Abort(MPI_COMM_WORLD,1,ierr)
       endif
+
+      if (mod(ispectout,istatout)/= 0.and.istatspectra) then
+         write(*,*) "ispectout must be multiple of istatout"
+            call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+      endif
+
+      if (ispectstart<1.and.istatspectra) then
+         write(*,*) "If temporal acceleration is used "//&
+                     "ispectstart must be specified and valid"
+         call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+      endif
+      
    endif
   endif
 
@@ -855,4 +867,5 @@ subroutine parameter_defaults()
   autocorr_max_sep = -1
   autocorr_xlocs = -1
   spectra_corr_nlocs = -1
+  ispectstart = -1
 end subroutine parameter_defaults

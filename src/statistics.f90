@@ -430,7 +430,7 @@ contains
     use var, only : tmean, nclx
 
     implicit none
-
+    logical :: read_spectra, read_autocorrelation
     ! No reading for statistics when nstat > 1 or no restart
     call init_statistic()
 
@@ -444,11 +444,14 @@ contains
 
     ! Temporary array
     tmean = zero
+    read_spectra = istatspectra .and. (itime>=initstat2.or.itempaccel==1)
+    read_autocorrelation = istatautocorr .and. (itime>=initstat2.or.itempaccel==1)
 
+    call put_write_read_start(.true.,.true.,read_spectra,read_autocorrelation)
     ! Read all statistics
     call read_or_write_all_stats(.true.)
 
-    if (istatspectra .and. (itime>=initstat2.or.itempaccel==1)) then
+    if (read_spectra) then
       if(nclx) then
         call read_write_spectra(.true.,spectra_2d_mean,'spectra_2d',1)
       else
@@ -456,9 +459,11 @@ contains
       endif
     endif
 
-    if (istatautocorr .and. (itime>=initstat2.or.itempaccel==1)) then
+    if (read_autocorrelation) then
       call read_autocorr('statistics/'//gen_statname("autocorr_mean"))
     endif
+
+    call put_write_read_end(.true.)
 
   end subroutine restart_statistic
 
@@ -502,22 +507,7 @@ contains
     integer :: i, j
     real(mytype) :: factor
 
-    ! File ID to read or write
-    if (flag_read) then
-        it = itime - 1
-    else
-        it = itime
-     endif
-     stats_time = it
 
-    if (nrank==0) then
-      print *,'==========================================================='
-      if (flag_read) then
-        print *,'Reading stat file', stats_time
-      else
-        print *,'Writing stat file', stats_time
-      endif
-    endif
 
     if (flag_read) then
        io_mode = decomp_2d_read_mode
@@ -596,14 +586,6 @@ contains
       enddo
     endif
   endif
-    if (nrank==0) then
-      if (flag_read) then
-        print *,'Read stat done!'
-      else
-        print *,'Write stat done!'
-      endif
-      print *,'==========================================================='
-    endif
 
   end subroutine read_or_write_all_stats
 
@@ -676,14 +658,6 @@ contains
     integer,intent(in) :: ipencil
     character(len=80) :: fn, suffix
     integer :: i
-    if (nrank==0) then
-      print *,'==========================================================='
-      if (flag_read) then
-        print *,'Reading spectra files', stats_time
-      else
-        print *,'Writing spectra files', stats_time
-      endif
-    endif
 
     if (spectra_level.ge.1) then
       if (flag_read) then
@@ -759,15 +733,6 @@ contains
         enddo
       endif 
     endif
-
-    if (nrank==0) then
-      if (flag_read) then
-        print *,'Read spectra done!'
-      else
-        print *,'Write spectra done!'
-      endif
-      print *,'==========================================================='
-    endif
   end subroutine
 
   subroutine read_autocorr(filename)
@@ -782,11 +747,6 @@ contains
     integer :: nlocs, xlocs
     integer, dimension(2) :: dims, coords
     logical, dimension(2) :: periods 
-
-    if (nrank==0) then
-      print *,'==========================================================='
-      print *,'Reading autocorrelation files', stats_time
-    endif
 
     nlocs = (xlx - two*autocorr_max_sep) / autocorr_xlocs + 1
     xlocs = int(two*autocorr_max_sep/real(dx)) + 1
@@ -817,11 +777,6 @@ contains
 
     call MPI_Comm_free(split_comm_z,code)
 
-    if (nrank==0) then
-      print *,'Read autocorrelation done!'
-      print *,'==========================================================='
-    endif
-
   end subroutine read_autocorr
 
   subroutine write_autocorr(filename)
@@ -838,11 +793,6 @@ contains
     logical, dimension(2) :: periods 
     real(mytype), dimension(:), allocatable :: autocorr_g
     integer, dimension(:), allocatable :: recvcounts, displs
-
-    if (nrank==0) then
-      print *,'==========================================================='
-      print *,'writing autocorrelation files', stats_time
-    endif
 
     nlocs = (xlx - two*autocorr_max_sep) / autocorr_xlocs + 1
     xlocs = int(two*autocorr_max_sep/real(dx)) + 1
@@ -875,14 +825,53 @@ contains
     call MPI_TYPE_FREE(newtype,code)
     call MPI_Comm_free(split_comm_z,code)
   
-    if (nrank==0) then
-      print *,'write autocorrelation done!'
-      print *,'==========================================================='
-    endif
   end subroutine write_autocorr
   !
   ! Statistics : Intialize, update and perform IO
   !
+  subroutine put_write_read_start(flag_read,write,write_spectra,write_autocorrelation)
+    use decomp_2d
+    use var, only: itime
+    logical, intent(in) :: flag_read,write,write_spectra,write_autocorrelation
+
+    integer :: it
+    ! File ID to read or write
+    if (flag_read) then
+        it = itime - 1
+    else
+        it = itime
+    endif
+    stats_time = it
+
+    if (nrank==0) then
+      print *,'==========================================================='
+      if (flag_read) then
+        print *,'Reading stat files', stats_time
+      else
+        print *,'Writing stat files', stats_time
+      endif
+      if (write) print *, '    basic statistics'
+      if (write_autocorrelation) print *, '    autocorrelation'
+      if (write_spectra) print *, '    spectra'
+  
+    endif
+    
+  end subroutine
+
+  subroutine put_write_read_end(flag_read)
+    use decomp_2d
+    logical, intent(in) :: flag_read
+
+    if (nrank==0) then
+      if (flag_read) then
+        print *,'Read stat done!'
+      else
+        print *,'Write stat done!'
+      endif
+      print *,'==========================================================='
+    endif
+
+  end subroutine
   subroutine overall_statistic(ux1,uy1,uz1,phi1,pp3,ep1)
 
     use param
@@ -913,6 +902,7 @@ contains
 
     integer :: is
     character(len=30) :: filename
+    logical :: any, depend,spectra, write, write_spectra
 
     if (itime.lt.initstat) then
        return
@@ -925,135 +915,139 @@ contains
        else
           call restart_statistic()
        endif
-
     endif
     
-    if (mod(itime,istatcalc) /= 0) return
-    if (itempaccel == 1 .and. mod(itime,istatout)/=0) return 
+    call process_statistics(any, depend,spectra, write, write_spectra)
+    if (any) then
 
-    !! Mean pressure
-    !WORK Z-PENCILS
-    call interzpv(ppi3,pp3(:,:,:,1),dip3,sz,cifip6z,cisip6z,ciwip6z,cifz6,cisz6,ciwz6,&
-         (ph3%zen(1)-ph3%zst(1)+1),(ph3%zen(2)-ph3%zst(2)+1),nzmsize,zsize(3),1)
-    !WORK Y-PENCILS
-    call transpose_z_to_y(ppi3,pp2,ph3) !nxm nym nz
-    call interypv(ppi2,pp2,dip2,sy,cifip6y,cisip6y,ciwip6y,cify6,cisy6,ciwy6,&
-         (ph3%yen(1)-ph3%yst(1)+1),nymsize,ysize(2),ysize(3),1)
-    !WORK X-PENCILS
-    call transpose_y_to_x(ppi2,pp1,ph2) !nxm ny nz
-    call interxpv(td1,pp1,di1,sx,cifip6,cisip6,ciwip6,cifx6,cisx6,ciwx6,&
-         nxmsize,xsize(1),xsize(2),xsize(3),1)
-    ! Convert to physical pressure
-    call rescale_pressure(td1)
+      !! Mean pressure
+      !WORK Z-PENCILS
+      call interzpv(ppi3,pp3(:,:,:,1),dip3,sz,cifip6z,cisip6z,ciwip6z,cifz6,cisz6,ciwz6,&
+          (ph3%zen(1)-ph3%zst(1)+1),(ph3%zen(2)-ph3%zst(2)+1),nzmsize,zsize(3),1)
+      !WORK Y-PENCILS
+      call transpose_z_to_y(ppi3,pp2,ph3) !nxm nym nz
+      call interypv(ppi2,pp2,dip2,sy,cifip6y,cisip6y,ciwip6y,cify6,cisy6,ciwy6,&
+          (ph3%yen(1)-ph3%yst(1)+1),nymsize,ysize(2),ysize(3),1)
+      !WORK X-PENCILS
+      call transpose_y_to_x(ppi2,pp1,ph2) !nxm ny nz
+      call interxpv(td1,pp1,di1,sx,cifip6,cisip6,ciwip6,cifx6,cisx6,ciwx6,&
+          nxmsize,xsize(1),xsize(2),xsize(3),1)
+      ! Convert to physical pressure
+      call rescale_pressure(td1)
 
-    call transpose_x_to_y(ux1,ux2)
-    call transpose_x_to_y(uy1,uy2)
-    call transpose_x_to_y(uz1,uz2)
-    call transpose_x_to_y(td1,td2)
+      call transpose_x_to_y(ux1,ux2)
+      call transpose_x_to_y(uy1,uy2)
+      call transpose_x_to_y(uz1,uz2)
+      call transpose_x_to_y(td1,td2)
 
-    call transpose_y_to_z(ux2,ux3)
-    call transpose_y_to_z(uy2,uy3)
-    call transpose_y_to_z(uz2,uz3)
-    call transpose_y_to_z(td2,td3)
+      call transpose_y_to_z(ux2,ux3)
+      call transpose_y_to_z(uy2,uy3)
+      call transpose_y_to_z(uz2,uz3)
+      call transpose_y_to_z(td2,td3)
 
-    call update_average_scalar(uvwp_mean(:,:,4), td3, ep1)
+      call update_average_scalar(uvwp_mean(:,:,4), td3, ep1)
 
-    !! Mean velocity
-    call update_average_vector(uvwp_mean(:,:,1),uvwp_mean(:,:,2), uvwp_mean(:,:,3), &
-                               ux3, uy3, uz3, td3)
-
-    !! Second-order velocity moments
-    call update_variance_vector(uu_mean(:,:,1),uu_mean(:,:,2), uu_mean(:,:,3),&
-                                uu_mean(:,:,4), uu_mean(:,:,5), uu_mean(:,:,6), &
+      !! Mean velocity
+      call update_average_vector(uvwp_mean(:,:,1),uvwp_mean(:,:,2), uvwp_mean(:,:,3), &
                                 ux3, uy3, uz3, td3)
 
-    if (istatbudget) then
-      call grad_x(ux1, ta1)
-      call grad_x(uy1, tb1)
-      call grad_x(uz1, tc1)
-      
-      !y-derivatives
-      call grad_y(ux2,ta2)
-      call grad_y(uy2,tb2)
-      call grad_y(uz2,tc2)
+      !! Second-order velocity moments
+      call update_variance_vector(uu_mean(:,:,1),uu_mean(:,:,2), uu_mean(:,:,3),&
+                                  uu_mean(:,:,4), uu_mean(:,:,5), uu_mean(:,:,6), &
+                                  ux3, uy3, uz3, td3)
 
-      !!z-derivatives
+      if (istatbudget) then
+        call grad_x(ux1, ta1)
+        call grad_x(uy1, tb1)
+        call grad_x(uz1, tc1)
+        
+        !y-derivatives
+        call grad_y(ux2,ta2)
+        call grad_y(uy2,tb2)
+        call grad_y(uz2,tc2)
 
-      call grad_z(ux3,ta3)
-      call grad_z(uy3,tb3)
-      call grad_z(uz3,tc3)
+        !!z-derivatives
 
-      call transpose_y_to_z(ta2,dudy)
-      call transpose_y_to_z(tb2,dvdy)
-      call transpose_y_to_z(tc2,dwdy)
+        call grad_z(ux3,ta3)
+        call grad_z(uy3,tb3)
+        call grad_z(uz3,tc3)
 
-      call transpose_x_to_y(ta1,ta2)
-      call transpose_x_to_y(tb1,tb2)
-      call transpose_x_to_y(tc1,tc2)
+        call transpose_y_to_z(ta2,dudy)
+        call transpose_y_to_z(tb2,dvdy)
+        call transpose_y_to_z(tc2,dwdy)
 
-      call transpose_y_to_z(ta2,dudx)
-      call transpose_y_to_z(tb2,dvdx)
-      call transpose_y_to_z(tc2,dwdx)
+        call transpose_x_to_y(ta1,ta2)
+        call transpose_x_to_y(tb1,tb2)
+        call transpose_x_to_y(tc1,tc2)
 
-    call update_skewness_tensor(uuu_mean(:,:,1), uuu_mean(:,:,2), uuu_mean(:,:,3),&
-                               uuu_mean(:,:,4),uuu_mean(:,:,5),uuu_mean(:,:,6),&
-                               uuu_mean(:,:,7),uuu_mean(:,:,8),uuu_mean(:,:,9),&
-                               uuu_mean(:,:,10), ux3, uy3, uz3, td3)  
+        call transpose_y_to_z(ta2,dudx)
+        call transpose_y_to_z(tb2,dvdx)
+        call transpose_y_to_z(tc2,dwdx)
 
-    call update_pvelograd_vector(pdudx_mean(:,:,1), pdudx_mean(:,:,2), pdudx_mean(:,:,3),&
-                                dudx, dvdy, tc3, td3)
+      call update_skewness_tensor(uuu_mean(:,:,1), uuu_mean(:,:,2), uuu_mean(:,:,3),&
+                                uuu_mean(:,:,4),uuu_mean(:,:,5),uuu_mean(:,:,6),&
+                                uuu_mean(:,:,7),uuu_mean(:,:,8),uuu_mean(:,:,9),&
+                                uuu_mean(:,:,10), ux3, uy3, uz3, td3)  
 
-    call update_pvelo_vector(pu_mean(:,:,1), pu_mean(:,:,2), pu_mean(:,:,3), ux3, uy3, uz3,td3)
+      call update_pvelograd_vector(pdudx_mean(:,:,1), pdudx_mean(:,:,2), pdudx_mean(:,:,3),&
+                                  dudx, dvdy, tc3, td3)
 
-    call update_velograd_tensor(dudx_mean, dudx,dudy,ta3,dvdx,dvdy,&
-                                tb3,dwdx,dwdy,tc3,td3)
+      call update_pvelo_vector(pu_mean(:,:,1), pu_mean(:,:,2), pu_mean(:,:,3), ux3, uy3, uz3,td3)
 
-    call update_velograd2_tensor(dudxdudx_mean,&
-                                 dudx,dvdx,dwdx,dudy,dvdy,dwdy,td3)
-                      
-    endif                             
+      call update_velograd_tensor(dudx_mean, dudx,dudy,ta3,dvdx,dvdy,&
+                                  tb3,dwdx,dwdy,tc3,td3)
 
-    if (istatflatness) then
-      call update_flatness(uuuu_mean,ux3, uy3, uz3,td3)
-    endif
-    if (istatpstrain .and. (itime>=initstat2.or.itempaccel==1)) then
-      call update_pstrain_cond_avg(pdvdy_q_mean(:,:,1),pdvdy_q_mean(:,:,2),&
-                                  pdvdy_q_mean(:,:,3),pdvdy_q_mean(:,:,4),&
-                                  td3,dvdy,uvwp_mean(:,:,4),dudx_mean(:,:,5),td3)
-    endif
+      call update_velograd2_tensor(dudxdudx_mean,&
+                                  dudx,dvdx,dwdx,dudy,dvdy,dwdy,td3)
+                        
+      endif                             
 
-    if (istatquadrant .and. (itime>=initstat2.or.itempaccel==1)) then
-      call update_uv_quad_avg(uv_quadrant_mean, uu_mean(:,:,1), uu_mean(:,:,2),&
-                              uvwp_mean(:,:,1), uvwp_mean(:,:,2),ux3,uy3, td3)
-    endif
+      if (istatflatness) then
+        call update_flatness(uuuu_mean,ux3, uy3, uz3,td3)
+      endif
+      if (istatpstrain .and. depend) then
+        call update_pstrain_cond_avg(pdvdy_q_mean(:,:,1),pdvdy_q_mean(:,:,2),&
+                                    pdvdy_q_mean(:,:,3),pdvdy_q_mean(:,:,4),&
+                                    td3,dvdy,uvwp_mean(:,:,4),dudx_mean(:,:,5),td3)
+      endif
 
-    if (istatspectra.and. (itime>=initstat2.or.itempaccel==1)) then
-      if (nclx) then
-        call update_spectra_avg_xz(spectra_2d_mean,ux3,uy3,uz3,td3,dvdy, ta3, dwdx)
-      else
-        call update_spectra_avg_z(spectra_z_z_mean,ux3,uy3,uz3,td3,dudx, dvdy, ta3,dwdx)
+      if (istatquadrant .and. depend) then
+        call update_uv_quad_avg(uv_quadrant_mean, uu_mean(:,:,1), uu_mean(:,:,2),&
+                                uvwp_mean(:,:,1), uvwp_mean(:,:,2),ux3,uy3, td3)
+      endif
+
+      if (istatspectra.and. spectra) then
+        if (nclx) then
+          call update_spectra_avg_xz(spectra_2d_mean,ux3,uy3,uz3,td3,dvdy, ta3, dwdx)
+        else
+          call update_spectra_avg_z(spectra_z_z_mean,ux3,uy3,uz3,td3,dudx, dvdy, ta3,dwdx)
+        endif
+      endif
+
+      if (istatautocorr.and. spectra) then
+        call update_autocorr_x(autocorr_mean,ux3)
+      endif
+
+      if (istatlambda2.and. depend) then
+        call update_lambda2_avg(lambda2mean,lambda22mean,&
+                                  dudx,dudy,ta3,dvdx,dvdy,&
+                                  tb3,dwdx,dwdy,tc3,td3)
       endif
     endif
 
-    if (istatautocorr.and. (itime>=initstat2.or.itempaccel==1)) then
-      call update_autocorr_x(autocorr_mean,ux3)
-    endif
-
-    if (istatlambda2.and. (itime>=initstat2.or.itempaccel==1)) then
-      call update_lambda2_avg(lambda2mean,lambda22mean,&
-                                dudx,dudy,ta3,dvdx,dvdy,&
-                                tb3,dwdx,dwdy,tc3,td3)
-    endif
-
     ! Write all statistics
-    if (mod(itime,istatout)==0) then
+    if (write .or. write_spectra) call put_write_read_start(.false., write,&
+                                                           write_spectra.and.istatspectra,&
+                                                           write_spectra.and.istatautocorr)
+    if (write) then
        call read_or_write_all_stats(.false.)
-       if (istatautocorr .and. (itime>=initstat2.or.itempaccel==1)) then
-          call write_autocorr('statistics/'//gen_statname("autocorr_mean"))
-       endif
     endif
 
-    if (istatspectra .and. (itime>=initstat2.or.itempaccel==1)) then
+    if (istatautocorr .and. write_spectra) then
+      call write_autocorr('statistics/'//gen_statname("autocorr_mean"))
+   endif
+
+    if (istatspectra .and. write_spectra) then
       if (mod(itime,ispectout)==0) then
 
         if(nclx) then
@@ -1063,8 +1057,31 @@ contains
         endif
       endif
     endif
+    if (write .or. write_spectra) call put_write_read_end(.false.)
+
   end subroutine overall_statistic
 
+  subroutine process_statistics(any,depend,spectra,write,write_spectra)
+    use param, only: ispectstart, itempaccel, istatcalc, initstat2, ispectout, istatout
+    use var, only: itime
+    logical, intent(out) :: any, depend, spectra, write, write_spectra
+
+    
+    if (itempaccel == 1) then
+      any = mod(itime,istatout)==0
+      depend = any
+      spectra = mod(itime,ispectout)==0 .and. itime >=ispectstart
+      write = any 
+      write_spectra =  spectra
+    else
+      any = mod(itime,istatcalc) == 0
+      depend = itime >= initstat2
+      spectra = depend
+      write = mod(itime,istatout)==0
+      write_spectra = spectra .and. mod(itime,ispectout)==0
+    endif
+
+  end subroutine process_statistics
   !
   ! Basic function, can be applied to arrays
   !
