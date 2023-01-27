@@ -496,7 +496,7 @@ contains
    character(len=32), intent(in) :: num
 
 
-  if (istatlambda2.and.(itime>initstat2.or.itempaccel.eq.1)) then
+  if (istatlambda2.and.(itime>initstat2.or.(itempaccel.eq.1.and.itime>initstat))) then
      call transpose_z_to_y(lambda2,ta2)
      call transpose_y_to_x(ta2,ta1)
      call write_field(ta1, ".", "lambda2", trim(num), flush=.true.) ! Reusing temporary array, force flush
