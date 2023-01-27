@@ -1662,7 +1662,7 @@ contains
 
 
     ! calculate spectra of local rank
-    spec_size = dft_info%xsz(1)*dft_info%xsz(3)
+    spec_size = dft_info%zsz(1)*dft_info%zsz(3)
 
     ! broadcast data
     if (spectra_corr_ranks(index)==spectra_corr_thisrank) then
