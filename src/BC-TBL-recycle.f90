@@ -79,6 +79,8 @@ contains
     integer, dimension (:), allocatable :: seed
     real(mytype), dimension(nx,ny) :: u_mean, v_mean
 
+    u_mean = zero
+    v_mean = zero
 #ifdef BL_DEBG
     real(mytype), allocatable, dimension(:,:,:) :: ux_dbg, uy_dbg, uz_dbg
     real(mytype) :: dbg_t_recy1, dbg_t_recy2
@@ -1018,8 +1020,8 @@ end subroutine tbl_recy_tripping
   !********************************************************************
   
   subroutine nickels_init(u_mean, v_mean)
-      real(mytype), dimension(:,:), intent(out) :: u_mean
-      real(mytype), dimension(:, :), intent(out) :: v_mean
+      real(mytype), dimension(nx,ny), intent(out) :: u_mean
+      real(mytype), dimension(nx,ny), intent(out) :: v_mean
 
       real(mytype), dimension(:), allocatable :: Cf, delta_plus
       real(mytype), dimension(:), allocatable :: y_plus, u_plus

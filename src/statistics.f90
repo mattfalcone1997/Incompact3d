@@ -1893,9 +1893,9 @@ contains
       w_spec1 = cmplx(-aimag(w_spec),real(w_spec))
 #ifdef HAVE_FFTW
       call dfftw_execute_dft_r2c(plan_z,te3,p_spec)
-      call dfftw_execute_dft_r2c(plan_z,tf3,omega_spec)
-      call dfftw_execute_dft_r2c(plan_z,tg3,dudx_spec)
-      call dfftw_execute_dft_r2c(plan_z,th3,dvdy_spec)
+      call dfftw_execute_dft_r2c(plan_z,tf3,dudx_spec)
+      call dfftw_execute_dft_r2c(plan_z,tg3,dvdy_spec)
+      call dfftw_execute_dft_r2c(plan_z,th3,omega_spec)
 #endif
       call spectra_z_calc(spec_z_ml(:,:,:,5),v_spec,omega_spec)
       call spectra_z_calc(spec_z_ml(:,:,:,6),p_spec,dudx_spec)
