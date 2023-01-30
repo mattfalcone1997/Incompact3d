@@ -207,9 +207,13 @@ contains
        endif
       else if (iwhen ==5 .and. itime>=initstat) then
          if (nrank == 0) then
-            if  (mod(itime,istatcalc) == 0) then
+            if  (mod(itime,istatcalc) == 0.or.(itempaccel==1.and.mod(itime,istatout)==0)) then
                call cpu_time(trank)
-               tstats = (trank - time1 - tstep)/real(istatcalc)
+               if (itempaccel/=1) then
+                  tstats = (trank - time1 - tstep)/real(istatcalc)
+               else
+                  tstats = (trank - time1 - tstep)/real(istatout)
+               endif
             endif
             if ((mod(itime, ilist) == 0 .or. itime == ifirst .or. itime==ilast)) then
 

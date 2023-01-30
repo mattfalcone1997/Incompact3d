@@ -1897,7 +1897,7 @@ contains
       call dfftw_execute_dft_r2c(plan_z,tg3,dvdy_spec)
       call dfftw_execute_dft_r2c(plan_z,th3,omega_spec)
 #endif
-      call spectra_z_calc(spec_z_ml(:,:,:,5),v_spec,omega_spec)
+      call spectra_z_calc(spec_z_ml(:,:,:,5),omega_spec,v_spec)
       call spectra_z_calc(spec_z_ml(:,:,:,6),p_spec,dudx_spec)
       call spectra_z_calc(spec_z_ml(:,:,:,7),p_spec,dvdy_spec)
       call spectra_z_calc(spec_z_ml(:,:,:,8),p_spec,w_spec1)
