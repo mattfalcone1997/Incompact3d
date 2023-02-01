@@ -242,7 +242,7 @@ contains
     use var, only : numscalar, nrhotime, npress
 
     use turbine, only : turbine_output
-    use probes, only : write_probes
+    use probes, only : write_probes, write_line_probes
 
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)), intent(in) :: ux1, uy1, uz1
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar), intent(in) :: phi1
@@ -284,6 +284,7 @@ contains
     endif
 
     call write_probes(ux1, uy1, uz1, pp3, phi1)
+    call write_line_probes(ux1, uy1, uz1)
 
   end subroutine postprocessing
   !##################################################################

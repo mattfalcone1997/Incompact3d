@@ -123,7 +123,7 @@ subroutine init_xcompact3d()
   use genepsi, only : genepsi3d, epsi_init
   use ibm, only : body
 
-  use probes, only : init_probes
+  use probes, only : init_probes, init_line_probes
    use tbl_recy, only : restart_tbl_recy
 
    use channel, only : body_forces_init, temp_accel_init
@@ -263,6 +263,7 @@ subroutine init_xcompact3d()
   call calc_divu_constraint(divu3, rho1, phi1)
 
   call init_probes()
+  call init_line_probes()
 
   if (iturbine.ne.0) call init_turbines(ux1, uy1, uz1)
 
@@ -519,7 +520,6 @@ subroutine write_run_info
       open(newunit=fl,file='run_log.json',status='replace',action='write')
       write(fl,'(A)') "{"
       write(fl,"(A ,': {')") '  "run 1"'
-
    endif
 
    write(fl,'(A," : ",I0,",")') '    "itime0"',ifirst

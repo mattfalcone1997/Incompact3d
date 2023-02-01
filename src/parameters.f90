@@ -29,7 +29,8 @@ subroutine parameter(input_i3d)
   use lockexch, only : pfront
   use stats, only : h_quads, spectra_level, autocorr_max_sep,autocorr_xlocs,&
                     spectra_corr_nlocs,spectra_corr_ylocs
-  use probes, only : nprobes, setup_probes, flag_all_digits, flag_extra_probes, xyzprobes
+  use probes, only : nprobes, nlineprobes, setup_probes, flag_all_digits,&
+                     flag_extra_probes, xyzprobes, zlineprobes, probe_freq
   use visu, only : output2D
   use forces, only : iforces, nvol, xld, xrd, yld, yud!, zld, zrd
 
@@ -52,12 +53,13 @@ subroutine parameter(input_i3d)
   NAMELIST /NumOptions/ ifirstder, isecondder, itimescheme, iimplicit, &
        nu0nu, cnu, ipinter
   NAMELIST /InOutParam/ irestart, icheckpoint, ioutput, nvisu, ilist, iprocessing, &
-       ninflows, ntimesteps, inflowpath, ioutflow, output2D, nprobes, log_cputime
+       ninflows, ntimesteps, inflowpath, ioutflow, output2D, nprobes, log_cputime,&
+       nlineprobes
   NAMELIST /Statistics/ wrotation,spinup_time, nstat, initstat, &
             istatcalc, istatbudget,istatpstrain,istatlambda2, initstat2,&
             istatquadrant, nquads, istatflatness, istatspectra,spectra_level,&
             istatautocorr, autocorr_max_sep,autocorr_xlocs, spectra_corr_nlocs
-  NAMELIST /ProbesParam/ flag_all_digits, flag_extra_probes, xyzprobes
+  NAMELIST /ProbesParam/ flag_all_digits, flag_extra_probes, xyzprobes, zlineprobes, probe_freq
   NAMELIST /ScalarParam/ sc, ri, uset, cp, &
        nclxS1, nclxSn, nclyS1, nclySn, nclzS1, nclzSn, &
        scalar_lbound, scalar_ubound, sc_even, sc_skew, &
@@ -152,7 +154,7 @@ subroutine parameter(input_i3d)
   if (iibm.ne.0) then
      read(10, nml=ibmstuff); rewind(10)
   endif
-  if (nprobes.gt.0) then
+  if (nprobes.gt.0.or.nlineprobes.gt.0) then
      call setup_probes()
      read(10, nml=ProbesParam); rewind(10)
   endif
@@ -702,7 +704,7 @@ subroutine parameter_defaults()
   use decomp_2d
   use complex_geometry
 
-  use probes, only : nprobes, flag_all_digits, flag_extra_probes
+  use probes, only : nprobes, flag_all_digits, flag_extra_probes, probe_freq, nlineprobes
   use visu, only : output2D
   use forces, only : iforces, nvol
   use stats, only : spectra_level, autocorr_max_sep
@@ -810,6 +812,8 @@ subroutine parameter_defaults()
   ioutflow=0
   output2D = 0
   nprobes=0
+  nlineprobes=0
+  probe_freq = 0
   log_cputime=.false.
 
   !! PROBES

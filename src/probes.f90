@@ -16,7 +16,7 @@ module probes
   USE decomp_2d, only : ph1, nrank, mytype
   USE decomp_2d, only : xstart, xend, ystart, yend, zstart, zend
   USE decomp_2d, only : decomp_2d_abort
-
+   use MPI
   IMPLICIT NONE
 
   !
@@ -24,12 +24,15 @@ module probes
   !
   ! Number of probes
   integer, save :: nprobes
+  ! Number of line probes
+  integer, save :: nlineprobes
   ! Flag to monitor velocity, scalar(s) and pressure gradients
   logical, save :: flag_extra_probes = .false.
   ! Flag to print 16 digits, only 6 digits by default
   logical, save :: flag_all_digits = .false.
   ! Position of the probes
   real(mytype), save, allocatable, dimension(:,:) :: xyzprobes
+  real(mytype), save, allocatable, dimension(:,:) :: zlineprobes
   !
   ! Following parameters are not extracted from the i3d input file
   !
@@ -44,9 +47,18 @@ module probes
   ! Arrays used to monitor gradients
   real(mytype), save, allocatable, dimension(:,:) :: dfdx, dfdy, dfdz
 
+  real(mytype), save, allocatable, dimension(:,:,:) :: lineprobes
+
+  integer, save, allocatable, dimension(:) :: probecomms
+  integer, save, allocatable, dimension(:,:) :: probelocs
+  logical, allocatable, dimension(:) :: ranklineprobes
+
+  integer :: nprobes_local, probe_freq, run_number
+  integer(MPI_OFFSET_KIND), allocatable, dimension(:) :: offset_mpi
   PRIVATE ! All functions/subroutines private by default
-  PUBLIC :: setup_probes, init_probes, write_probes, finalize_probes, &
-            nprobes, flag_all_digits, flag_extra_probes, xyzprobes
+  PUBLIC :: setup_probes, init_probes, init_line_probes,write_probes, &
+            finalize_probes, nprobes, flag_all_digits, flag_extra_probes,&
+            xyzprobes, zlineprobes, nlineprobes, probe_freq, write_line_probes
 
 contains
 
@@ -55,15 +67,23 @@ contains
   ! This subroutine is used to setup the probes module, before init_probes
   !
   subroutine setup_probes()
-
+   use MPI
+    integer :: ierr
     ! Exit if no file or no probes
     if (nprobes.le.0) then
        flag_extra_probes = .false.
        return
+    else
+      allocate(xyzprobes(3, nprobes))
     endif
 
     ! Allocate memory
-    allocate(xyzprobes(3, nprobes))
+
+    if (nlineprobes.le.0) then
+      return
+    else
+      allocate(zlineprobes(2,nlineprobes))
+    endif
 
   end subroutine
 
@@ -243,6 +263,220 @@ contains
 #endif
 
   end subroutine init_probes
+
+  subroutine init_line_probes
+   use decomp_2d
+   use MPI
+   use var, only: dx, ny,yp, t0, itime0, itime, t, xlx
+   use dbg_schemes, only : abs_prec
+   integer :: i, j, index
+   real(mytype) :: x, y, dyl,dyu, ymin, ymax, xmin, xmax
+
+   integer :: ierr, rank, unit
+   
+   integer :: split_comm_y, key, color
+   integer, dimension(2) :: dims, coords
+   logical, dimension(2) :: periods 
+   character(len=80) :: fname
+   logical :: exists
+
+
+   if (nlineprobes.le.0) return
+
+   if (probe_freq.lt.1.and.nrank==0) then
+      write(*,*) "Probe frequency must be greater than 0"
+      call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+   endif
+
+   ! determine probes on current rank
+   allocate(probecomms(nlineprobes))
+   allocate(ranklineprobes(nlineprobes))
+   allocate(probelocs(2,nlineprobes))
+   allocate(offset_mpi(nlineprobes))
+
+   nprobes_local = 0
+   call MPI_cart_get(DECOMP_2D_COMM_CART_X,2,dims,&
+                     periods,coords,ierr)
+   key = coords(1)
+   color = coords(2)
+   call MPI_Comm_split(DECOMP_2D_COMM_CART_X, key, color, split_comm_y,ierr)
+                  
+   do i = 1, nlineprobes
+      if (zlineprobes(1,i)>xlx.or.zlineprobes(1,i)<0) then
+         if (nrank==0) then
+            write(*,*) "line probe outside x bounds"
+            call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+         endif
+      endif
+      if (zlineprobes(2,i)>yp(ny).or.zlineprobes(2,i)<yp(1)) then
+         if (nrank==0) then
+            write(*,*) "line probe outside y bounds"
+            call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+         endif
+      endif
+      do j = 1, ny-1
+         if (zlineprobes(2,i)<yp(j)) then
+            dyl = abs_prec(zlineprobes(2,i)-yp(j))
+            dyu = abs_prec(zlineprobes(2,i)-yp(j+1))
+            if (dyl>dyu) then
+               probelocs(2,i) = j+1
+            else
+               probelocs(2,i) = j
+            endif
+            exit
+         endif
+      enddo
+      
+      do j = 1, xsize(1)
+         x = real(j-1)*dx
+         if (zlineprobes(1,i)<x) then
+            dyl = abs_prec(zlineprobes(1,i)-x)
+            dyu = abs_prec(zlineprobes(1,i)-x-dx)
+            if (dyl>dyu) then
+               probelocs(1,i) = j+1
+            else
+               probelocs(1,i) = j
+            endif
+            exit
+         endif
+      enddo
+
+      if (probelocs(2,i).ge.xstart(2).and.probelocs(2,i).le.xend(2)) then
+         probecomms(i) = split_comm_y
+         nprobes_local = nprobes_local + 1
+         ranklineprobes(i) = .true.
+      else
+         probecomms(i) = MPI_COMM_NULL
+         ranklineprobes(i) = .false.
+      endif      
+   enddo
+
+   if (nprobes_local.gt.0) then
+      allocate(lineprobes(xsize(3),3,nprobes_local))
+   endif
+   if (nrank .eq.0) then
+
+      exists = .true.
+      run_number = 0
+      do while (exists)
+         run_number= run_number + 1
+         write(fname,'("./probes/probe_info-run",I0,".json")') run_number
+         inquire(file=fname,exist=exists)
+      enddo
+
+      write(fname,'("./probes/probe_info-run",I0,".json")') run_number
+      open(newunit=unit,file=fname,status='new',action='write')
+      write(unit,'(A)') "{"
+      write(unit,'(A," : ",g0,",")') '  "t0"', t0
+      write(unit,'(A," : ",I0,",")') '  "itime0"', itime0
+      write(unit,'(A," : ",I0,",")') '  "nlineprobes"', nlineprobes
+      write(unit,'(A," : ",I0,",")') '  "probe_freq"', probe_freq
+      do i = 1, nlineprobes-1
+         x = real(probelocs(1,i) -1)*dx
+         y = yp(probelocs(2,i))
+         write(unit,"(A,I0,A,' : [',g0,',',g0,'],')") '  "probe ',i, '"', x, y
+      enddo
+
+      x = real(probelocs(1,nlineprobes) -1)*dx
+      y = yp(probelocs(2,nlineprobes))
+      write(unit,"(A,I0,A,' : [',g0,',',g0,']')") '  "probe ',i, '"', x, y
+      write(unit,'(A)') "}"
+      
+      close(unit)
+
+      write(fname,'("./probes/probe_times",I0,".csv")') run_number
+      open(newunit=unit,file=fname,status='new',action='write')
+      write(unit,'(A,",",A)') 'itime','t'
+      close(unit)
+
+   endif 
+
+   call MPI_Bcast(run_number,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
+   
+  end subroutine
+
+  subroutine write_line_probes(ux1,uy1,uz1)
+   use var, only : itime, nz, t, nzmsize, numscalar
+   use param, only : npress
+   use decomp_2d
+   use MPI
+
+   !dummy argument declaration
+   real(mytype),intent(in),dimension(xsize(1),xsize(2),xsize(3)) :: ux1, uy1, uz1
+   
+   !local argument declaration
+   integer :: i, j=0, jloc,k, mode, ierr, fh, newtype, unit
+   integer :: sizes(2), starts(2), subsizes(2)
+   character(len=80) :: fname
+   integer :: disp_bytes
+   logical :: exists
+   !collect info
+
+   if (nlineprobes.le.0) return
+   if (mod(itime, probe_freq) /= 0) return
+
+   j=0
+   do i = 1, nlineprobes
+      if (ranklineprobes(i)) then
+         j= j + 1
+         jloc = probelocs(2,i) - xstart(2) + 1
+         do k =1 ,xsize(3)
+            lineprobes(k,1,j) = ux1(probelocs(1,i),jloc,k)
+            lineprobes(k,2,j) = uy1(probelocs(1,i),jloc,k)
+            lineprobes(k,3,j) = uz1(probelocs(1,i),jloc,k)
+         enddo
+      endif
+   enddo
+   
+   !write info
+   sizes(:) = [nz,3]
+   starts(:) = [xstart(3)-1,0]
+   subsizes(:) = [xsize(3),3]
+
+   call MPI_type_create_subarray(2, sizes, subsizes, starts,  &
+   MPI_ORDER_FORTRAN, real_type, newtype, ierr)
+   call MPI_Type_commit(newtype,ierr)
+
+   call MPI_Type_size(real_type,disp_bytes,ierr)
+
+   j=0
+   do i = 1, nlineprobes
+      
+      write(fname,'("./probes/lineprobe",I4.4,"-run",I0)') i, run_number
+      inquire(file=fname,exist=exists)
+      if (exists) then
+         mode = MPI_MODE_WRONLY
+      else
+         mode = MPI_MODE_WRONLY + MPI_MODE_CREATE
+         offset_mpi(i) = 0_MPI_OFFSET_KIND
+      endif
+
+      if (ranklineprobes(i)) then
+         j= j + 1
+         call MPI_File_open(probecomms(i),fname,mode,&
+                           MPI_INFO_NULL, fh, ierr)
+
+         call MPI_file_set_view(fh,offset_mpi(i),real_type, &
+                           newtype,'native',MPI_INFO_NULL,ierr)
+         call MPI_File_write_all(fh,lineprobes(:,:,j),subsizes(1)*subsizes(2),&
+                                 real_type,MPI_STATUS_IGNORE,ierr)
+         
+         call MPI_File_close(fh,ierr)
+         offset_mpi(i) = offset_mpi(i) + int(sizes(1),kind=MPI_OFFSET_KIND)&
+                                       *int(sizes(2),kind=MPI_OFFSET_KIND)&
+                                       *disp_bytes
+      endif
+   enddo
+   call MPI_type_free(newtype,ierr)
+
+   if (nrank .eq.0) then
+      write(fname,'("./probes/probe_times",I0,".csv")') run_number
+      open(newunit=unit,file=fname,status='old',position='append')
+      write(unit,'(I0,",",g0)') itime, t
+      close(unit)
+   endif
+
+  end subroutine write_line_probes
 
   !############################################################################
   !
@@ -610,6 +844,13 @@ contains
       deallocate(dfdx)
       deallocate(dfdy)
       deallocate(dfdz)
+    endif
+
+    if (nlineprobes.gt.0) then
+      deallocate(probecomms,ranklineprobes)
+      deallocate(probelocs)
+      if (nprobes_local.gt.0) deallocate(lineprobes)
+      deallocate(zlineprobes)
     endif
 
   end subroutine finalize_probes
