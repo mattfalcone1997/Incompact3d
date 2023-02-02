@@ -444,8 +444,8 @@ contains
 
     ! Temporary array
     tmean = zero
-    read_spectra = istatspectra .and. (itime>=initstat2.or.itempaccel==1)
-    read_autocorrelation = istatautocorr .and. (itime>=initstat2.or.itempaccel==1)
+    read_spectra = istatspectra .and. (itime>initstat2.or.itempaccel==1)
+    read_autocorrelation = istatautocorr .and. (itime>initstat2.or.itempaccel==1)
 
     call put_write_read_start(.true.,.true.,read_spectra,read_autocorrelation)
     ! Read all statistics
@@ -535,15 +535,15 @@ contains
       call read_or_write_one_stat(flag_read, gen_statname("uuuu_mean"), uuuu_mean, uuuu_info)
     endif
 
-    if (istatpstrain .and. (itime>=initstat2.or.itempaccel==1)) then
+    if (istatpstrain .and. (itime>initstat2.or.itempaccel==1)) then
       call read_or_write_one_stat(flag_read, gen_statname("pdvdy_q_mean"), pdvdy_q_mean, pdvdy_q_info)
     endif
 
-    if (istatquadrant .and. (itime>=initstat2.or.itempaccel==1)) then
+    if (istatquadrant .and. (itime>initstat2.or.itempaccel==1)) then
       call read_or_write_one_stat(flag_read, gen_statname("uv_quadrant_mean"), uv_quadrant_mean, uv_quadrant_info)
     endif
 
-    if (istatlambda2.and. (itime>=initstat2.or.itempaccel==1)) then
+    if (istatlambda2.and. (itime>initstat2.or.itempaccel==1)) then
       call read_or_write_one_stat(flag_read, gen_statname("lambda2mean"), lambda2mean,dstat_plane)
       call read_or_write_one_stat(flag_read, gen_statname("lambda22mean"), lambda22mean,dstat_plane)
     endif
