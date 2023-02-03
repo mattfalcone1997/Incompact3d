@@ -174,7 +174,7 @@ contains
     USE var, only : sxx3,syy3,szz3,sxy3,sxz3,syz3
     USE ibm_param
     use dbg_schemes, only: sqrt_prec
-
+    use visu, only: visu_output_now, ioutput_num
     implicit none
 
     real(mytype), dimension(xsize(1), xsize(2), xsize(3)) :: ux1, uy1, uz1
@@ -294,9 +294,9 @@ contains
       endif
     endif
 
-    if (mod(itime, ioutput).eq.0) then
+    if (visu_output_now(itime)) then
 
-       write(filename, "(I0)") itime / ioutput
+       write(filename, "(I0)") ioutput_num(itime)
       call decomp_2d_write_one(1, nut1, turb_dir, gen_filename("", "nut_smag", filename, ""), 2, io_turb)
 
     endif
@@ -328,6 +328,7 @@ contains
     USE ibm_param
     USE param, only : zero
     use dbg_schemes, only: sqrt_prec
+    use visu, only: visu_output_now, ioutput_num
     
     implicit none
 
@@ -403,7 +404,7 @@ contains
     call filx(uxz1f, uxz1, di1,fisx,fiffx ,fifsx ,fifwx ,xsize(1),xsize(2),xsize(3),0,ubcx*ubcz) !ux1*uz1
     call filx(uyz1f, uyz1, di1,fisx,fiffxp,fifsxp,fifwxp,xsize(1),xsize(2),xsize(3),1,ubcy*ubcz) !uy1*uz1
 
-    if (mod(itime, ioutput) == 0) then
+    if (visu_output_now(itime)) then
        if (nrank==0) write(*,*) "filx ux= ", maxval(ta1), maxval(ux1f), maxval(ta1) - maxval(ux1f)
     endif
 
@@ -442,7 +443,7 @@ contains
     call fily(uxz2f, th2, di2,fisy,fiffyp,fifsyp,fifwyp,ysize(1),ysize(2),ysize(3),1,ubcx*ubcz) !ux2*uz2
     call fily(uyz2f, ti2, di2,fisy,fiffy ,fifsy ,fifwy ,ysize(1),ysize(2),ysize(3),0,ubcy*ubcz) !uy2*uz2
 
-    if (mod(itime, ioutput) == 0) then
+    if (visu_output_now(itime)) then
        if (nrank==0) write(*,*) "fily ux= ", maxval(ta2), maxval(ux2f), maxval(ta2) - maxval(ux2f)
     endif
 
@@ -484,7 +485,7 @@ contains
     call filz(uxz3f, th3, di3,fisz,fiffz ,fifsz ,fifwz ,zsize(1),zsize(2),zsize(3),0,ubcx*ubcz) !ux3*uz3
     call filz(uyz3f, ti3, di3,fisz,fiffz ,fifsz ,fifwz ,zsize(1),zsize(2),zsize(3),0,ubcy*ubcz) !uy3*uz3
 
-    if (mod(itime, ioutput) == 0) then
+    if (visu_output_now(itime)) then
        if (nrank==0) write(*,*) "filz ux= ", maxval(ta3), maxval(ux3f), maxval(ta3) - maxval(ux3f)
     endif
 
@@ -671,7 +672,7 @@ contains
     call filx(axz1f, axz1, di1,fisx,fiffx ,fifsx ,fifwx ,xsize(1),xsize(2),xsize(3),0,zero)
     call filx(ayz1f, ayz1, di1,fisx,fiffxp,fifsxp,fifwxp,xsize(1),xsize(2),xsize(3),1,zero)
 
-    if (mod(itime, ioutput) == 0) then
+    if (visu_output_now(itime)) then
        if (nrank==0) write(*,*) "filx axx1= ", maxval(axx1), maxval(axx1f), maxval(axx1) - maxval(axx1f)
     endif
 
@@ -699,7 +700,7 @@ contains
     call fily(axz2f, te2, di2,fisy,fiffyp,fifsyp,fifwyp,ysize(1),ysize(2),ysize(3),1,zero)
     call fily(ayz2f, tf2, di2,fisy,fiffy ,fifsy ,fifwy ,ysize(1),ysize(2),ysize(3),0,zero)
 
-    if (mod(itime, ioutput) == 0) then
+    if (visu_output_now(itime)) then
        if (nrank==0) write(*,*) "fily axx2= ", maxval(ta2), maxval(axx2f), maxval(ta2) - maxval(axx2f)
     endif
 
@@ -731,7 +732,7 @@ contains
     call filz(axz3f, te3, di3,fisz,fiffz ,fifsz ,fifwz ,zsize(1),zsize(2),zsize(3),0,zero)
     call filz(ayz3f, tf3, di3,fisz,fiffz ,fifsz ,fifwz ,zsize(1),zsize(2),zsize(3),0,zero)
 
-    if (mod(itime, ioutput) == 0) then
+    if (visu_output_now(itime)) then
        if (nrank==0) write(*,*) "filz axx3= ", maxval(ta3), maxval(axx3f), maxval(ta3) - maxval(axx3f)
     endif
 
@@ -801,7 +802,7 @@ contains
     call transpose_y_to_z(smagC2f, ta3)
     call filz(smagC3f, ta3, di3,fisz,fiffz ,fifsz ,fifwz ,zsize(1),zsize(2),zsize(3),0,zero)
 
-    if (mod(itime, ioutput) == 0) then
+    if (visu_output_now(itime)) then
        if (nrank==0) write(*,*) "filx smagC1= ", maxval(smagC1), maxval(smagC1f), maxval(smagC1) - maxval(smagC1f)
        if (nrank==0) write(*,*) "fily smagC1= ", maxval(ta2), maxval(smagC2f), maxval(ta2) - maxval(smagC2f)
        if (nrank==0) write(*,*) "filz smagC1= ", maxval(ta3), maxval(smagC3f), maxval(ta3) - maxval(smagC3f)
@@ -847,12 +848,12 @@ contains
        if (nrank==0) write(*,*) "dsmag nut1    min max= ", minval(nut1), maxval(nut1)
     endif
 
-    if (mod(itime, ioutput) == 0) then
+    if (visu_output_now(itime)) then
 
       ! write(filename, "('./data/dsmagcst_initial',I4.4)") itime / imodulo
       ! call decomp_2d_write_one(1, smagC1, filename, 2)
 
-       write(filename, "(I0)") itime / ioutput
+       write(filename, "(I0)") ioutput_num(itime)
        call decomp_2d_write_one(1, dsmagcst1, turb_dir, gen_filename("", "dsmagcst_final", filename, ""), 2, io_turb)
        call decomp_2d_write_one(1, nut1, turb_dir, gen_filename("", "nut_dynsmag", filename, ""), 2, io_turb)
     endif
@@ -891,7 +892,8 @@ contains
   USE var, only : sdxx3,sdyy3,sdzz3,sdxy3,sdxz3,sdyz3
   USE var, only : srt_wale,srt_wale2,srt_wale3,srt_wale4
   USE ibm_param
-  
+  use visu, only: visu_output_now, ioutput_num
+
   implicit none
 
   real(mytype), dimension(xsize(1), xsize(2), xsize(3)) :: ux1, uy1, uz1
@@ -1030,9 +1032,9 @@ contains
       if (nrank==0) write(*,*) "WALE SdSd min max= ", minval(srt_wale3), maxval(srt_wale3)
       if (nrank==0) write(*,*) "WALE nut1     min max= ", minval(nut1), maxval(nut1)
   endif
-  if (mod(itime, ioutput).eq.0) then
+  if (visu_output_now(itime)) then
 
-     write(filename, "(I0)") itime / ioutput
+     write(filename, "(I0)") ioutput_num(itime)
      call decomp_2d_write_one(1, nut1, turb_dir, gen_filename("", "nut_wale", filename, ""), 2, io_turb)
 
   endif

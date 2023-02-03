@@ -404,6 +404,7 @@ contains
     use ibm_param
     use param, only : zero
     use tools, only : mean_plane_z
+    use visu, only: visu_output_now, ioutput_num
 
     implicit none
 
@@ -577,11 +578,11 @@ contains
        close(67)
     end if
 
-    if (mod(itime,ioutput).eq.0) then
+    if (visu_output_now(itime)) then
        !if (save_diss.eq.1) then
        uvisu=zero
        call fine_to_coarseV(1,diss1,uvisu)
-       write(filename,"('diss',I4.4)") itime/ioutput
+       write(filename,"('diss',I4.4)") ioutput_num(itime)
        call decomp_2d_write_one(1,uvisu,bcle_dir,filename,2,io_bcle)
        !endif
 
@@ -589,7 +590,7 @@ contains
        call transpose_x_to_y (diss1,temp2)
        call transpose_y_to_z (temp2,temp3)
        call mean_plane_z(temp3,zsize(1),zsize(2),zsize(3),temp3(:,:,1))
-       write(filename,"('dissm',I4.4)") itime/ioutput
+       write(filename,"('dissm',I4.4)") ioutput_num(itime)
        call decomp_2d_write_plane(3,temp3,3,1,bcle_dir,filename,io_bcle)
        !endif
     endif

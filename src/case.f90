@@ -234,7 +234,7 @@ contains
   subroutine postprocessing(rho1, ux1, uy1, uz1, pp3, phi1, ep1)
 
     use decomp_2d, only : mytype, xsize, ph1
-    use visu, only  : write_snapshot, end_snapshot
+    use visu, only  : write_snapshot, end_snapshot, visu_output_now
     use stats, only : overall_statistic
 
     use var, only : nzmsize
@@ -265,7 +265,7 @@ contains
       T = phi1
     endif
 
-    if ((ivisu.ne.0).and.(mod(itime, ioutput).eq.0)) then
+    if ((ivisu.ne.0).and.visu_output_now(itime)) then
        call write_snapshot(rho1, ux1, uy1, uz1, pp3, T, ep1, itime, num)
 
        ! XXX: Ultimate goal for ADIOS2 is to pass do all postproc online - do we need this?

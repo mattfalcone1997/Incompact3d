@@ -21,16 +21,57 @@ module visu
   real, save :: tstart, tend
 
   character(len=*), parameter :: io_name = "solution-io"
-
+  character(len=128) :: output_fname
+  logical :: output_use_fname
+  integer, allocatable, dimension(:) :: output_it
   private
   public :: output2D, visu_init, visu_ready, visu_finalise, write_snapshot, end_snapshot, &
-       write_field, io_name, gen_filename
+       write_field, io_name, gen_filename, visu_output_now, ioutput_num,&
+        output_use_fname, output_fname
 
 contains
 
   !
   ! Initialize the visu module
   !
+  integer function ioutput_num(it)
+  use param ,only: ioutput
+  integer, intent(in) :: it
+
+  integer :: i
+
+  if (output_use_fname) then
+    do i = 1, size(output_it)
+      if (it .eq. output_it(i)) then
+        ioutput_num = i
+        return
+      endif
+    enddo
+  else
+    ioutput_num = it/ioutput
+  endif
+    
+  end function
+
+  logical function visu_output_now(it)
+    use param ,only: ioutput
+    integer, intent(in) :: it
+    integer :: i
+
+    if (output_use_fname) then
+      do i = 1, size(output_it)
+        if (it .eq. output_it(i)) then
+          visu_output_now = .true.
+          return
+        endif
+      enddo
+      visu_output_now = .false.
+    else
+      visu_output_now = mod(it,ioutput) == 0
+    endif
+
+  end function visu_output_now
+
   subroutine visu_init()
 
     use MPI
@@ -45,14 +86,38 @@ contains
     implicit none
 
     ! Local variables
-    integer :: noutput, nsnapout
+    integer :: noutput, nsnapout, ierr
     real(mytype) :: memout
+    logical :: exists
 
-    integer :: is
+    integer :: is, nlines, i, unit
 
+    if (output_use_fname) then
+      inquire(file=output_fname,exist=exists)
+      if(.not.exists.and. nrank.eq.0) then
+        write(*,*) "Using output fname requires file to exist"
+        call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+      endif
+
+      open(newunit=unit,file=output_fname,status='old',action='read')
+      nlines=0
+      do
+        read(unit,*,end=10)
+        nlines = nlines + 1
+      enddo
+      10 rewind(unit)
+
+      allocate(output_it(nlines))
+      do i =1, nlines
+        read(unit,*) output_it(i)
+      enddo
+
+      close(unit)
+    endif
     ! HDD usage of visu module
     if (nrank==0) then
-      noutput = (ilast - ifirst +1)/ioutput
+      if (output_use_fname) noutput = nlines
+      if(.not. output_use_fname) noutput = (ilast - ifirst +1)/ioutput
 
       nsnapout = 4
       if (ilmn)         nsnapout = nsnapout + 1
@@ -207,7 +272,7 @@ contains
     ! Update log file
     if (nrank.eq.0) then
       call cpu_time(tstart)
-      print *,'Writing snapshots =>',itime/ioutput
+      print *,'Writing snapshots =>', ioutput_num(itime)
     end if
 
 #ifdef ADIOS2
@@ -221,11 +286,11 @@ contains
        write(num, ifilenameformat) itime
     else
        ! Classic enumeration system
-       write(num, ifilenameformat) itime/ioutput
+       write(num, ifilenameformat) ioutput_num(itime)
     endif
 #else
     ! ADIOS2 is zero-indexed
-    write(num, '(I0)') itime/ioutput - 1
+    write(num, '(I0)') ioutput_num(itime) - 1
 #endif
     
     ! Write XDMF header

@@ -31,7 +31,7 @@ subroutine parameter(input_i3d)
                     spectra_corr_nlocs,spectra_corr_ylocs
   use probes, only : nprobes, nlineprobes, setup_probes, flag_all_digits,&
                      flag_extra_probes, xyzprobes, zlineprobes, probe_freq
-  use visu, only : output2D
+  use visu, only : output2D, output_use_fname, output_fname
   use forces, only : iforces, nvol, xld, xrd, yld, yud!, zld, zrd
 
   implicit none
@@ -54,7 +54,7 @@ subroutine parameter(input_i3d)
        nu0nu, cnu, ipinter
   NAMELIST /InOutParam/ irestart, icheckpoint, ioutput, nvisu, ilist, iprocessing, &
        ninflows, ntimesteps, inflowpath, ioutflow, output2D, nprobes, log_cputime,&
-       nlineprobes
+       nlineprobes, output_use_fname, output_fname
   NAMELIST /Statistics/ wrotation,spinup_time, nstat, initstat, &
             istatcalc, istatbudget,istatpstrain,istatlambda2, initstat2,&
             istatquadrant, nquads, istatflatness, istatspectra,spectra_level,&
