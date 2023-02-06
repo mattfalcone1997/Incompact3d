@@ -676,6 +676,19 @@ subroutine  inttimp (var1,dvar1,npaire,isc,forcing1,id)
    else
       bctop(:,:) = tb2(:,ny-1,:)
    endif
+  else if ((itype.eq.itype_tbl_temp) .and. isc.eq.0) then
+   bctop(:,:) = zero
+   if (.not.present(id)) then
+      if (nrank == 0) write(*,*) "id must be present"
+      call MPI_Abort(MPI_COMM_WORLD,1,code)
+   endif
+   if (id.eq.1) then
+      bcbot(:,:) = one
+   else
+      bcbot(:,:) = zero
+   endif
+      
+
   !
   ! Generic homogeneous cases after
   !

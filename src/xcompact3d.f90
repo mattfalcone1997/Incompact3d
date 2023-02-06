@@ -444,7 +444,7 @@ subroutine write_params_json
       write(fl,'(A)') "  },"
    endif
 
-   if(itempaccel == 1) then
+   if(itempaccel == 1.and.itype==itype_channel) then
       write(fl,"(A ,': {')") '  "temp_accel"'
       if (iacceltype== 1) then
          write(fl,"(A,': ',A,',')") '    "profile"','"linear"'

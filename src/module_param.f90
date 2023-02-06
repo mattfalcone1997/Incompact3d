@@ -284,7 +284,8 @@ module param
        itype_abl = 10, &
        itype_uniform = 11, &
        itype_sandbox = 12, &
-       itype_tbl_recy = 13
+       itype_tbl_recy = 13, &
+       itype_tbl_temp = 14
 
   integer :: cont_phi,itr,itime,itest,iprocessing
   integer :: ifft,istret,iforc_entree,iturb
@@ -424,6 +425,9 @@ module param
   integer :: itempaccel, iacceltype
   real(mytype) :: Re_ratio, t_start, t_end
   logical :: use_center
+  ! tbl temporal
+  real(mytype) :: Re_D
+
   !numbers
 
   real(mytype),parameter :: zpone=0.1_mytype

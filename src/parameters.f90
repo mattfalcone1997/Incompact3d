@@ -89,7 +89,7 @@ subroutine parameter(input_i3d)
   NAMELIST/spatial_equiv/U_ratio, accel_centre, alpha_accel
   NAMELIST/hquadrant/h_quads
   NAMELIST/spectra_corr/spectra_corr_ylocs
-
+  NAMELIST/tbl_temp/Re_D, istatout, ispectout, ispectstart
 #ifdef DEBG
   if (nrank == 0) write(*,*) '# parameter start'
 #endif
@@ -283,32 +283,37 @@ subroutine parameter(input_i3d)
       else if (iacceltype==2) then
          read(10,nml=spatial_equiv); rewind(10)
       endif
-
-      if (istatout<1) then
-         write(*,*) "If temporal acceleration is used istatout "//&
-                     "must be specified and valid"
-         call MPI_Abort(MPI_COMM_WORLD,1,ierr)
-      endif
-      if (ispectout<1.and.istatspectra) then
-         write(*,*) "If temporal acceleration is used "//&
-                     "ispectout must be specified and valid"
-         call MPI_Abort(MPI_COMM_WORLD,1,ierr)
-      endif
-
-      if (mod(ispectout,istatout)/= 0.and.istatspectra) then
-         write(*,*) "ispectout must be multiple of istatout"
-            call MPI_Abort(MPI_COMM_WORLD,1,ierr)
-      endif
-
-      if (ispectstart<1.and.istatspectra) then
-         write(*,*) "If temporal acceleration is used "//&
-                     "ispectstart must be specified and valid"
-         call MPI_Abort(MPI_COMM_WORLD,1,ierr)
-      endif
-      
    endif
   endif
 
+  if (itype == itype_tbl_temp) then
+   read(10,nml=tbl_temp); rewind(10)
+   itempaccel=1
+  endif
+
+  if (itempaccel==1) then
+   if (istatout<1) then
+      write(*,*) "If temporal acceleration is used istatout "//&
+                  "must be specified and valid"
+      call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+   endif
+   if (ispectout<1.and.istatspectra) then
+      write(*,*) "If temporal acceleration is used "//&
+                  "ispectout must be specified and valid"
+      call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+   endif
+
+   if (mod(ispectout,istatout)/= 0.and.istatspectra) then
+      write(*,*) "ispectout must be multiple of istatout"
+         call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+   endif
+
+   if (ispectstart<1.and.istatspectra) then
+      write(*,*) "If temporal acceleration is used "//&
+                  "ispectstart must be specified and valid"
+      call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+   endif
+  endif
    if (itempaccel == 0) then
       istatout = icheckpoint
       ispectout = icheckpoint
@@ -447,6 +452,8 @@ subroutine parameter(input_i3d)
         print *,'Turbulent boundary layer'
       elseif (itype.eq.itype_tbl_recy) then
       print *,'Turbulent boundary layer using recycling method'
+     elseif (itype.eq.itype_tbl_temp) then
+      print *,'Temporally developing turbulent boundary layer'
      elseif (itype.eq.itype_abl) then
         print *,'Atmospheric boundary layer'
      elseif (itype.eq.itype_uniform) then

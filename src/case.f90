@@ -22,6 +22,7 @@ module case
   use abl
   use uniform
   use sandbox
+  use tbl_temp
 
   use var, only : nzmsize
 
@@ -115,6 +116,10 @@ contains
    
        call init_sandbox (ux1, uy1, uz1, ep1, phi1, 0)
 
+    elseif (itype.eq.itype_tbl_temp) then
+
+      call init_tbl_temp(ux1, uy1, uz1, ep1, phi1)
+
     else
   
          if (nrank.eq.0) then
@@ -203,6 +208,8 @@ contains
    
        call boundary_conditions_sandbox (ux, uy, uz, phi)
 
+    elseif (itype.eq.itype_tbl_temp) then
+       call boundary_conditions_tbl_temp (ux, uy, uz, phi)
     endif
 
   end subroutine boundary_conditions
@@ -353,6 +360,8 @@ contains
    
        call postprocess_sandbox (ux, uy, uz, phi, ep)
 
+    else if (itype.eq.itype_tbl_temp) then
+      call postprocess_tbl_temp (ux, uy, uz, ep)
     endif
 
     if (iforces.eq.1) then
@@ -399,7 +408,10 @@ contains
     else if (itype .eq. itype_uniform) then
 
        call visu_uniform_init(case_visu_init)      
+    
+    else if (itype .eq.itype_tbl_temp) then
 
+      call visu_tbl_temp_init(case_visu_init)
     end if
     
   end subroutine visu_case_init
@@ -459,6 +471,8 @@ contains
        call visu_uniform(ux1, uy1, uz1, pp3, phi1, ep1, num)
        called_visu = .true.
 
+   elseif (itype.eq.itype_tbl_temp) then
+      call visu_tbl_temp(ux1, uy1, uz1, pp3, phi1, ep1, num)
     endif
 
     if (called_visu .and. (.not. case_visu_init)) then
@@ -502,6 +516,9 @@ contains
     elseif (itype.eq.itype_tbl_recy) then
 
         call momentum_forcing_tbl_recy(dux1, duy1, duz1, ux1, uy1, uz1)
+    elseif (itype.eq.itype_tbl_temp) then
+      
+      call momentum_forcing_tbl_temp(dux1, duy1, duz1, ux1, uy1, uz1)
     endif
 
   end subroutine momentum_forcing
