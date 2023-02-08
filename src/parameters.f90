@@ -89,7 +89,8 @@ subroutine parameter(input_i3d)
   NAMELIST/spatial_equiv/U_ratio, accel_centre, alpha_accel
   NAMELIST/hquadrant/h_quads
   NAMELIST/spectra_corr/spectra_corr_ylocs
-  NAMELIST/tbl_temp/Re_D, istatout, ispectout, ispectstart
+  NAMELIST/tbl_temp/Re_D, istatout, ispectout, ispectstart, iaccel
+  NAMELIST/temptbl_linear/U_ratio, t_start, t_end
 #ifdef DEBG
   if (nrank == 0) write(*,*) '# parameter start'
 #endif
@@ -289,6 +290,12 @@ subroutine parameter(input_i3d)
   if (itype == itype_tbl_temp) then
    read(10,nml=tbl_temp); rewind(10)
    itempaccel=1
+   if (iaccel.eq.1) then
+      read(10,nml=temptbl_linear); rewind(10)
+   else if (iaccel.ne.0) then
+      write(*,*) "Invalid iaccel"
+      call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+   endif
   endif
 
   if (itempaccel==1) then
@@ -681,9 +688,18 @@ subroutine parameter(input_i3d)
          write(*,"(' Body force extent   : ',F17.8)") linear_ext
       endif
       write(*,*) '==========================================================='
-   else if (itype==itype_channel) then
+     else if (itype==itype_channel) then
       write(*,*) "No streamwise body forces"
-   endif
+     endif
+
+     if (itype == itype_tbl_temp) then
+      if (iaccel == 0) then
+         write(*,*) "Constant velocity moving wall"
+      else if (iaccel == 1) then
+         write(*,*) "Linear acceleration moving wall"
+      endif
+      write(*,*) '==========================================================='
+     endif
   endif
   
   if (iibm.eq.3) then ! This is only for the Cubic Spline Reconstruction

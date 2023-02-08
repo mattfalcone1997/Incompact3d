@@ -1,8 +1,33 @@
 module tbl_temp
     use decomp_2d
     implicit none
-    contains
+    private
 
+    procedure(real(mytype)), pointer :: wall_velocity
+
+    public :: setup_tbl_temp, init_tbl_temp, momentum_forcing_tbl_temp
+    public :: boundary_conditions_tbl_temp, postprocess_tbl_temp
+    public :: visu_tbl_temp, visu_tbl_temp_init
+
+    contains
+    subroutine setup_tbl_temp()
+        use param, only : itype, itype_tbl_temp, iaccel, t_start, t_end
+        use MPI
+        integer :: code
+
+        if (itype.ne.itype_tbl_temp) return
+
+
+        if (iaccel == 0) then
+            wall_velocity => const_velo
+        else if (iaccel == 1) then
+            if (t_start > t_end) then
+                write(*,*) "t_start cannot be greater than t_end" 
+                call MPI_Abort(MPI_COMM_WORLD,1,code)
+            endif
+            wall_velocity => linear_accel
+        endif
+    end subroutine
     subroutine init_tbl_temp(ux1,uy1,uz1,ep1,phi1)
 
         use decomp_2d_io
@@ -105,21 +130,49 @@ module tbl_temp
 
     subroutine boundary_conditions_tbl_temp (ux,uy,uz,phi)
         use param, only : ncly1, nclyn, one, zero
-        use var, only: numscalar, byx1, byy1, byz1, byxn, byyn, byzn, yp
+        use param, only: ilast, ifirst
+        use var, only: numscalar, byx1, byy1, byz1, byxn, byyn
+        use var, only:  byzn, yp, t, itime
+        use variables, only: ilist
 
         implicit none
     
         real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux,uy,uz
         real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
-        
+
+        if ((mod(itime,ilist)==0.or. itime == ifirst .or. itime == ilast) .and. nrank ==0) &
+                write(*,*) 'U_w', wall_velocity(t)
+
         if (ncly1==2) then
-            byx1=one;byy1=zero;byz1=zero
+            byx1=wall_velocity(t)
+            byy1=zero;byz1=zero
         endif
         if (nclyn==2) then
             byxn=zero;byyn=zero;byzn=zero
         endif
 
     end subroutine boundary_conditions_tbl_temp
+
+    function const_velo(time) result(wall_velo)
+        use param, only: one
+        real(mytype), intent(in) :: time
+        real(mytype) :: wall_velo
+        wall_velo = one
+    end function const_velo
+
+    function linear_accel(time) result(wall_velo)
+        use param, only: t_start, t_end, U_ratio, one
+        real(mytype), intent(in) :: time
+        real(mytype) :: wall_velo
+        if (time < t_start) then
+            wall_velo = one
+        elseif (time > t_end) then
+            wall_velo = U_ratio
+        else
+            wall_velo = one + (U_ratio - one)*(time - t_start)/(t_end - t_start)
+        endif
+    end function linear_accel
+
 
     subroutine postprocess_tbl_temp(ux1,uy1,uz1,ep1)
         real(mytype),intent(in),dimension(xsize(1),xsize(2),xsize(3)) :: ux1, uy1, uz1, ep1

@@ -108,7 +108,7 @@ subroutine init_xcompact3d()
        simu_stats, compute_cfldiff, &
        init_inflow_outflow
 
-  use param, only : ilesmod, jles,itype, iaccel
+  use param, only : ilesmod, jles,itype, iaccel, itype_tbl_temp
   use param, only : irestart
 
   use variables, only : nx, ny, nz, nxm, nym, nzm
@@ -127,6 +127,7 @@ subroutine init_xcompact3d()
    use tbl_recy, only : restart_tbl_recy
 
    use channel, only : body_forces_init, temp_accel_init
+   use tbl_temp, only : setup_tbl_temp
   implicit none
 
   integer :: ierr
@@ -210,6 +211,10 @@ subroutine init_xcompact3d()
   if (itype == itype_channel) then
    call body_forces_init
    call temp_accel_init
+  endif
+
+  if (itype == itype_tbl_temp) then
+   call setup_tbl_temp
   endif
   !####################################################################
   ! initialise visu
