@@ -357,8 +357,9 @@ subroutine write_params_json
    use param
    use variables
    use decomp_2d, only : nrank
-   use tbl_recy, only : u_infty_calc
-   use channel, only : body_force, temp_accel_calc
+   use tbl_recy, only : write_params_tbl_recy
+   use channel, only : write_params_channel
+   use tbl_temp, only: write_params_tbl_temp
    use stats, only : h_quads
    implicit none
 
@@ -413,71 +414,7 @@ subroutine write_params_json
    write(fl,xfmt) '    "xcoords"',xcoords
    write(fl,yfmt) '    "ycoords"',yp
    write(fl,zfmt) '    "zcoords"',zcoords
-   write(fl,'(A)') "  },"
-
-   if (itype .eq. itype_tbl_recy) then
-      do i =1, nx
-         call u_infty_calc(i,u_infty(i),u_infty_grad)
-      enddo
-      write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nx-1,"(',',g0),']')"
-      
-      write(fl,"(A ,': {')") '  "tbl_recy"'
-      if (iaccel== 1) then
-         write(fl,"(A,': ',A,',')") '    "profile"','"tanh"'
-         write(fl,"(A,': ',g0,',')") '    "U_ratio"',U_ratio
-         write(fl,"(A,': ',g0,',')") '    "x0"',accel_centre
-         write(fl,"(A,': ',g0,',')") '    "alpha_accel"',alpha_accel
-      else if (iaccel==2) then
-         write(fl,"(A,': ',A,',')") '    "profile"','"tanh cubic"'
-         write(fl,"(A,': ',g0,',')") '    "U_ratio"',U_ratio
-         write(fl,"(A,': ',g0,',')") '    "x0"',accel_centre
-         write(fl,"(A,': ',g0,',')") '    "alpha_accel"',alpha_accel
-         write(fl,"(A,': ',g0,',')") '    "iaccel_thresh"',iaccel_thresh
-      else if (iaccel==3) then
-         write(fl,"(A,': ',A,',')") '    "profile"','"file"'
-      endif
-      write(fl,xfmt) '    "u_infty"',u_infty
-      write(fl,'(A)') "  },"
-
-   endif
-
-   if (ibodyforces.eq.1) then
-      write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ny-1,"(',',g0),']')"
-      
-      write(fl,"(A ,': {')") '  "bodyforces"'
-      write(fl,yfmt) '    "bf_array"', body_force
-      write(fl,'(A)') "  },"
-   endif
-
-   if(itempaccel == 1.and.itype==itype_channel) then
-      write(fl,"(A ,': {')") '  "temp_accel"'
-      if (iacceltype== 1) then
-         write(fl,"(A,': ',A,',')") '    "profile"','"linear"'
-         write(fl,"(A,': ',g0,',')") '    "t_start"',t_start
-         write(fl,"(A,': ',g0,',')") '    "t_end"',t_start
-         write(fl,"(A,': ',g0,',')") '    "Re_ratio"',Re_ratio
-      else if (iacceltype==2) then
-         write(fl,"(A,': ',A,',')") '    "profile"','"spatial equiv"'
-         write(fl,"(A,': ',g0,',')") '    "U_ratio"',U_ratio
-         write(fl,"(A,': ',g0,',')") '    "x0"',accel_centre
-         write(fl,"(A,': ',g0,',')") '    "alpha_accel"',alpha_accel
-      endif
-
-      allocate(u_b(ilast/ilist))
-      allocate(t_b(ilast/ilist))
-      
-      do i = 1,ilast/ilist
-         t_b(i) = real(i,kind=mytype)*dt*ilist
-         u_b(i) = temp_accel_calc( t_b(i))
-      enddo
-      write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ilast/ilist-1,"(',',g0),'],')"
-      write(fl,yfmt) '    "t"', t_b
-      write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ilast/ilist-1,"(',',g0),']')"
-      write(fl,yfmt) '    "U_b"', u_b
-
-      deallocate(u_b,t_b)
-      write(fl,'(A)') "  },"
-   endif
+   write(fl,'(A)') "  },"   
    if (istatquadrant) then
       write(fl,"(A ,': {')") '  "uv_quadrant"'
       if (nquads > 1) then
@@ -494,10 +431,16 @@ subroutine write_params_json
    else
       write(fl,'(A," : ",g0)') '    "dt"',dt
    endif   
-   write(fl,'(A)') "}"
 
    close(fl)
 
+   if (itype .eq. itype_tbl_recy) then
+      call write_params_tbl_recy
+   elseif (itype.eq. itype_channel) then
+      call write_params_channel
+   elseif(itype.eq.itype_tbl_temp) then
+      call write_params_tbl_temp
+   endif
 end subroutine
 
 subroutine write_run_info

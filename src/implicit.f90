@@ -554,6 +554,7 @@ subroutine  inttimp (var1,dvar1,npaire,isc,forcing1,id)
   use derivY
   use matinv
   use tbl_recy, only : u_infty_calc
+  use tbl_temp, only: wall_velocity
 
   implicit none
 
@@ -683,7 +684,7 @@ subroutine  inttimp (var1,dvar1,npaire,isc,forcing1,id)
       call MPI_Abort(MPI_COMM_WORLD,1,code)
    endif
    if (id.eq.1) then
-      bcbot(:,:) = one
+      bcbot(:,:) = wall_velocity(t)
    else
       bcbot(:,:) = zero
    endif

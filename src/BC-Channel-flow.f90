@@ -21,7 +21,7 @@ module channel
   PUBLIC :: init_channel, boundary_conditions_channel, postprocess_channel, &
             visu_channel, visu_channel_init, momentum_forcing_channel, &
             geomcomplex_channel, body_force, temp_accel_init, body_forces_init,&
-            temp_accel_calc
+            temp_accel_calc, write_params_channel
 
 contains
   !############################################################################
@@ -270,6 +270,55 @@ contains
     return
   end subroutine init_channel
   !############################################################################
+  subroutine write_params_channel
+   use param
+   use variables
+   real(mytype), dimension(:), allocatable :: u_b, t_b
+   character(80) :: xfmt, yfmt
+   integer :: fl, i
+   open(newunit=fl,file='parameters.json',status='old',action='write',position='append')
+
+   if (ibodyforces.eq.1) then
+      write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ny-1,"(',',g0),']')"
+      
+      write(fl,"(A ,': {')") '  "bodyforces"'
+      write(fl,yfmt) '    "bf_array"', body_force
+      write(fl,'(A)') "  },"
+   endif
+
+   if(itempaccel == 1) then
+      write(fl,"(A ,': {')") '  "temp_accel"'
+      if (iacceltype== 1) then
+         write(fl,"(A,': ',A,',')") '    "profile"','"linear"'
+         write(fl,"(A,': ',g0,',')") '    "t_start"',t_start
+         write(fl,"(A,': ',g0,',')") '    "t_end"',t_start
+         write(fl,"(A,': ',g0,',')") '    "Re_ratio"',Re_ratio
+      else if (iacceltype==2) then
+         write(fl,"(A,': ',A,',')") '    "profile"','"spatial equiv"'
+         write(fl,"(A,': ',g0,',')") '    "U_ratio"',U_ratio
+         write(fl,"(A,': ',g0,',')") '    "x0"',accel_centre
+         write(fl,"(A,': ',g0,',')") '    "alpha_accel"',alpha_accel
+      endif
+
+      allocate(u_b(ilast/ilist))
+      allocate(t_b(ilast/ilist))
+      
+      do i = 1,ilast/ilist
+         t_b(i) = real(i,kind=mytype)*dt*ilist
+         u_b(i) = temp_accel_calc( t_b(i))
+      enddo
+      write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ilast/ilist-1,"(',',g0),'],')"
+      write(fl,yfmt) '    "t"', t_b
+      write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ilast/ilist-1,"(',',g0),']')"
+      write(fl,yfmt) '    "U_b"', u_b
+
+      deallocate(u_b,t_b)
+      write(fl,'(A)') "  }"
+   endif
+   write(fl,'(A)') "}"
+   close(fl)
+  end subroutine write_params_channel
+
   !############################################################################
   subroutine boundary_conditions_channel (ux,uy,uz,phi)
 

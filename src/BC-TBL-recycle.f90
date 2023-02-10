@@ -54,7 +54,8 @@ module tbl_recy
   PUBLIC :: init_tbl_recy, boundary_conditions_tbl_recy,&
             postprocess_tbl_recy, visu_tbl_recy, &
             visu_tbl_recy_init, momentum_forcing_tbl_recy,&
-            u_infty_calc, restart_tbl_recy, tbl_recy_tripping
+            u_infty_calc, restart_tbl_recy, tbl_recy_tripping,&
+            write_params_tbl_recy
 
 contains
 
@@ -251,7 +252,41 @@ contains
 
     return
   end subroutine init_tbl_recy
+  subroutine write_params_tbl_recy
+      use param
+      use variables
+      real(mytype), dimension(nx) ::  u_infty
+      real(mytype) :: u_infty_grad
+      character(80) :: xfmt
+      integer :: fl, i
 
+      open(newunit=fl,file='parameters.json',status='old',action='write',position='append')
+      
+      do i =1, nx
+         call u_infty_calc(i,u_infty(i),u_infty_grad)
+      enddo
+      write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nx-1,"(',',g0),']')"
+      
+      write(fl,"(A ,': {')") '  "tbl_recy"'
+      if (iaccel== 1) then
+         write(fl,"(A,': ',A,',')") '    "profile"','"tanh"'
+         write(fl,"(A,': ',g0,',')") '    "U_ratio"',U_ratio
+         write(fl,"(A,': ',g0,',')") '    "x0"',accel_centre
+         write(fl,"(A,': ',g0,',')") '    "alpha_accel"',alpha_accel
+      else if (iaccel==2) then
+         write(fl,"(A,': ',A,',')") '    "profile"','"tanh cubic"'
+         write(fl,"(A,': ',g0,',')") '    "U_ratio"',U_ratio
+         write(fl,"(A,': ',g0,',')") '    "x0"',accel_centre
+         write(fl,"(A,': ',g0,',')") '    "alpha_accel"',alpha_accel
+         write(fl,"(A,': ',g0,',')") '    "iaccel_thresh"',iaccel_thresh
+      else if (iaccel==3) then
+         write(fl,"(A,': ',A,',')") '    "profile"','"file"'
+      endif
+      write(fl,xfmt) '    "u_infty"',u_infty
+      write(fl,'(A)') "  }"
+      write(fl,'(A)') "}"
+   close(fl)
+  end subroutine write_params_tbl_recy
   subroutine setup_tbl_recy
    use MPI
    use param, only: iimplicit

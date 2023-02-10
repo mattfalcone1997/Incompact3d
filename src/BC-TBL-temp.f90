@@ -7,9 +7,46 @@ module tbl_temp
 
     public :: setup_tbl_temp, init_tbl_temp, momentum_forcing_tbl_temp
     public :: boundary_conditions_tbl_temp, postprocess_tbl_temp
-    public :: visu_tbl_temp, visu_tbl_temp_init
+    public :: visu_tbl_temp, visu_tbl_temp_init, write_params_tbl_temp
+    public :: wall_velocity
 
     contains
+    subroutine write_params_tbl_temp
+        use param
+        use variables
+        real(mytype), dimension(:), allocatable :: u_w, t_b
+        character(80) :: yfmt
+        integer :: fl, i
+
+        open(newunit=fl,file='parameters.json',status='old',action='write',position='append')
+        if (iaccel.ne.0) write(fl,"(A ,': {')") '  "tbl_temp_accel"'
+        
+        if(iaccel==1) then
+            write(fl,"(A,': ',A,',')") '    "profile"','"linear"'
+            write(fl,"(A,': ',g0,',')") '    "U_ratio"',U_ratio
+            write(fl,"(A,': ',g0,',')") '    "t_start"',t_start
+            write(fl,"(A,': ',g0,',')") '    "t_end"',t_end
+        endif
+        if (iaccel.ne.0) then
+            allocate(u_w(ilast/ilist))
+            allocate(t_b(ilast/ilist))
+            
+            do i = 1,ilast/ilist
+            t_b(i) = real(i,kind=mytype)*dt*ilist
+            u_w(i) = wall_velocity( t_b(i))
+            enddo
+            write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ilast/ilist-1,"(',',g0),'],')"
+            write(fl,yfmt) '    "t"', t_b
+            write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ilast/ilist-1,"(',',g0),']')"
+            write(fl,yfmt) '    "U_w"', u_w
+
+            deallocate(u_w,t_b)
+        endif
+        write(fl,'(A)') "  }"
+        write(fl,'(A)') "}"
+
+        close(fl)
+    end subroutine
     subroutine setup_tbl_temp()
         use param, only : itype, itype_tbl_temp, iaccel, t_start, t_end
         use MPI
