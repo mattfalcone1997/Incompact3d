@@ -69,7 +69,69 @@ module stats
             autocorr_max_sep, autocorr_xlocs, spectra_corr_nlocs, spectra_corr_ylocs
 
 contains
+  subroutine write_params_stats
+    use param
+    use variables
+    use decomp_2d
+    real(mytype), dimension(:), allocatable :: u_w, t_b
+    character(80) :: xfmt
+    integer :: fl, i
+    integer :: nlocs, xlocs
 
+    if (nrank/=0) return
+    
+    open(newunit=fl,file='statistics.json',status='replace',action='write')
+    write(fl,'(A)') "{"
+    if (istatquadrant) then
+      write(fl,"(A ,': {')") '  "uv_quadrant"'
+      if (nquads > 1) then
+         write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nquads-1,"(',',g0),']')"
+      else
+         xfmt =  "( A, ': [',g0,']')"
+      endif
+      write(fl,xfmt) '    "h_quads"',h_quads
+      if ((istatspectra.and.spectra_level == 3.or.istatautocorr)) then
+        write(fl,'(A)') "  },"
+      else
+        write(fl,'(A)') "  }"
+      endif
+   endif
+    if (istatspectra.and.spectra_level == 3) then
+      write(fl,"(A ,': {')") '  "spectra_corr"'
+
+      if (spectra_corr_nlocs>1) then
+        write(xfmt,'(A,I0,A)') "( A, ': [',g0,",spectra_corr_nlocs-1,"(',',g0),']')"
+      else
+        write(xfmt,'(A,I0,A)') "( A, ': [',g0,']')"
+      endif
+      write(fl,xfmt) '    "y_locs"',spectra_corr_ylocs
+      
+      if (istatautocorr) then
+        write(fl,'(A)') "  },"
+      else
+        write(fl,'(A)') "  }"
+      endif
+    endif
+
+    if (istatautocorr) then
+      nlocs = (xlx - two*autocorr_max_sep) / autocorr_xlocs +1
+      xlocs = int(two*autocorr_max_sep/real(dx)) + 1
+
+      write(fl,"(A ,' : {')") '  "autocorrelation"'
+      if (nlocs>1) then
+        write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nlocs-1,"(',',g0),']')"
+      else
+        write(xfmt,'(A,I0,A)') "( A, ': [',g0,']')"
+      endif
+      write(fl,"(A ,': [',I0,',',I0,',',I0,'],')") '    "shape"',xlocs, ny, nlocs
+      write(fl,xfmt) '    "x_locs"',(autocorr_x_indices(:)-1)*dx
+      write(fl,'(A)') "  }"
+    endif
+
+    write(fl,'(A)') "}"
+    close(fl)
+
+  end subroutine write_params_stats
   subroutine init_statistic_adios2
 
     use decomp_2d, only : mytype
@@ -225,6 +287,8 @@ contains
 
     call grad_init
 
+    call write_params_stats
+
   end subroutine init_statistic
 
   subroutine init_spectra
@@ -322,22 +386,6 @@ contains
 
       spectra_corr_thisrank = color
       deallocate(code_list)
-
-      if (nrank ==0) then
-        open(newunit=fl,file='parameters.json',status='old',action='readwrite',position='append')
-        backspace(fl)
-        write(fl,"(A ,' : {')") '  "spectra_corr"'
-        if (spectra_corr_nlocs>1) then
-          write(xfmt,'(A,I0,A)') "( A, ': [',g0,",spectra_corr_nlocs-1,"(',',g0),']')"
-        else
-          write(xfmt,'(A,I0,A)') "( A, ': [',g0,']')"
-        endif
-        write(fl,xfmt) '    "y_locs"',spectra_corr_ylocs
-        if (istatautocorr) write(fl,'(A)') "  },"
-        if (.not.istatautocorr) write(fl,'(A)') "  }"
-          write(fl,'(A)') "}"
-        close(fl)
-      endif
     else
       write(*,*) "Invalid spectra level"
     call MPI_Abort(MPI_COMM_WORLD,1,code)
@@ -403,21 +451,6 @@ contains
       autocorr_x_indices(i) = int(autocorr_max_sep/dx) + int((i-1)*autocorr_xlocs/dx,kind=mytype)
     enddo
 
-    if (nrank ==0) then
-      open(newunit=fl,file='parameters.json',status='old',action='readwrite',position='append')
-      backspace(fl)
-      write(fl,"(A ,' : {')") '  "autocorrelation"'
-      if (nlocs>1) then
-        write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nlocs-1,"(',',g0),']')"
-      else
-        write(xfmt,'(A,I0,A)') "( A, ': [',g0,']')"
-      endif
-      write(fl,"(A ,': [',I0,',',I0,',',I0,'],')") '    "shape"',xlocs, ny, nlocs
-      write(fl,xfmt) '    "x_locs"',(autocorr_x_indices(:)-1)*dx
-      write(fl,'(A)') "  }"
-      write(fl,'(A)') "}"
-      close(fl)
-    endif
   end subroutine
   !
   ! Read all statistics if possible

@@ -276,6 +276,7 @@ contains
    real(mytype), dimension(:), allocatable :: u_b, t_b
    character(80) :: xfmt, yfmt
    integer :: fl, i
+   if (nrank .ne. 0) return
    open(newunit=fl,file='parameters.json',status='old',action='write',position='append')
 
    if (ibodyforces.eq.1) then
@@ -283,7 +284,8 @@ contains
       
       write(fl,"(A ,': {')") '  "bodyforces"'
       write(fl,yfmt) '    "bf_array"', body_force
-      write(fl,'(A)') "  },"
+      if (itempaccel /= 0) write(fl,'(A)') "  },"
+      if (itempaccel == 0) write(fl,'(A)') "  }"
    endif
 
    if(itempaccel == 1) then

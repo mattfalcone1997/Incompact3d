@@ -377,62 +377,55 @@ subroutine write_params_json
    ! acceleration
    ! tbl_recy
 
-   if (nrank .ne. 0) return
+   if (nrank .eq. 0) then
 
-   do i =1, nx
-      xcoords(i) = real(i-1,kind=mytype)*dx
-   enddo
-   if (istret.eq.0) then
-      do i = 1, ny
-         yp(i) = real(i-1,kind=mytype)*dy
+      do i =1, nx
+         xcoords(i) = real(i-1,kind=mytype)*dx
       enddo
-   endif
-   do i =1, nz
-      zcoords(i) = real(i-1,kind=mytype)*dz
-   enddo
-
-   open(newunit=fl,file='parameters.json',status='replace',action='write')
-
-   write(fl,'(A)') "{"
-   write(fl,"(A ,':',I0,',')") '  "itype"',itype
-   write(fl,"(A ,':',I0,',')") '  "istatcalc"',istatcalc
-   write(fl,"(A ,':',I0,',')") '  "initstat"',initstat
-   write(fl,"(A ,':',I0,',')") '  "initstat2"',initstat2
-
-   write(fl,"(A ,' : {')") '  "geometry"'
-   write(fl,"(A ,': ',g0,',')") '    "xlx"',xlx
-   write(fl,"(A ,' : ',g0,',')") '    "yly"', yly
-   write(fl,"(A ,': ',g0)") '    "zlz"', zlz
-   write(fl,*) "  },"
-
-   write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nx-1,"(',',g0),'],')"
-   write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ny-1,"(',',g0),'],')"
-   write(zfmt,'(A,I0,A)') "( A, ': [',g0,",nz-1,"(',',g0),']')"
-
-   write(fl,"(A ,': {')") '  "mesh"'
-   write(fl,"(A ,': [',I0,',',I0,',',I0,'],')") '    "sizes"',nx, ny, nz
-   write(fl,xfmt) '    "xcoords"',xcoords
-   write(fl,yfmt) '    "ycoords"',yp
-   write(fl,zfmt) '    "zcoords"',zcoords
-   write(fl,'(A)') "  },"   
-   if (istatquadrant) then
-      write(fl,"(A ,': {')") '  "uv_quadrant"'
-      if (nquads > 1) then
-         write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nquads-1,"(',',g0),']')"
-      else
-         xfmt =  "( A, ': [',g0,']')"
+      if (istret.eq.0) then
+         do i = 1, ny
+            yp(i) = real(i-1,kind=mytype)*dy
+         enddo
       endif
-      write(fl,xfmt) '    "h_quads"',h_quads
-      write(fl,'(A)') "  },"
-   endif
-   write(fl,"(A ,':',g0,',')") '  "re"',re
-   if (istatautocorr) then
-      write(fl,'(A," : ",g0,",")') '    "dt"',dt
-   else
-      write(fl,'(A," : ",g0)') '    "dt"',dt
-   endif   
+      do i =1, nz
+         zcoords(i) = real(i-1,kind=mytype)*dz
+      enddo
 
-   close(fl)
+      open(newunit=fl,file='parameters.json',status='replace',action='write')
+
+      write(fl,'(A)') "{"
+      write(fl,"(A ,':',I0,',')") '  "itype"',itype
+      write(fl,"(A ,':',I0,',')") '  "istatcalc"',istatcalc
+      write(fl,"(A ,':',I0,',')") '  "initstat"',initstat
+      write(fl,"(A ,':',I0,',')") '  "initstat2"',initstat2
+
+      write(fl,"(A ,' : {')") '  "geometry"'
+      write(fl,"(A ,': ',g0,',')") '    "xlx"',xlx
+      write(fl,"(A ,' : ',g0,',')") '    "yly"', yly
+      write(fl,"(A ,': ',g0)") '    "zlz"', zlz
+      write(fl,*) "  },"
+
+      write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nx-1,"(',',g0),'],')"
+      write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ny-1,"(',',g0),'],')"
+      write(zfmt,'(A,I0,A)') "( A, ': [',g0,",nz-1,"(',',g0),']')"
+
+      write(fl,"(A ,': {')") '  "mesh"'
+      write(fl,"(A ,': [',I0,',',I0,',',I0,'],')") '    "sizes"',nx, ny, nz
+      write(fl,xfmt) '    "xcoords"',xcoords
+      write(fl,yfmt) '    "ycoords"',yp
+      write(fl,zfmt) '    "zcoords"',zcoords
+      write(fl,'(A)') "  },"   
+
+      write(fl,"(A ,':',g0,',')") '  "re"',re
+      if (itype .eq. itype_tbl_recy.or.itype.eq. itype_channel&
+                           .or.itype.eq.itype_tbl_temp) then
+         write(fl,'(A," : ",g0,",")') '    "dt"',dt
+      else
+         write(fl,'(A," : ",g0)') '    "dt"',dt
+      endif   
+
+      close(fl)
+   endif
 
    if (itype .eq. itype_tbl_recy) then
       call write_params_tbl_recy

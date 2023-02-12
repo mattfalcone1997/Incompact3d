@@ -260,13 +260,12 @@ contains
       character(80) :: xfmt
       integer :: fl, i
 
+      if (nrank .ne. 0) return
       open(newunit=fl,file='parameters.json',status='old',action='write',position='append')
       
       do i =1, nx
          call u_infty_calc(i,u_infty(i),u_infty_grad)
-      enddo
-      write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nx-1,"(',',g0),']')"
-      
+      enddo      
       write(fl,"(A ,': {')") '  "tbl_recy"'
       if (iaccel== 1) then
          write(fl,"(A,': ',A,',')") '    "profile"','"tanh"'
@@ -282,6 +281,8 @@ contains
       else if (iaccel==3) then
          write(fl,"(A,': ',A,',')") '    "profile"','"file"'
       endif
+      
+      write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nx-1,"(',',g0),']')"
       write(fl,xfmt) '    "u_infty"',u_infty
       write(fl,'(A)') "  }"
       write(fl,'(A)') "}"

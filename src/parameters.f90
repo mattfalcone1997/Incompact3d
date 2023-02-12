@@ -91,6 +91,7 @@ subroutine parameter(input_i3d)
   NAMELIST/spectra_corr/spectra_corr_ylocs
   NAMELIST/tbl_temp/Re_D, istatout, ispectout, ispectstart, iaccel
   NAMELIST/temptbl_linear/U_ratio, t_start, t_end
+  NAMELIST/temptbl_equiv/U_ratio, accel_centre, alpha_accel, re_ref
 #ifdef DEBG
   if (nrank == 0) write(*,*) '# parameter start'
 #endif
@@ -292,6 +293,8 @@ subroutine parameter(input_i3d)
    itempaccel=1
    if (iaccel.eq.1) then
       read(10,nml=temptbl_linear); rewind(10)
+   else if (iaccel.eq.2) then
+      read(10,nml=temptbl_equiv); rewind(10)
    else if (iaccel.ne.0) then
       write(*,*) "Invalid iaccel"
       call MPI_Abort(MPI_COMM_WORLD,1,ierr)
@@ -878,6 +881,8 @@ subroutine parameter_defaults()
   t_start = zero
   t_end = zero
   use_center = .false.
+
+  re_ref = -1
 
   ! statistics
   istatcalc = 1

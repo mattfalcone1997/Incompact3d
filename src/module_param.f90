@@ -426,7 +426,7 @@ module param
   real(mytype) :: Re_ratio, t_start, t_end
   logical :: use_center
   ! tbl temporal
-  real(mytype) :: Re_D
+  real(mytype) :: Re_D, re_ref
 
   !numbers
 
