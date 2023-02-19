@@ -70,12 +70,12 @@ module tbl_temp
     subroutine setup_tbl_temp()
         use param, only : itype, itype_tbl_temp, iaccel, t_start, t_end
         use param, only : one, half, U_ratio, accel_centre, re_ref, ilast
-        use param, only: alpha_accel
+        use param, only: alpha_accel, zero
         use var, only : dt
         use dbg_schemes, only : tanh_prec
         use MPI
         integer :: code, i
-        real(mytype) :: x
+        real(mytype) :: x=zero
 
         if (itype.ne.itype_tbl_temp) return
 

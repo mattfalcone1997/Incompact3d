@@ -78,7 +78,7 @@ subroutine parameter(input_i3d)
   NAMELIST /CASE/ tgv_twod, pfront
   NAMELIST/ALMParam/iturboutput,NTurbines,TurbinesPath,NActuatorlines,ActuatorlinesPath,eps_factor,rho_air
   NAMELIST/ADMParam/Ndiscs,ADMcoords,C_T,aind,iturboutput,rho_air
-  NAMELIST/TBLRecy/plane_location, t_avg1,t_avg2, t_recy1, t_recy2, iaccel,t_trip
+  NAMELIST/TBLRecy/plane_location, t_avg1,t_avg2, t_recy1, t_recy2, iaccel,t_trip, re_in
   NAMELIST/tanhAccelTBL/U_ratio, accel_centre, alpha_accel
   NAMELIST/tanhAccelCubicTBL/U_ratio, accel_centre, alpha_accel, iaccel_thresh
   NAMELIST/fileAccel/accel_file
@@ -869,6 +869,7 @@ subroutine parameter_defaults()
   iaccel = 0
   U_ratio = one
   t_trip = 600.0_mytype
+  re_in = -1
 
    ! body forces
   ibodyforces = 0

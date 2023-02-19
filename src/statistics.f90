@@ -1069,7 +1069,7 @@ contains
     endif
 
     ! Write all statistics
-    if (write .or. write_spectra) call put_write_read_start(.false., write,&
+    if (write .or. (write_spectra.and.istatspectra)) call put_write_read_start(.false., write,&
                                                            write_spectra.and.istatspectra,&
                                                            write_spectra.and.istatautocorr)
     if (write) then

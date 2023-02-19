@@ -413,6 +413,7 @@ module param
   real(mytype) :: t_recy1, t_recy2
   real(mytype) :: t_trip
   real(mytype) :: plane_location
+  real(mytype) :: re_in
 
   !TBL acceleration params
   real(mytype) :: alpha_accel, U_ratio, accel_centre, iaccel_thresh
