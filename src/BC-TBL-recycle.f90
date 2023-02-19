@@ -315,6 +315,7 @@ contains
       call MPI_Abort(MPI_COMM_WORLD,1,ierror)
     endif
 
+    if (re_in<zero) re_in =re
     do i = 1, nx
       x = real(i-1,mytype)*dx
       if (x.gt.plane_location) then
@@ -1068,8 +1069,8 @@ end subroutine tbl_recy_tripping
       allocate(Cf(nx), delta_plus(nx))
       allocate(y_plus(ny), u_plus(ny))
 
-      call delta_plus_correlation(re, delta_plus)
-      call Cf_correlation(re, Cf)
+      call delta_plus_correlation(delta_plus)
+      call Cf_correlation(Cf)
 
       do i = 1, nx
           call u_infty_calc(i,u_infty,dudx)
@@ -1159,8 +1160,8 @@ end subroutine tbl_recy_tripping
       deallocate(dvdy)
   end subroutine
 
-   subroutine Cf_correlation(Re_theta_target,C_f)
-      real(mytype), intent(in) :: Re_theta_target
+   subroutine Cf_correlation(C_f)
+      use param, only: re, re_in
       real(mytype), dimension(:), intent(out) :: C_f
       real(mytype) :: Re_theta, x
 
@@ -1168,14 +1169,14 @@ end subroutine tbl_recy_tripping
 
       do i = 1, nx
           x = real(i-1,mytype)*dx
-          Re_theta = ( 0.015_mytype*x*Re_theta_target  + Re_theta_target**1.25_mytype)**0.8_mytype
+          Re_theta = ( 0.015_mytype*x*re  + re_in**1.25_mytype)**0.8_mytype
           C_f(i) = 0.024_mytype*Re_theta**(-0.25_mytype)
       enddo
 
   end subroutine Cf_correlation
 
-  subroutine delta_plus_correlation(Re_theta_target, delta_plus)
-      real(mytype), intent(in) :: Re_theta_target
+  subroutine delta_plus_correlation(delta_plus)
+      use param, only: re, re_in
       real(mytype), dimension(:), intent(out) :: delta_plus
       real(mytype) :: Re_theta, x
 
@@ -1183,7 +1184,7 @@ end subroutine tbl_recy_tripping
 
       do i = 1, nx
          x = real(i-1,mytype)*dx
-         Re_theta = ( 0.015_mytype*x*Re_theta_target  + Re_theta_target**1.25_mytype)**0.8_mytype
+         Re_theta = ( 0.015_mytype*x*re  + re_in**1.25_mytype)**0.8_mytype
          delta_plus(i) = 1.13_mytype*Re_theta**(0.843_mytype)
       enddo
   end subroutine
@@ -1311,7 +1312,7 @@ end subroutine tbl_recy_tripping
 
   subroutine GetScalings(delta_v_inlt, delta_v_recy, delta_i, delta_r, reset)
    use dbg_schemes
-   use param, only : irestart
+   use param, only : irestart, re, re_in
    real(mytype), intent(out) :: delta_v_inlt, delta_v_recy, delta_i, delta_r
    logical, intent(in), optional :: reset
    real(mytype) :: delta_meas
@@ -1319,7 +1320,7 @@ end subroutine tbl_recy_tripping
    logical, save :: first_call = .true.
    real(mytype) :: dyy, u_infty_recy, u_infty_inlt, u_thresh
    real(mytype) :: theta_inlt, theta_recy, int_inlt
-   real(mytype) :: int_recy, mid_u, u_tau
+   real(mytype) :: int_recy, mid_u, u_tau, theta_inlt_des
    real(mytype), parameter :: alp = 0.3
    integer :: i,j, unit, pos, nreads
    logical :: reset_local
@@ -1372,7 +1373,8 @@ end subroutine tbl_recy_tripping
          first_call = .false.
       endif
    else if (itr .eq. 1) then
-      delta_i = delta_inlt_old + alp*( one - theta_inlt)*delta_inlt_old
+      theta_inlt_des = re_in / re
+      delta_i = delta_inlt_old + alp*( theta_inlt_des - theta_inlt)*delta_inlt_old
       if (abs_prec(delta_i - delta_meas) > one) then
          delta_i = delta_meas + sign(one,delta_i - delta_meas)
       endif
@@ -1398,7 +1400,7 @@ end subroutine tbl_recy_tripping
                                  "u_tau_inlt","delta_v_recy","delta_v_inlt"
       
       else if (itime == ifirst) then
-         open(newunit=tbl_recy_log,file='tbl_recy.log',status='old',action='readwrite',position='append')
+         open(newunit=tbl_recy_log,file='tbl_recy.log',status='old',action='write',position='append')
       endif
 
       if ((mod(itime,ilist)==0.or.itime==1) .and. itr.eq.1) then
