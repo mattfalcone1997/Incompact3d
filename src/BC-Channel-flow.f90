@@ -17,6 +17,7 @@ module channel
   PRIVATE ! All functions/subroutines private by default
   procedure(real(mytype)), pointer :: temp_accel_calc
   real(mytype), dimension(:), allocatable :: ub_temp_accel
+  real(mytype) :: source_val, ub_old
 
   PUBLIC :: init_channel, boundary_conditions_channel, postprocess_channel, &
             visu_channel, visu_channel_init, momentum_forcing_channel, &
@@ -359,7 +360,7 @@ contains
             call channel_c_center(uz,u_b)
          endif
       endif
-
+      if (itr==1) source_val = compute_amp(u_b)
     end if
 
     if (iscalar /= 0) then
@@ -470,6 +471,30 @@ contains
   end subroutine
   !! calculation of temporal acceleration
 
+   function compute_amp(u_b) result(dudt)
+      real(mytype),intent(in) :: u_b
+      real(mytype) :: dudt
+
+      integer :: unit
+
+      if (itempbf ==0) then
+         dudt = one
+         return
+      endif
+      dudt = (u_b - ub_old)/gdt(itr)
+      ub_old = u_b
+      if (nrank==0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime == ilast)) then
+         write(*,*) 'itempbf: dudt', dudt
+         if (itime==1) then
+            open(newunit=unit,file='dudt.csv',status='replace',action='write',position='append')
+            write(unit,*) '# itime, t, dudt'
+         else 
+            open(newunit=unit,file='dudt.csv',status='old',action='write',position='append')
+         endif
+         write(unit,'(I0,",", g0,",", g0)') itime, t, dudt
+         close(unit)
+      endif
+   end function
   real(mytype) function linear_temp(temp)
    real(mytype), intent(in) :: temp
 
@@ -590,13 +615,13 @@ contains
       if (idir_stream == 1) then
          do j = 1,xsize(2)
             jloc = j + xstart(2) -1
-            dux1(:,j,:,1) = dux1(:,j,:,1) + body_force(jloc)
+            dux1(:,j,:,1) = dux1(:,j,:,1) + source_val*body_force(jloc)
          enddo
 
       else
          do j = 1,xsize(2)
             jloc = j + xstart(2) -1
-            duz1(:,j,:,1) = duz1(:,j,:,1) + body_force(jloc)
+            duz1(:,j,:,1) = duz1(:,j,:,1) + source_val*body_force(jloc)
          enddo
       endif
 
@@ -656,7 +681,7 @@ contains
    endif
   end subroutine
   subroutine body_forces_init
-   use dbg_schemes, only : abs_prec
+   use dbg_schemes, only : abs_prec, sin_prec
    integer :: j
    real(mytype) :: lim, y
    if (ibodyforces.eq.1) then
@@ -665,13 +690,23 @@ contains
       body_force = zero
 
       if (ibftype.eq.1) then
-         lim = one - linear_ext
+         lim = one - bf_ext
          do j = 1, ny
             if (istret==0) y=real(j,mytype)*dy-yly*half
             if (istret/=0) y=yp(j)-yly*half
             
             if (abs_prec(y)>lim) then
-               body_force(j) = linear_amp*(abs_prec(y)-lim)/linear_ext
+               body_force(j) = bf_amp*(abs_prec(y)-lim)/bf_ext
+            endif
+         enddo
+      elseif (ibftype.eq.2) then
+         lim = one - bf_ext
+         do j = 1, ny
+            if (istret==0) y=real(j,mytype)*dy-yly*half
+            if (istret/=0) y=yp(j)-yly*half
+            
+            if (abs_prec(y)>lim) then
+               body_force(j) = bf_amp*sin_prec(pi*(one - abs_prec(y))/bf_ext)**2
             endif
          enddo
       endif

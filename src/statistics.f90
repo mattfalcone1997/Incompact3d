@@ -496,7 +496,7 @@ contains
       call read_autocorr('statistics/'//gen_statname("autocorr_mean"))
     endif
 
-    call put_write_read_end(.true.)
+    call put_write_read_end(.true.,.true.)
 
   end subroutine restart_statistic
 
@@ -868,6 +868,10 @@ contains
     logical, intent(in) :: flag_read,write,write_spectra,write_autocorrelation
 
     integer :: it
+    logical :: output
+
+    output = write.or.write_spectra.or.write_autocorrelation
+    if (.not. output) return
     ! File ID to read or write
     if (flag_read) then
         it = itime - 1
@@ -891,9 +895,11 @@ contains
     
   end subroutine
 
-  subroutine put_write_read_end(flag_read)
+  subroutine put_write_read_end(flag_read, output)
     use decomp_2d
-    logical, intent(in) :: flag_read
+    logical, intent(in) :: flag_read, output
+
+    if (.not. output) return
 
     if (nrank==0) then
       if (flag_read) then
@@ -1069,9 +1075,8 @@ contains
     endif
 
     ! Write all statistics
-    if (write .or. (write_spectra.and.istatspectra)) call put_write_read_start(.false., write,&
-                                                           write_spectra.and.istatspectra,&
-                                                           write_spectra.and.istatautocorr)
+    call put_write_read_start(.false., write, write_spectra.and.istatspectra,&
+                                              write_spectra.and.istatautocorr)
     if (write) then
        call read_or_write_all_stats(.false.)
     endif
@@ -1090,7 +1095,8 @@ contains
         endif
       endif
     endif
-    if (write .or. write_spectra) call put_write_read_end(.false.)
+    call put_write_read_end(.false., write.or. (write_spectra.and.istatspectra)&
+                                            .or.(write_spectra.and.istatautocorr))
 
   end subroutine overall_statistic
 

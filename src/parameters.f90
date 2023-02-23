@@ -82,8 +82,9 @@ subroutine parameter(input_i3d)
   NAMELIST/tanhAccelTBL/U_ratio, accel_centre, alpha_accel
   NAMELIST/tanhAccelCubicTBL/U_ratio, accel_centre, alpha_accel, iaccel_thresh
   NAMELIST/fileAccel/accel_file
-  NAMELIST/bodyForce/ibodyforces,ibftype
-  NAMELIST/linearBodyF/linear_amp,linear_ext
+  NAMELIST/bodyForce/ibodyforces,ibftype, itempbf
+  NAMELIST/linearBodyF/bf_amp,bf_ext
+  NAMELIST/sin2BodyF/bf_amp,bf_ext
   NAMELIST/tempAccel/itempaccel, iacceltype, istatout,ispectout,ispectstart
   NAMELIST/linear_prof/Re_ratio, t_start, t_end
   NAMELIST/spatial_equiv/U_ratio, accel_centre, alpha_accel
@@ -273,6 +274,8 @@ subroutine parameter(input_i3d)
    if (iostat ==0.and.ibodyforces.eq.1) then
       if (ibftype.eq.1) then
          read(10,nml=linearBodyF); rewind(10)
+      else if (ibftype.eq.2) then
+         read(10,nml=sin2BodyF); rewind(10)
       endif
    else
       ibodyforces = 0
@@ -687,8 +690,12 @@ subroutine parameter(input_i3d)
       write(*,*) "Streamwise body forces activated:"
       if (ibftype.eq.1) then
          write(*,*) "Linear body force selected"
-         write(*,"(' Body force amplitude   : ',F17.8)") linear_amp
-         write(*,"(' Body force extent   : ',F17.8)") linear_ext
+         write(*,"(' Body force amplitude   : ',F17.8)") bf_amp
+         write(*,"(' Body force extent   : ',F17.8)") bf_ext
+      else
+         write(*,*) "Sine squared body force selected"
+         write(*,"(' Body force amplitude   : ',F17.8)") bf_amp
+         write(*,"(' Body force extent   : ',F17.8)") bf_ext
       endif
       write(*,*) '==========================================================='
      else if (itype==itype_channel) then
@@ -873,8 +880,10 @@ subroutine parameter_defaults()
 
    ! body forces
   ibodyforces = 0
-  linear_amp = zero
-  linear_ext = zero
+  bf_amp = zero
+  bf_ext = zero
+  ibftype = 0
+  itempbf = 0
 
   ! temporal acceleration
   itempaccel = 0
