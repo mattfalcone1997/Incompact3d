@@ -546,7 +546,7 @@ contains
          if (.not. exists) call system("mkdir -p body_force")
          write(fname,'(A,"/",A,"-",I7.7)') "body_force", "bodyf", itime
          open(newunit=unit,file=fname,status='replace',action='write',access='stream')
-         write(unit) body_force
+         write(unit) body_force*source_val
          close(unit)
       endif
 
