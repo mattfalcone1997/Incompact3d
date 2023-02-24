@@ -43,7 +43,7 @@ if (Fortran_COMPILER_NAME MATCHES "GNU")
     set(CMAKE_Fortran_FLAGS "-cpp -funroll-loops -floop-optimize -g -Warray-bounds -fcray-pointer -fbacktrace -ffree-line-length-none -fallow-argument-mismatch")
   endif (CMAKE_Fortran_COMPILER_VERSION GREATER_EQUAL "10")
   set(CMAKE_Fortran_FLAGS_RELEASE "-funroll-all-loops -fno-f2c -O3")
-  set(CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g -DBL_DEBG -Wall -Wno-unused-variable  -Wno-unused-dummy-argument")
+  set(CMAKE_Fortran_FLAGS_DEBUG   "-O0 -g -fcheck=bounds -Wall -Wno-unused-variable  -Wno-unused-dummy-argument ")
 elseif (Fortran_COMPILER_NAME MATCHES "Intel")
   message(STATUS "Setting ifort flags")
   set(CMAKE_Fortran_FLAGS "-fpp -xHost -heaparrays -safe-cray-ptr -g -traceback")
@@ -136,8 +136,6 @@ if(ADIOS2_FOUND)
 else()
   message(STATUS "ADIOS2 not found")
 endif()
-
-option(SPECTRA_ENABLED "Use fftw library to compute energy spectra" OFF)
 
 # Create a static library for the fft
 add_subdirectory(decomp2d)

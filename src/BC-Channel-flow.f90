@@ -13,7 +13,7 @@ module channel
   integer :: FS
   character(len=100) :: fileformat
   character(len=1),parameter :: NL=char(10) !new line character
-  real(mytype), dimension(:), allocatable :: body_force
+  real(mytype), dimension(:), allocatable :: body_force, base_force
   PRIVATE ! All functions/subroutines private by default
   procedure(real(mytype)), pointer :: temp_accel_calc
   real(mytype), dimension(:), allocatable :: ub_temp_accel
@@ -46,7 +46,7 @@ contains
 
     real(mytype) :: y,r,um,r3,x,z,h,ct
     real(mytype) :: cx0,cy0,cz0,hg,lg
-    real(mytype) :: ftent
+    real(mytype) :: ftent, u_max
     integer :: k,j,i,fh,ierror,ii,is,it,code, jj
 
     !integer, dimension (:), allocatable :: seed
@@ -144,12 +144,14 @@ contains
              if (istret/=0) y=yp(j+xstart(2)-1)-yly*half
              um=exp_prec(-zptwo*y*y)
              do i=1,xsize(1)
+                if (use_center) u_max = one
+                if (.not.use_center) u_max = onepfive
                 if (idir_stream == 1) then
-                   ux1(i,j,k)=init_noise*um*(two*ux1(i,j,k)-one)+onepfive*(one-y*y)
+                   ux1(i,j,k)=init_noise*um*(two*ux1(i,j,k)-one)+u_max*(one-y*y)
                    uy1(i,j,k)=init_noise*um*(two*uy1(i,j,k)-one)
                    uz1(i,j,k)=init_noise*um*(two*uz1(i,j,k)-one)
                 else
-                   uz1(i,j,k)=init_noise*um*(two*ux1(i,j,k)-one)+one-y*y
+                   uz1(i,j,k)=init_noise*um*(two*ux1(i,j,k)-one)+u_max*(one-y*y)
                    uy1(i,j,k)=init_noise*um*(two*uy1(i,j,k)-one)
                    ux1(i,j,k)=init_noise*um*(two*uz1(i,j,k)-one)
                 endif
@@ -281,10 +283,13 @@ contains
    open(newunit=fl,file='parameters.json',status='old',action='write',position='append')
 
    if (ibodyforces.eq.1) then
-      write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ny-1,"(',',g0),']')"
+      write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ny-1,"(',',g0),'],')"
       
       write(fl,"(A ,': {')") '  "bodyforces"'
       write(fl,yfmt) '    "bf_array"', body_force
+      write(fl,"(A,':'I0,',')") '    "ibftype"', ibftype
+      write(fl,"(A,':'I0)")'    "itempbf"', itempbf
+
       if (itempaccel /= 0) write(fl,'(A)') "  },"
       if (itempaccel == 0) write(fl,'(A)') "  }"
    endif
@@ -530,7 +535,22 @@ contains
     real(mytype), intent(in), dimension(xsize(1),xsize(2),xsize(3)) :: ux1, uy1, uz1, ep1
     real(mytype), intent(in), dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
     real(mytype), intent(in), dimension(ph1%zst(1):ph1%zen(1),ph1%zst(2):ph1%zen(2),nzmsize,npress) :: pp3
+    
+    logical :: exists
+    integer :: unit
+    character(len=128) :: fname
 
+    if (mod(itime,istatout)==0 .and. itime>=initstat) then
+      if (nrank==0) then
+         inquire(file="body_force",exist=exists)
+         if (.not. exists) call system("mkdir -p body_force")
+         write(fname,'(A,"/",A,"-",I7.7)') "body_force", "bodyf", itime
+         open(newunit=unit,file=fname,status='replace',action='write',access='stream')
+         write(unit) body_force
+         close(unit)
+      endif
+
+    endif
   end subroutine postprocess_channel
   subroutine visu_channel_init(visu_initialised)
 
@@ -611,6 +631,8 @@ contains
        duy1(:,:,:,1) = duy1(:,:,:,1) + wrotation*ux1(:,:,:)
     endif
 
+    if (itempbf==2) call compute_tempbf(ux1)
+
     if (ibodyforces.eq.1) then
       if (idir_stream == 1) then
          do j = 1,xsize(2)
@@ -628,7 +650,84 @@ contains
 
     endif
   end subroutine momentum_forcing_channel
+  subroutine compute_tempbf(ux)
+   use dbg_schemes, only: abs_prec
+   use MPI
+   real(mytype), dimension(xsize(1),xsize(2),xsize(3)), intent(in) :: ux
+   real(mytype), dimension(xsize(2)) :: u_l, u
+   real(mytype), dimension(ny) :: u_g, dudy
+   integer, dimension(:), allocatable :: recvcounts, displs
+   integer :: code, split_comm_y, split_comm_z, key, color, i, j, k
+   
+   integer, dimension(2) :: dims, coords
+   logical, dimension(2) :: periods
+   real(mytype) :: a, b, c, ddy1, ddy2
 
+   if (itempbf==2) then
+      u_l(:) = zero
+      do k = 1, xsize(3)
+         do j = 1, xsize(2)
+            do i = 1, xsize(1)
+               u_l(j) = u_l(j) + ux(i,j,k)
+            enddo
+         enddo
+      enddo
+
+      u_l(:) = u_l(:)/real(nx*nz,kind=mytype)
+
+      call MPI_CART_GET(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, code)
+
+      key = coords(1)
+      color = coords(2)
+  
+      call MPI_Comm_split(DECOMP_2D_COMM_CART_X, key,color, split_comm_y,code)
+      call MPI_Comm_split(DECOMP_2D_COMM_CART_X, color,key, split_comm_z,code)
+  
+      call MPI_Allreduce(u_l,u,xsize(2),&
+                         real_type,MPI_SUM,split_comm_y,code)
+
+      allocate(recvcounts(dims(1)),displs(dims(1)))
+      call MPI_Allgather(xsize(2),1,MPI_INTEGER,recvcounts,1,MPI_INTEGER,split_comm_z,code)
+      call MPI_Allgather(xstart(2)-1,1,MPI_INTEGER,displs,1,MPI_INTEGER,split_comm_z,code)
+      call MPI_AllGatherv(u,xsize(2),real_type,u_g, recvcounts,displs,&
+                           real_type,split_comm_z,code)
+
+      do j = 2, ny-1
+         ddy1 = yp(j) - yp(j-1)
+         ddy2 = yp(j+1) - yp(j)
+
+         a = -(ddy2)/(ddy1 * (ddy1 + ddy2))
+         b = (ddy2 - ddy1) / (ddy1 * ddy2)
+         c = ddy1 / (ddy2 * (ddy1 + ddy2))
+
+         dudy(j) = a*u_g(j-1) + b*u_g(j) + c*u_g(j+1)
+      enddo
+      
+      ddy1 = yp(2) - yp(1)
+      ddy2 = yp(3) - yp(2)
+
+      a = -( two*ddy1 + ddy2)/(ddy1*(ddy1 + ddy2))
+      b = (ddy1 + ddy2)/(ddy1*ddy2)
+      c = -ddy1/(ddy2*(ddy1 + ddy2))
+
+      dudy(1) = a*u_g(1) + b*u_g(2) + c*u_g(3)
+      
+      ddy1 = yp(ny-1) - yp(ny-2)
+      ddy2 = yp(ny) - yp(ny-1)
+
+      a = ddy2/(ddy1*(ddy1 + ddy2))
+      b = -(ddy1 + ddy2)/(ddy1*ddy2)
+      c = (two*ddy2 + ddy1)/(ddy2*(ddy1 + ddy2))
+  
+      dudy(ny) = a*u_g(ny-2) + b*u_g(ny-1) + c*u_g(ny)
+
+      do j = 1, ny
+         body_force(j) = zpfive*base_force(j)*(dudy(j) - dudy(ny-j+1))*sign(one,-(yp(j)-half*yly))
+      enddo
+      call MPI_Comm_free(split_comm_y,code)
+      call MPI_Comm_free(split_comm_z,code)
+   endif
+  end subroutine
   subroutine mass_flow_conserve(du1)
    use MPI
    real(mytype), intent(inout), dimension(xsize(1), xsize(2), xsize(3),ntime) :: du1
@@ -681,13 +780,14 @@ contains
    endif
   end subroutine
   subroutine body_forces_init
-   use dbg_schemes, only : abs_prec, sin_prec
+   use dbg_schemes, only : abs_prec, sin_prec, tanh_prec
    integer :: j
    real(mytype) :: lim, y
    if (ibodyforces.eq.1) then
 
       allocate(body_force(ny))
       body_force = zero
+      ub_old = one
 
       if (ibftype.eq.1) then
          lim = one - bf_ext
@@ -709,6 +809,16 @@ contains
                body_force(j) = bf_amp*sin_prec(pi*(one - abs_prec(y))/bf_ext)**2
             endif
          enddo
+      elseif (ibftype.eq.3) then
+         allocate(base_force(ny))
+         do j = 1, ny
+            if (istret==0) y=real(j,mytype)*dy
+            if (istret/=0) y=yp(j)
+            
+            base_force(j) = zpfive*bf_amp*(tanh_prec(bf_alp*(y-bf_ext)) &
+                                             + tanh_prec(-bf_alp*(y-(yly-bf_ext))))
+         enddo
+         body_force(:) = base_force(:)
       endif
    endif
 

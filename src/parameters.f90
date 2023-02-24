@@ -85,6 +85,7 @@ subroutine parameter(input_i3d)
   NAMELIST/bodyForce/ibodyforces,ibftype, itempbf
   NAMELIST/linearBodyF/bf_amp,bf_ext
   NAMELIST/sin2BodyF/bf_amp,bf_ext
+  NAMELIST/tanhBodyF/bf_amp,bf_ext,bf_alp
   NAMELIST/tempAccel/itempaccel, iacceltype, istatout,ispectout,ispectstart
   NAMELIST/linear_prof/Re_ratio, t_start, t_end
   NAMELIST/spatial_equiv/U_ratio, accel_centre, alpha_accel
@@ -276,6 +277,8 @@ subroutine parameter(input_i3d)
          read(10,nml=linearBodyF); rewind(10)
       else if (ibftype.eq.2) then
          read(10,nml=sin2BodyF); rewind(10)
+      else if (ibftype.eq.3) then
+         read(10,nml=tanhBodyF); rewind(10)
       endif
    else
       ibodyforces = 0
@@ -692,10 +695,15 @@ subroutine parameter(input_i3d)
          write(*,*) "Linear body force selected"
          write(*,"(' Body force amplitude   : ',F17.8)") bf_amp
          write(*,"(' Body force extent   : ',F17.8)") bf_ext
-      else
+      else if (ibftype.eq.2) then
          write(*,*) "Sine squared body force selected"
          write(*,"(' Body force amplitude   : ',F17.8)") bf_amp
          write(*,"(' Body force extent   : ',F17.8)") bf_ext
+      else
+         write(*,*) "tanh body force selected"
+         write(*,"(' Body force amplitude   : ',F17.8)") bf_amp
+         write(*,"(' Body force extent   : ',F17.8)") bf_ext
+         write(*,"(' Tanh stretching   : ',F17.8)") bf_alp
       endif
       write(*,*) '==========================================================='
      else if (itype==itype_channel) then
@@ -882,6 +890,7 @@ subroutine parameter_defaults()
   ibodyforces = 0
   bf_amp = zero
   bf_ext = zero
+  bf_alp = zero
   ibftype = 0
   itempbf = 0
 

@@ -2068,7 +2068,7 @@ contains
     coefy_bc1(3) = -ddy1/(ddy2*(ddy1 + ddy2))
 
     ddy1 = yp(ny-1) - yp(ny-2)
-    ddy2 = yp(ny-2) - yp(ny-3)
+    ddy2 = yp(ny) - yp(ny-1)
 
     coefy_bcn(1) = ddy2/(ddy1*(ddy1 + ddy2))
     coefy_bcn(2) = -(ddy1 + ddy2)/(ddy1*ddy2)

@@ -420,7 +420,7 @@ module param
   character(len=80) :: accel_file
   !channel body forces
   integer :: ibodyforces, ibftype, itempbf
-  real(mytype) :: bf_amp, bf_ext
+  real(mytype) :: bf_amp, bf_ext, bf_alp
 
   !channel temporal acceleration
   integer :: itempaccel, iacceltype
