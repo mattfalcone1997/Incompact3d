@@ -541,7 +541,7 @@ contains
     character(len=128) :: fname
 
     if (mod(itime,istatout)==0 .and. itime>=initstat) then
-      if (nrank==0) then
+      if (nrank==0.and.ibodyforces.ne.0) then
          inquire(file="body_force",exist=exists)
          if (.not. exists) call system("mkdir -p body_force")
          write(fname,'(A,"/",A,"-",I7.7)') "body_force", "bodyf", itime
