@@ -361,6 +361,7 @@ subroutine write_params_json
    use channel, only : write_params_channel
    use tbl_temp, only: write_params_tbl_temp
    use stats, only : h_quads
+   use visu, only: use_window, window_dt, window_hwidth, output_fname
    implicit none
 
    real(mytype), dimension(nx) :: xcoords, u_infty
@@ -369,6 +370,7 @@ subroutine write_params_json
    real(mytype) :: u_infty_grad, t_tmp
    character(80) :: xfmt, zfmt,yfmt
    integer :: fl, i
+   logical :: endstop
    ! itype
    ! mesh
    ! geometry
@@ -416,12 +418,25 @@ subroutine write_params_json
       write(fl,zfmt) '    "zcoords"',zcoords
       write(fl,'(A)') "  },"   
 
+      if (use_window) then
+
+         write(fl,"(A ,': {')") '  "window"'
+         write(fl,"(A ,':',A,',')") '    "file"', '"'//trim(output_fname)//'"'
+         write(fl,"(A ,': ',I0,',')") '    "hwidth"',window_hwidth
+         write(fl,"(A ,': ',I0)") '    "dt"',window_dt
+         write(fl,'(A)') "  },"   
+      endif
+      
       write(fl,"(A ,':',g0,',')") '  "re"',re
-      if (itype .eq. itype_tbl_recy.or.itype.eq. itype_channel&
-                           .or.itype.eq.itype_tbl_temp) then
-         write(fl,'(A," : ",g0,",")') '    "dt"',dt
+      endstop = itype .eq. itype_tbl_recy&
+                   .or.(itype.eq. itype_channel&
+                   .and.(itempaccel/=0.or.ibodyforces/=0))&
+                   .or.itype.eq.itype_tbl_temp
+
+      if (endstop) then
+         write(fl,'(A," : ",g0,",")') '  "dt"',dt
       else
-         write(fl,'(A," : ",g0)') '    "dt"',dt
+         write(fl,'(A," : ",g0)') '  "dt"',dt
       endif   
 
       close(fl)

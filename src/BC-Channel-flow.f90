@@ -663,6 +663,7 @@ contains
    logical, dimension(2) :: periods
    real(mytype) :: a, b, c, ddy1, ddy2
 
+   if (ibodyforces==0) return
    if (itempbf==2) then
       u_l(:) = zero
       do k = 1, xsize(3)

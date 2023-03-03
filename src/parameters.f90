@@ -32,6 +32,7 @@ subroutine parameter(input_i3d)
   use probes, only : nprobes, nlineprobes, setup_probes, flag_all_digits,&
                      flag_extra_probes, xyzprobes, zlineprobes, probe_freq
   use visu, only : output2D, output_use_fname, output_fname
+  use visu, only : use_window, window_dt, window_hwidth
   use forces, only : iforces, nvol, xld, xrd, yld, yud!, zld, zrd
 
   implicit none
@@ -54,7 +55,7 @@ subroutine parameter(input_i3d)
        nu0nu, cnu, ipinter
   NAMELIST /InOutParam/ irestart, icheckpoint, ioutput, nvisu, ilist, iprocessing, &
        ninflows, ntimesteps, inflowpath, ioutflow, output2D, nprobes, log_cputime,&
-       nlineprobes, output_use_fname, output_fname
+       nlineprobes, output_use_fname, output_fname, use_window, window_dt,window_hwidth
   NAMELIST /Statistics/ wrotation,spinup_time, nstat, initstat, &
             istatcalc, istatbudget,istatpstrain,istatlambda2, initstat2,&
             istatquadrant, nquads, istatflatness, istatspectra,spectra_level,&
@@ -746,7 +747,7 @@ subroutine parameter_defaults()
   use complex_geometry
 
   use probes, only : nprobes, flag_all_digits, flag_extra_probes, probe_freq, nlineprobes
-  use visu, only : output2D
+  use visu, only : output2D, use_window, window_dt, window_hwidth, output_use_fname
   use forces, only : iforces, nvol
   use stats, only : spectra_level, autocorr_max_sep
   use stats, only : autocorr_xlocs,spectra_corr_nlocs
@@ -856,6 +857,10 @@ subroutine parameter_defaults()
   nlineprobes=0
   probe_freq = 0
   log_cputime=.false.
+  output_use_fname=.false.
+  use_window=.false.
+  window_dt=1
+  window_hwidth=0
 
   !! PROBES
   flag_all_digits = .false.

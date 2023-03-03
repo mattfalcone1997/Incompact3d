@@ -22,12 +22,13 @@ module visu
 
   character(len=*), parameter :: io_name = "solution-io"
   character(len=128) :: output_fname
-  logical :: output_use_fname
+  logical :: output_use_fname, use_window
+  integer :: window_dt, window_hwidth
   integer, allocatable, dimension(:) :: output_it
   private
   public :: output2D, visu_init, visu_ready, visu_finalise, write_snapshot, end_snapshot, &
        write_field, io_name, gen_filename, visu_output_now, ioutput_num,&
-        output_use_fname, output_fname
+        output_use_fname, output_fname, use_window, window_dt, window_hwidth
 
 contains
 
@@ -75,7 +76,7 @@ contains
   subroutine visu_init()
 
     use MPI
-    use param, only : ilmn, iscalar, ilast, ifirst, ioutput, istret
+    use param, only : ilmn, iscalar, ilast, ifirst, ioutput, istret,dt
     use variables, only : numscalar, prec, nvisu
     use param, only : dx, dy, dz
     use decomp_2d, only : nrank, mytype, xszV, yszV, zszV, xsize, ysize, zsize
@@ -90,7 +91,7 @@ contains
     real(mytype) :: memout
     logical :: exists
 
-    integer :: is, nlines, i, unit
+    integer :: is, nlines, i, unit, outputsz, hsz, it, loc, j
 
     if (output_use_fname) then
       inquire(file=output_fname,exist=exists)
@@ -107,10 +108,29 @@ contains
       enddo
       10 rewind(unit)
 
-      allocate(output_it(nlines))
-      do i =1, nlines
-        read(unit,*) output_it(i)
-      enddo
+      if (use_window) then
+        hsz = window_hwidth/window_dt
+        outputsz=nlines*(2*hsz+1)
+        
+        allocate(output_it(outputsz))
+        output_it(:) = -1
+
+        do i =1, nlines
+          read(unit,*) it
+          loc = (2*hsz+1)*(i-1)+hsz+1
+          output_it(loc) = it
+
+          do j = -window_hwidth/window_dt,window_hwidth/window_dt
+             output_it(loc+j) = it +j*window_dt
+          enddo
+        enddo
+      else
+        allocate(output_it(nlines))
+        do i =1, nlines
+          read(unit,*) output_it(i)
+        enddo
+      endif
+
 
       close(unit)
     endif
@@ -135,6 +155,17 @@ contains
       endif
       write(*,*)'==========================================================='
       write(*,*)'Visu module requires ',real(memout*1e-9,4),'GB'
+      if (output_use_fname) then
+        write(*,*) "  Using output iterations from file "//trim(output_fname)
+        if (use_window) then
+          write(*,*) "  Using window with half-width ", window_hwidth*dt
+          write(*,*) "  Window interval ", window_dt*dt
+        else
+          write(*,*) "  Windowing not active"
+        endif
+      else
+        write(*,*) "  Output with frequency ", ioutput
+      endif
       write(*,*)'==========================================================='
     end if
 

@@ -197,26 +197,47 @@ contains
 
     use param, only : zero, iscalar, istatbudget, istatpstrain
     use param, only : istatquadrant, istatlambda2, nquads, istatspectra
-    use param, only : istatflatness, istatautocorr
+    use param, only : istatflatness, istatautocorr, nclx
     use variables, only : nx, ny, nz
     use decomp_2d, only : zsize, decomp_info_init
     use MPI
 
     implicit none
     integer :: code
+    integer :: sizex, lsizex
 
-    allocate(uvwp_mean(zsize(1),zsize(2),4))
-    allocate(uu_mean(zsize(1),zsize(2),6))
+    if (nclx) then
+      sizex = 1; lsizex =1
+    else
+      sizex = nx; lsizex=zsize(1)
+    endif
+    
+    call decomp_info_init(sizex, ny, 4, uvwp_info)
+    call decomp_info_init(sizex, ny, 6, uu_info)
+    call decomp_info_init(sizex, ny, 3, pu_info)
+    call decomp_info_init(sizex, ny, 10, uuu_info)
+    call decomp_info_init(sizex, ny, 3, pdudx_info)
+    call decomp_info_init(sizex, ny, 9, dudx_info)
+    call decomp_info_init(sizex, ny, 12, dudxdudx_info)
+
+    call decomp_info_init(sizex, ny, 4*nquads, uv_quadrant_info)
+
+    call decomp_info_init(sizex, ny, 4, pdvdy_q_info)
+    call decomp_info_init(sizex, ny, 3, uuuu_info)
+    call decomp_info_init(sizex, ny, 1, dstat_plane)
+    
+    allocate(uvwp_mean(lsizex,zsize(2),4))
+    allocate(uu_mean(lsizex,zsize(2),6))
 
     uvwp_mean = zero
     uu_mean = zero
 
     if (istatbudget) then
-      allocate(pu_mean(zsize(1),zsize(2),3))
-      allocate(uuu_mean(zsize(1),zsize(2),10))
-      allocate(pdudx_mean(zsize(1),zsize(2),3))
-      allocate(dudx_mean(zsize(1),zsize(2),9))
-      allocate(dudxdudx_mean(zsize(1),zsize(2),12))
+      allocate(pu_mean(lsizex,zsize(2),3))
+      allocate(uuu_mean(lsizex,zsize(2),10))
+      allocate(pdudx_mean(lsizex,zsize(2),3))
+      allocate(dudx_mean(lsizex,zsize(2),9))
+      allocate(dudxdudx_mean(lsizex,zsize(2),12))
 
       pu_mean = zero
       uuu_mean = zero
@@ -227,7 +248,7 @@ contains
     endif
 
     if (istatflatness) then
-      allocate(uuuu_mean(zsize(1),zsize(2),3))
+      allocate(uuuu_mean(lsizex,zsize(2),3))
       uuuu_mean = zero
     endif
 
@@ -237,20 +258,20 @@ contains
         call MPI_Abort(MPI_COMM_WORLD,1,code)
       endif
 
-      allocate(pdvdy_q_mean(zsize(1),zsize(2),4))
+      allocate(pdvdy_q_mean(lsizex,zsize(2),4))
 
       pdvdy_q_mean = zero
     endif
 
     if (istatquadrant) then
-      allocate(uv_quadrant_mean(zsize(1),zsize(2),4*nquads))
+      allocate(uv_quadrant_mean(lsizex,zsize(2),4*nquads))
 
       uv_quadrant_mean = zero
     endif
     if (istatlambda2) then
 
-      allocate(lambda2mean(zsize(1),zsize(2),1))
-      allocate(lambda22mean(zsize(1),zsize(2),1))
+      allocate(lambda2mean(lsizex,zsize(2),1))
+      allocate(lambda22mean(lsizex,zsize(2),1))
       allocate(lambda2(zsize(1),zsize(2),zsize(3)))
 
       lambda2mean = zero
@@ -269,20 +290,6 @@ contains
       call init_autocorrelation
     endif
 
-    call decomp_info_init(nx, ny, 4, uvwp_info)
-    call decomp_info_init(nx, ny, 6, uu_info)
-    call decomp_info_init(nx, ny, 3, pu_info)
-    call decomp_info_init(nx, ny, 10, uuu_info)
-    call decomp_info_init(nx, ny, 3, pdudx_info)
-    call decomp_info_init(nx, ny, 9, dudx_info)
-    call decomp_info_init(nx, ny, 12, dudxdudx_info)
-
-    call decomp_info_init(nx, ny, 4*nquads, uv_quadrant_info)
-
-    call decomp_info_init(nx, ny, 4, pdvdy_q_info)
-    call decomp_info_init(nx, ny, 3, uuuu_info)
-    call decomp_info_init(nx, ny, 1, dstat_plane)
-    
     call init_statistic_adios2
 
     call grad_init
@@ -437,10 +444,16 @@ contains
     use param
     use decomp_2d
     use var, only : ny
-
+    use MPI
+    use decomp_2d
     integer :: nlocs, xlocs, x_ref
-    integer :: i, j, k, fl
+    integer :: i, j, k, fl, code
     character(len=80) :: xfmt
+
+    if (nclx.and.nrank.eq.0) then
+      write(*,*) "Cannot use autocorrelation with streamwise periodicity"
+      call MPI_Abort(MPI_COMM_WORLD,1,code)
+    endif
     nlocs = (xlx - two*autocorr_max_sep) / autocorr_xlocs +1
     xlocs = int(two*autocorr_max_sep/real(dx)) + 1
 
@@ -660,7 +673,7 @@ contains
 
     use decomp_2d, only : mytype, xstS, xenS, zsize
     use decomp_2d_io, only : decomp_2d_read_one, decomp_2d_write_one
-
+    use param, only: nclx
     implicit none
 
     ! Arguments
@@ -672,13 +685,88 @@ contains
 
     if (flag_read) then
        ! There was a check for nvisu = 1 before
-       call decomp_2d_read_one(3, array, stat_dir, filename, io_statistics, reduce_prec=.false.,opt_decomp=opt_decomp)
+       if (.not.nclx) then
+          call decomp_2d_read_one(3, array, stat_dir, filename, io_statistics, reduce_prec=.false.,opt_decomp=opt_decomp)
+       else
+          call read_one_xz(array,stat_dir,filename,opt_decomp%zsz(3))
+       endif
     else
-       call decomp_2d_write_one(3, array, stat_dir, filename, 0, io_statistics, reduce_prec=.false.,opt_decomp=opt_decomp)
+      if (.not.nclx) then
+          call decomp_2d_write_one(3, array, stat_dir, filename, 0, io_statistics, reduce_prec=.false.,opt_decomp=opt_decomp)
+      else
+          call write_one_xz(array,stat_dir,filename,opt_decomp%zsz(3))
+      endif
     endif
 
   end subroutine read_or_write_one_stat
+  subroutine read_one_xz(array, dir, filename,asize)
+    use decomp_2d
+    use var, only : ny
+    character(len=*), intent(in) :: dir,filename
+    real(mytype), dimension(:,:,:), intent(inout) :: array
+    integer, intent(in) :: asize
+    real(mytype), dimension(ny,asize) :: data_array
+    character(len=128) :: fn
+    integer :: unit, j, k, jloc
+    fn = trim(dir)//'/'//trim(filename)
+    open(newunit=unit,file=fn,status='old',action='read',access='stream')
+    read(unit) data_array
+    close(unit)
 
+    do j =1, zsize(2)
+      jloc = zstart(2) + j -1
+      do k = 1, asize
+        array(1,j,k) = data_array(jloc,k)
+      enddo
+    enddo
+  end subroutine
+  subroutine write_one_xz(array, dir, filename,asize)
+    use decomp_2d
+    use MPI
+    use var, only: ny
+    character(len=*), intent(in) :: dir, filename
+    integer, intent(in) :: asize
+    real(mytype), dimension(1,zsize(2),asize), intent(inout) :: array
+    real(mytype), dimension(ny,asize) :: data_array
+    character(len=128) :: fn
+    integer :: fh, split_comm_x, newtype, resized_type
+    integer :: color, key, code
+    logical :: exists
+    integer, dimension(2):: sizes, subsizes, starts
+    integer, dimension(2) :: dims, coords
+    logical, dimension(2) :: periods 
+    
+    call MPI_CART_GET(DECOMP_2D_COMM_CART_Z, 2, dims, periods, coords, code)
+    key = coords(1)
+    color = coords(2)
+
+    call MPI_Comm_split(DECOMP_2D_COMM_CART_Z, key,color, split_comm_x,code)
+    sizes(:) = [ny,asize]
+    subsizes(:) = [zsize(2),asize]
+    starts(:) = [zstart(2)-1,0]
+
+    call MPI_Type_create_subarray(2, sizes, subsizes, starts,  &
+                              MPI_ORDER_FORTRAN, real_type, newtype, code)
+    call MPI_Type_commit(newtype,code)
+
+    if (key==0) then
+      inquire(file=dir,exist=exists)
+      if (.not.exists) call system("mkdir -p "//trim(dir))
+
+      fn = trim(dir)//'/'//trim(filename)
+      call MPI_File_open(split_comm_x,fn,MPI_MODE_CREATE+MPI_MODE_WRONLY,&
+                        MPI_INFO_NULL, fh, code)
+      call MPI_FILE_SET_SIZE(fh,0_MPI_OFFSET_KIND,code)                        
+      call MPI_FILE_SET_VIEW(fh,0_MPI_OFFSET_KIND,real_type, &
+                        newtype,'native',MPI_INFO_NULL,code)
+      call MPI_FILE_WRITE_ALL(fh, array, &
+                        subsizes(1)*subsizes(2), &
+                        real_type, MPI_STATUS_IGNORE, code)
+      call MPI_FILE_CLOSE(fh,code)
+      
+
+    endif
+  end subroutine write_one_xz
   subroutine read_write_spectra(flag_read, array, file_base,ipencil)
     use decomp_2d
     use MPI
@@ -1147,32 +1235,51 @@ contains
   !
   subroutine update_average_scalar(um, ux, ep,mask,istat2)
 
-    use decomp_2d, only : mytype, xsize, zsize
-    use param, only : itime, initstat, istatcalc, itempaccel, initstat2
+    use decomp_2d
+    use param, only : itime, initstat, istatcalc, itempaccel, initstat2, nclx
     use var, only : di1, tmean
+    use MPI
 
     implicit none
 
     ! inputs
-    real(mytype), dimension(zsize(1),zsize(2)), intent(inout) :: um
+    real(mytype), dimension(:,:), intent(inout) :: um
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ux
     logical, dimension(zsize(1),zsize(2),zsize(3)), optional, intent(in) :: mask
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ep
+    real(mytype), dimension(zsize(2)) :: stat_x, stat_xg
     logical, optional, intent(in) :: istat2
+    integer :: color, key
+    integer, dimension(2) :: dims, coords
+    logical, dimension(2) :: periods 
+    integer :: split_comm_y
+    integer :: i,j,k, code
 
     real(mytype), dimension(zsize(1), zsize(2)) :: stat_z
     real(mytype) :: stat_inc
-    integer :: i, j
     
     if (present(mask)) then
       stat_z = sum(ux,dim=3,mask=mask) / real(zsize(3),kind=mytype)
-
     else
       stat_z = sum(ux,dim=3) / real(zsize(3),kind=mytype)
     endif
 
     if (itempaccel==1) then
-      um(:,:) = stat_z(:,:)
+      if (nclx) then
+        stat_x = sum(stat_z,dim=1)/real(xsize(1),kind=mytype)
+        call MPI_CART_GET(DECOMP_2D_COMM_CART_Z, 2, dims, periods, coords, code)
+        key = coords(2)
+        color = coords(1)
+
+        call MPI_Comm_split(DECOMP_2D_COMM_CART_Z, key,color, split_comm_y,code)
+
+        call MPI_Allreduce(stat_x,um,zsize(2),&
+                          real_type,MPI_SUM,split_comm_y,code)
+        call MPI_Comm_free(split_comm_y,code)
+
+      else
+        um(:,:) = stat_z(:,:)
+      endif
       return
     endif
 
@@ -1185,13 +1292,28 @@ contains
     else
       stat_inc = real((itime-initstat)/istatcalc+1, kind=mytype)
     endif
+    
+    if (nclx) then
+      stat_x = sum(stat_z,dim=1) / real(xsize(1),kind=mytype)
+      call MPI_CART_GET(DECOMP_2D_COMM_CART_Z, 2, dims, periods, coords, code)
+      key = coords(2)
+      color = coords(1)
 
-    do j = 1, zsize(2)
-      do i = 1, zsize(1)
-        um(i,j) = um(i,j) + (stat_z(i,j) - um(i,j))/ stat_inc
+      call MPI_Comm_split(DECOMP_2D_COMM_CART_Z, key,color, split_comm_y,code)
+
+      call MPI_Allreduce(stat_x,stat_xg,zsize(2),&
+                        real_type,MPI_SUM,split_comm_y,code)
+      do j = 1, zsize(2)
+          um(1,j) = um(1,j) + (stat_xg(j) - um(1,j))/ stat_inc
       enddo
-    enddo
-
+      call MPI_Comm_free(split_comm_y,code)
+    else
+      do j = 1, zsize(2)
+        do i = 1, zsize(1)
+          um(i,j) = um(i,j) + (stat_z(i,j) - um(i,j))/ stat_inc
+        enddo
+      enddo
+  endif
   end subroutine update_average_scalar
 
   ! subroutine average_z(array, stat_xz,mask)
@@ -1227,7 +1349,7 @@ contains
     implicit none
 
     ! inputs
-    real(mytype), dimension(zsize(1),zsize(2)), intent(inout) :: um, vm, wm
+    real(mytype), dimension(:,:), intent(inout) :: um, vm, wm
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ux, uy, uz, ep
 
     call update_average_scalar(um, ux, ep)
@@ -1246,7 +1368,7 @@ contains
     implicit none
 
     ! inputs
-    real(mytype), dimension(zsize(1),zsize(2)), intent(inout) :: uum, vvm, wwm, uvm, uwm, vwm
+    real(mytype), dimension(:,:), intent(inout) :: uum, vvm, wwm, uvm, uwm, vwm
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ux, uy, uz, ep
 
     call update_average_scalar(uum, ux*ux, ep)
@@ -1262,7 +1384,7 @@ contains
                                     uwwm,vvvm,vvwm,vwwm,wwwm,&
                                     ux, uy, uz, ep)
   use decomp_2d, only : mytype, xsize, zsize
-  real(mytype), dimension(zsize(1),zsize(2)), intent(inout) :: uuum,uuvm,uuwm,uvvm,uvwm,&
+  real(mytype), dimension(:,:), intent(inout) :: uuum,uuvm,uuwm,uvvm,uvwm,&
                                                                  uwwm,vvvm,vvwm,vwwm,wwwm
   real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ux, uy, uz, ep
 
@@ -1282,7 +1404,7 @@ contains
   subroutine update_pvelograd_vector(pdudxm,pdvdym,pdwdzm,dudx,dvdy,dwdz,ep)
     use decomp_2d, only : mytype, xsize, zsize
 
-    real(mytype), dimension(zsize(1),zsize(2)), intent(inout) :: pdudxm,pdvdym,pdwdzm
+    real(mytype), dimension(:,:), intent(inout) :: pdudxm,pdvdym,pdwdzm
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: dudx, dvdy, dwdz, ep
 
     call update_average_scalar(pdudxm, ep*dudx, ep)
@@ -1293,7 +1415,7 @@ contains
   subroutine update_pvelo_vector(pum, pvm, pwm, ux, uy, uz, ep)
     use decomp_2d, only : mytype, xsize, zsize
 
-    real(mytype), dimension(zsize(1),zsize(2)), intent(inout) :: pum, pvm, pwm
+    real(mytype), dimension(:,:), intent(inout) :: pum, pvm, pwm
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ux, uy, uz, ep
 
     call update_average_scalar(pum, ep*ux, ep)
@@ -1306,7 +1428,7 @@ contains
                                     dvdy, dvdz, dwdx, dwdy, dwdz, ep)
     use decomp_2d, only : mytype, xsize, zsize
 
-    real(mytype), dimension(zsize(1),zsize(2),9), intent(inout) :: dudxm
+    real(mytype), dimension(:,:,:), intent(inout) :: dudxm
 
 
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: dudx, dudy, dudz, ep
@@ -1330,7 +1452,7 @@ contains
                                      dudx,dvdx,dwdx,dudy,dvdy,dwdy,ep)
     use decomp_2d, only : mytype, xsize, zsize
 
-    real(mytype), dimension(zsize(1),zsize(2),12), intent(inout) :: dudxdudxm
+    real(mytype), dimension(:,:,:), intent(inout) :: dudxdudxm
 
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: dudx, dvdx, dwdx, ep
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: dudy, dvdy, dwdy
@@ -1353,7 +1475,7 @@ contains
   
   subroutine update_flatness(uuuum, ux, uy, uz, ep)
     use decomp_2d, only : mytype, xsize, zsize
-    real(mytype), dimension(zsize(1),zsize(2),3), intent(inout) :: uuuum
+    real(mytype), dimension(:,:,:), intent(inout) :: uuuum
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ux, uy, uz, ep
   
     call update_average_scalar(uuuum(:,:,1), ux*ux*ux*ux, ep)
@@ -1365,18 +1487,18 @@ contains
   subroutine update_uv_quad_avg(uvqm, uum, vvm, um, vm, ux, uy, ep)
     use dbg_schemes, only : sqrt_prec, abs_prec
     use decomp_2d, only : mytype, xsize, zsize
-    use param, only: nquads, zero
+    use param, only: nquads, zero, nclx
     use MPI
-    real(mytype), dimension(zsize(1),zsize(2),4*nquads), intent(inout) :: uvqm
-    real(mytype), dimension(zsize(1),zsize(2)), intent(in) :: um, vm
-    real(mytype), dimension(zsize(1),zsize(2)), intent(in) :: uum, vvm
+    real(mytype), dimension(:,:,:), intent(inout) :: uvqm
+    real(mytype), dimension(:,:), intent(in) :: um, vm
+    real(mytype), dimension(:,:), intent(in) :: uum, vvm
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ux, uy, ep
 
     logical, dimension(:,:,:,:,:) , allocatable :: mask
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: uv_fluct
 
     logical :: quad(4), thresh
-    integer :: i, j, k, l, ierr
+    integer :: i, j, k, l, ierr, avg_i
     real(mytype) :: u_rms, v_rms, u_fluct, v_fluct
 
     allocate(mask(zsize(1),zsize(2),zsize(3),nquads,4))
@@ -1384,11 +1506,13 @@ contains
       do k = 1, zsize(3)
         do j = 1, zsize(2)
           do i = 1, zsize(1)
-            u_rms = sqrt_prec(uum(i,j) - um(i,j)*um(i,j))
-            v_rms = sqrt_prec(vvm(i,j) - vm(i,j)*vm(i,j))
+            if (nclx) avg_i = 1
+            if (.not.nclx) avg_i = i
+            u_rms = sqrt_prec(uum(avg_i,j) - um(avg_i,j)*um(avg_i,j))
+            v_rms = sqrt_prec(vvm(avg_i,j) - vm(avg_i,j)*vm(avg_i,j))
 
-            u_fluct = ux(i,j,k) - um(i,j)
-            v_fluct = uy(i,j,k) - vm(i,j)
+            u_fluct = ux(i,j,k) - um(avg_i,j)
+            v_fluct = uy(i,j,k) - vm(avg_i,j)
 
             uv_fluct(i,j,k) = u_fluct*v_fluct
 
@@ -1430,21 +1554,24 @@ contains
                                      pdvdy_q3m,pdvdy_q4m,&
                                      p,dvdy, pm, dvdym,ep)
     use decomp_2d, only : mytype, xsize, zsize
-    use param, only : zero, zpfive
-    real(mytype), dimension(zsize(1),zsize(2)), intent(inout) :: pdvdy_q1m, pdvdy_q2m
-    real(mytype), dimension(zsize(1),zsize(2)), intent(inout) :: pdvdy_q3m, pdvdy_q4m
-    real(mytype), dimension(zsize(1),zsize(2)), intent(in) :: pm, dvdym
+    use param, only : zero, zpfive, nclx
+    real(mytype), dimension(:,:), intent(inout) :: pdvdy_q1m, pdvdy_q2m
+    real(mytype), dimension(:,:), intent(inout) :: pdvdy_q3m, pdvdy_q4m
+    real(mytype), dimension(:,:), intent(in) :: pm, dvdym
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: p,dvdy, ep
 
     logical, dimension(zsize(1),zsize(2),zsize(3)) :: mask1, mask2, mask3, mask4
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: p_fluct, dvdy_fluct
-    integer :: i,j,k
+    integer :: i,j,k, avg_i
 
     do k = 1, zsize(3)
       do j = 1, zsize(2)
         do i = 1, zsize(1)
-          p_fluct(i,j,k) = p(i,j,k) - pm(i,j)
-          dvdy_fluct(i,j,k) = dvdy(i,j,k) - dvdym(i,j)
+          if (nclx) avg_i = 1
+          if (.not.nclx) avg_i = i
+
+          p_fluct(i,j,k) = p(i,j,k) - pm(avg_i,j)
+          dvdy_fluct(i,j,k) = dvdy(i,j,k) - dvdym(avg_i,j)
           mask1(i,j,k) = p_fluct(i,j,k) .gt. zero .and.  dvdy_fluct(i,j,k) .gt. zero
           mask2(i,j,k) = p_fluct(i,j,k) .lt. zero .and.  dvdy_fluct(i,j,k) .gt. zero
           mask3(i,j,k) = p_fluct(i,j,k) .lt. zero .and.  dvdy_fluct(i,j,k) .lt. zero
@@ -1467,7 +1594,7 @@ contains
     use param
     USE dbg_schemes, only : sqrt_prec, acos_prec, cos_prec
 
-    real(mytype), dimension(zsize(1),zsize(2),1), intent(inout) :: lambda2m,lambda22m
+    real(mytype), dimension(:,:,:), intent(inout) :: lambda2m,lambda22m
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: dudx, dudy, dudz
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: dvdx, dvdy, dvdz
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: dwdx, dwdy, dwdz, ep
@@ -1533,8 +1660,8 @@ contains
       enddo
     enddo
 
-    call update_average_scalar(lambda2m, lambda2, ep,istat2=.true.)
-    call update_average_scalar(lambda22m, lambda2*lambda2, ep,istat2=.true.)
+    call update_average_scalar(lambda2m(:,:,1), lambda2, ep,istat2=.true.)
+    call update_average_scalar(lambda22m(:,:,1), lambda2*lambda2, ep,istat2=.true.)
   end subroutine
 
   subroutine fft_2d_calc(fft_2d,val)
@@ -1841,19 +1968,17 @@ contains
 
     uvw_l = zero
     do j =1, zsize(2)
-      do i =1,zsize(1)
-        uvw_l(j,1) = uvw_l(j,1) + uvwp_mean(i,j,1)
-        uvw_l(j,2) = uvw_l(j,2) + uvwp_mean(i,j,2)
-        uvw_l(j,3) = uvw_l(j,3) + uvwp_mean(i,j,3)
-      enddo
+        uvw_l(j,1) = uvwp_mean(1,j,1)
+        uvw_l(j,2) = uvwp_mean(1,j,2)
+        uvw_l(j,3) = uvwp_mean(1,j,3)
     enddo
 
     if (spectra_level.ge.2) then
       do j =1, zsize(2)
         do i =1,zsize(1)
-          uvw_l(j,4) = uvw_l(j,4) + uvwp_mean(i,j,4)
-          uvw_l(j,5) = uvw_l(j,5) + dudx_mean(i,j,5)
-          uvw_l(j,6) = uvw_l(j,6) + dudx_mean(i,j,3) - dudx_mean(i,j,7)
+          uvw_l(j,4) = uvwp_mean(1,j,4)
+          uvw_l(j,5) = dudx_mean(1,j,5)
+          uvw_l(j,6) = dudx_mean(1,j,3) - dudx_mean(1,j,7)
         enddo
       enddo
     endif
