@@ -1264,19 +1264,22 @@ contains
       stat_z = sum(ux,dim=3) / real(zsize(3),kind=mytype)
     endif
 
+    if (nclx) then
+      stat_x = sum(stat_z,dim=1)/real(xsize(1),kind=mytype)
+      call MPI_CART_GET(DECOMP_2D_COMM_CART_Z, 2, dims, periods, coords, code)
+      key = coords(2)
+      color = coords(1)
+
+      call MPI_Comm_split(DECOMP_2D_COMM_CART_Z, key,color, split_comm_y,code)
+
+      call MPI_Allreduce(stat_x,stat_xg,zsize(2),&
+                        real_type,MPI_SUM,split_comm_y,code)
+      call MPI_Comm_free(split_comm_y,code)
+    endif
+
     if (itempaccel==1) then
       if (nclx) then
-        stat_x = sum(stat_z,dim=1)/real(xsize(1),kind=mytype)
-        call MPI_CART_GET(DECOMP_2D_COMM_CART_Z, 2, dims, periods, coords, code)
-        key = coords(2)
-        color = coords(1)
-
-        call MPI_Comm_split(DECOMP_2D_COMM_CART_Z, key,color, split_comm_y,code)
-
-        call MPI_Allreduce(stat_x,um,zsize(2),&
-                          real_type,MPI_SUM,split_comm_y,code)
-        call MPI_Comm_free(split_comm_y,code)
-
+        um(1,:) = stat_xg(:)
       else
         um(:,:) = stat_z(:,:)
       endif
@@ -1294,19 +1297,9 @@ contains
     endif
     
     if (nclx) then
-      stat_x = sum(stat_z,dim=1) / real(xsize(1),kind=mytype)
-      call MPI_CART_GET(DECOMP_2D_COMM_CART_Z, 2, dims, periods, coords, code)
-      key = coords(2)
-      color = coords(1)
-
-      call MPI_Comm_split(DECOMP_2D_COMM_CART_Z, key,color, split_comm_y,code)
-
-      call MPI_Allreduce(stat_x,stat_xg,zsize(2),&
-                        real_type,MPI_SUM,split_comm_y,code)
       do j = 1, zsize(2)
           um(1,j) = um(1,j) + (stat_xg(j) - um(1,j))/ stat_inc
       enddo
-      call MPI_Comm_free(split_comm_y,code)
     else
       do j = 1, zsize(2)
         do i = 1, zsize(1)
