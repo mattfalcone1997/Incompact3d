@@ -450,10 +450,6 @@ contains
     integer :: i, j, k, fl, code
     character(len=80) :: xfmt
 
-    if (nclx.and.nrank.eq.0) then
-      write(*,*) "Cannot use autocorrelation with streamwise periodicity"
-      call MPI_Abort(MPI_COMM_WORLD,1,code)
-    endif
     nlocs = (xlx - two*autocorr_max_sep) / autocorr_xlocs +1
     xlocs = int(two*autocorr_max_sep/real(dx)) + 1
 
@@ -2091,7 +2087,7 @@ contains
     real(mytype), dimension(ysize(1),ysize(2),ysize(3)) :: u_fluct2
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: u_fluct3
     real(mytype), dimension(:,:,:), allocatable :: autocorr_ml, autocorr_ml2
-    integer :: i, j, k, l, stat_inc
+    integer :: i, j, k, l, stat_inc, avg_i
     integer :: nlocs, xlocs,autocorr_min
 
     integer :: split_comm_y, key, color, code
@@ -2102,7 +2098,10 @@ contains
     do k = 1, zsize(3)
       do j = 1, zsize(2)
         do i = 1, zsize(1)
-          u_fluct3(i,j,k) = ux3(i,j,k) - uvwp_mean(i,j,1)
+          if (nclx) avg_i = 1
+          if (.not.nclx) avg_i = i
+
+          u_fluct3(i,j,k) = ux3(i,j,k) - uvwp_mean(avg_i,j,1)
         enddo
       enddo
     enddo
