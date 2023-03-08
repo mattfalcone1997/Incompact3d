@@ -289,7 +289,7 @@ contains
    character(80) :: xfmt, yfmt
    integer :: fl, i
 
-   call body_force_calc(bf)
+   if (ibodyforces.eq.1) call body_force_calc(bf)
    if (nrank .ne. 0) return
    open(newunit=fl,file='parameters.json',status='old',action='write',position='append')
 
@@ -651,8 +651,8 @@ contains
        duy1(:,:,:,1) = duy1(:,:,:,1) + wrotation*ux1(:,:,:)
     endif
 
-    call body_force_calc(bforce)
     if (ibodyforces.eq.1) then
+      call body_force_calc(bforce)
       if (idir_stream == 1) then
          do j = 1,xsize(2)
             jloc = j + xstart(2) -1
