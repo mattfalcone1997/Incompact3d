@@ -43,7 +43,7 @@ subroutine parameter(input_i3d)
 
   NAMELIST /BasicParam/ p_row, p_col, nx, ny, nz, istret, beta, xlx, yly, zlz, &
        itype, iin, re, u1, u2, init_noise, inflow_noise, &
-       dt, ifirst, ilast, &
+       dt, ifirst, ilast, re_ini, t_ini, &
        numscalar, iibm, ilmn, &
        ilesmod, iscalar, &
        nclx1, nclxn, ncly1, nclyn, nclz1, nclzn, &
@@ -927,7 +927,7 @@ subroutine parameter_defaults()
   t_end = zero
   use_center = .false.
 
-  re_ref = -1
+  re_ini = -1
 
   ! statistics
   istatcalc = 1

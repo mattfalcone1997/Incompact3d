@@ -74,6 +74,18 @@ contains
     real(mytype) avg_param
 #endif
 
+   if (re_ini>0.and..not.cpg.and.t_ini>zero) then
+      xnu=one/re_ini
+      !! Constant pressure gradient, re = Re_tau -> use to compute Re_centerline   
+      if (iimplicit.ne.0) then
+         if (iimplicit==1) then
+            xcst = dt * xnu
+         else if (iimplicit==2) then
+            xcst = dt * xnu * half
+         endif
+         if (iscalar.eq.1) xcst_sc = xcst / sc
+      endif
+   endif
 
     if (idir_stream /= 1 .and. idir_stream /= 3) then
        if (nrank == 0) then
@@ -345,6 +357,7 @@ contains
     use var, only : di2
     use variables
     use decomp_2d
+    use dbg_schemes, only: abs_prec
 
     implicit none
 
@@ -352,6 +365,29 @@ contains
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi
     real(mytype) :: u_b
 
+    if (re_ini>zero.and..not.cpg.and.t_ini>zero.and.abs_prec(t-t_ini)<dt) then
+      xnu=one/re
+      !! Constant pressure gradient, re = Re_tau -> use to compute Re_centerline   
+      if (iimplicit.ne.0) then
+         if (iimplicit==1) then
+            xcst = dt * xnu
+         else if (iimplicit==2) then
+            xcst = dt * xnu * half
+         endif
+         if (iscalar.eq.1) xcst_sc = xcst / sc
+      endif
+   endif
+
+   if(re_ini>0.and..not.cpg) then
+      if (t<t_ini) then
+         if (nrank==0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime == ilast).and.t<t_ini) &
+               write(*,'("Variable re for development: ",g0," Ini time: ", g0)') re_ini, t_ini
+      else
+         if (nrank==0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime == ilast).and.t>=t_ini) &
+               write(*,'("Variable re for development: ",g0," Ini time: ", g0)') re, t_ini
+      endif
+   endif
+    
     if (use_center) then
       u_b = two/three
     else
@@ -559,16 +595,18 @@ contains
     character(len=128) :: fname
 
     if (mod(itime,istatout)==0 .and. itime>=initstat) then
-      call body_force_calc(bf)
-      if (nrank==0.and.ibodyforces.ne.0) then
-         inquire(file="body_force",exist=exists)
-         if (.not. exists) call system("mkdir -p body_force")
-         write(fname,'(A,"/",A,"-",I7.7)') "body_force", "bodyf", itime
-         open(newunit=unit,file=fname,status='replace',action='write',access='stream')
-         write(unit) bf
-         close(unit)
-      endif
+      if (ibodyforces.ne.0) then
+         call body_force_calc(bf)
 
+         if (nrank==0) then
+            inquire(file="body_force",exist=exists)
+            if (.not. exists) call system("mkdir -p body_force")
+            write(fname,'(A,"/",A,"-",I7.7)') "body_force", "bodyf", itime
+            open(newunit=unit,file=fname,status='replace',action='write',access='stream')
+            write(unit) bf
+            close(unit)
+         endif
+      endif
     endif
   end subroutine postprocess_channel
   subroutine visu_channel_init(visu_initialised)
