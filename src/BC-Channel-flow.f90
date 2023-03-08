@@ -13,15 +13,23 @@ module channel
   integer :: FS
   character(len=100) :: fileformat
   character(len=1),parameter :: NL=char(10) !new line character
-  real(mytype), dimension(:), allocatable :: body_force, base_force
   PRIVATE ! All functions/subroutines private by default
   procedure(real(mytype)), pointer :: temp_accel_calc
   real(mytype), dimension(:), allocatable :: ub_temp_accel
-  real(mytype) :: source_val, ub_old
+ 
+  interface
+   subroutine body_force(bf)
+      import mytype, ny
+      real(mytype), dimension(ny), intent(out) :: bf
+
+   end subroutine body_force
+  end interface
+
+  procedure(body_force), pointer :: body_force_calc
 
   PUBLIC :: init_channel, boundary_conditions_channel, postprocess_channel, &
             visu_channel, visu_channel_init, momentum_forcing_channel, &
-            geomcomplex_channel, body_force, temp_accel_init, body_forces_init,&
+            geomcomplex_channel, body_force_calc, temp_accel_init, body_forces_init,&
             temp_accel_calc, write_params_channel
 
 contains
@@ -277,8 +285,11 @@ contains
    use param
    use variables
    real(mytype), dimension(:), allocatable :: u_b, t_b
+   real(mytype), dimension(ny) :: bf
    character(80) :: xfmt, yfmt
    integer :: fl, i
+
+   call body_force_calc(bf)
    if (nrank .ne. 0) return
    open(newunit=fl,file='parameters.json',status='old',action='write',position='append')
 
@@ -286,7 +297,7 @@ contains
       write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ny-1,"(',',g0),'],')"
       
       write(fl,"(A ,': {')") '  "bodyforces"'
-      write(fl,yfmt) '    "bf_array"', body_force
+      write(fl,yfmt) '    "bf_array"', bf
       write(fl,"(A,':'I0,',')") '    "ibftype"', ibftype
       write(fl,"(A,':'I0)")'    "itempbf"', itempbf
 
@@ -365,7 +376,6 @@ contains
             call channel_c_center(uz,u_b)
          endif
       endif
-      if (itr==1) source_val = compute_amp(u_b)
     end if
 
     if (iscalar /= 0) then
@@ -476,27 +486,35 @@ contains
   end subroutine
   !! calculation of temporal acceleration
 
-   function compute_amp(u_b) result(dudt)
-      real(mytype),intent(in) :: u_b
-      real(mytype) :: dudt
+   function compute_amp(time_shift) result(amp)
+      real(mytype),intent(in) :: time_shift
+      real(mytype) :: amp
 
-      integer :: unit
+      integer :: unit, it
 
-      if (itempbf ==0) then
-         dudt = one
+      if (itempbf ==0.or.itime<ifirst) then
+         amp = one
          return
       endif
-      dudt = (u_b - ub_old)/gdt(itr)
-      ub_old = u_b
+
+      it = int((t+time_shift+dt)/dt)
+
+      if (it<2 .or.it>ilast-1) then
+         amp = zero
+      else
+         amp = zpfive*(temp_accel_calc(t+time_shift+dt) &
+                     - temp_accel_calc(t+time_shift-dt))/dt
+      endif
+
       if (nrank==0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime == ilast)) then
-         write(*,*) 'itempbf: dudt', dudt
+         write(*,*) 'itempbf: dudt', amp
          if (itime==1) then
             open(newunit=unit,file='dudt.csv',status='replace',action='write',position='append')
-            write(unit,*) '# itime, t, dudt'
+            write(unit,"('# itime, t, dudt')") 
          else 
             open(newunit=unit,file='dudt.csv',status='old',action='write',position='append')
          endif
-         write(unit,'(I0,",", g0,",", g0)') itime, t, dudt
+         write(unit,'(I0,",", g0,",", g0)') itime, t, amp
          close(unit)
       endif
    end function
@@ -535,18 +553,19 @@ contains
     real(mytype), intent(in), dimension(xsize(1),xsize(2),xsize(3)) :: ux1, uy1, uz1, ep1
     real(mytype), intent(in), dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
     real(mytype), intent(in), dimension(ph1%zst(1):ph1%zen(1),ph1%zst(2):ph1%zen(2),nzmsize,npress) :: pp3
-    
+    real(mytype), dimension(ny) :: bf
     logical :: exists
     integer :: unit
     character(len=128) :: fname
 
     if (mod(itime,istatout)==0 .and. itime>=initstat) then
+      call body_force_calc(bf)
       if (nrank==0.and.ibodyforces.ne.0) then
          inquire(file="body_force",exist=exists)
          if (.not. exists) call system("mkdir -p body_force")
          write(fname,'(A,"/",A,"-",I7.7)') "body_force", "bodyf", itime
          open(newunit=unit,file=fname,status='replace',action='write',access='stream')
-         write(unit) body_force*source_val
+         write(unit) bf
          close(unit)
       endif
 
@@ -612,6 +631,7 @@ contains
 
     real(mytype), intent(in), dimension(xsize(1), xsize(2), xsize(3)) :: ux1, uy1, uz1
     real(mytype), dimension(xsize(1), xsize(2), xsize(3), ntime) :: dux1, duy1, duz1
+    real(mytype), dimension(ny) :: bforce
     integer :: j, jloc
 
     if (cpg) then
@@ -631,29 +651,30 @@ contains
        duy1(:,:,:,1) = duy1(:,:,:,1) + wrotation*ux1(:,:,:)
     endif
 
-    if (itempbf==2) call compute_tempbf(ux1)
-
+    call body_force_calc(bforce)
     if (ibodyforces.eq.1) then
       if (idir_stream == 1) then
          do j = 1,xsize(2)
             jloc = j + xstart(2) -1
-            dux1(:,j,:,1) = dux1(:,j,:,1) + source_val*body_force(jloc)
+            dux1(:,j,:,1) = dux1(:,j,:,1) + bforce(jloc)
          enddo
 
       else
          do j = 1,xsize(2)
             jloc = j + xstart(2) -1
-            duz1(:,j,:,1) = duz1(:,j,:,1) + source_val*body_force(jloc)
+            duz1(:,j,:,1) = duz1(:,j,:,1) + bforce(jloc)
          enddo
       endif
 
 
     endif
   end subroutine momentum_forcing_channel
-  subroutine compute_tempbf(ux)
+  subroutine compute_bfweight(ux,weight)
    use dbg_schemes, only: abs_prec
    use MPI
    real(mytype), dimension(xsize(1),xsize(2),xsize(3)), intent(in) :: ux
+   real(mytype), dimension(ny), intent(out) :: weight
+
    real(mytype), dimension(xsize(2)) :: u_l, u
    real(mytype), dimension(ny) :: u_g, dudy
    integer, dimension(:), allocatable :: recvcounts, displs
@@ -661,9 +682,12 @@ contains
    
    integer, dimension(2) :: dims, coords
    logical, dimension(2) :: periods
-   real(mytype) :: a, b, c, ddy1, ddy2
+   real(mytype) :: a, b, c, ddy1, ddy2, symm_dudy
 
-   if (ibodyforces==0) return
+   if (ibodyforces==0.or.itime<ifirst) then
+      weight = one
+   endif 
+
    if (itempbf==2) then
       u_l(:) = zero
       do k = 1, xsize(3)
@@ -723,12 +747,21 @@ contains
       dudy(ny) = a*u_g(ny-2) + b*u_g(ny-1) + c*u_g(ny)
 
       do j = 1, ny
-         body_force(j) = zpfive*base_force(j)*(dudy(j) - dudy(ny-j+1))*sign(one,-(yp(j)-half*yly))
+         symm_dudy = zpfive*(dudy(j) - dudy(ny-j+1))*sign(one,-(yp(j)-half*yly))
+         if (symm_dudy < zero) then 
+            weight(j) = zero
+         else if (symm_dudy > shear_thresh) then
+             weight(j) = one
+         else
+            weight(j) = symm_dudy/shear_thresh
+         endif
       enddo
       call MPI_Comm_free(split_comm_y,code)
       call MPI_Comm_free(split_comm_z,code)
+   else
+      weight(:) = one
    endif
-  end subroutine
+end subroutine
   subroutine mass_flow_conserve(du1)
    use MPI
    real(mytype), intent(inout), dimension(xsize(1), xsize(2), xsize(3),ntime) :: du1
@@ -780,46 +813,106 @@ contains
       endif
    endif
   end subroutine
-  subroutine body_forces_init
-   use dbg_schemes, only : abs_prec, sin_prec, tanh_prec
+  subroutine linear_bf(bf)
+   use dbg_schemes, only: abs_prec
+   real(mytype), dimension(ny), intent(out) :: bf
    integer :: j
    real(mytype) :: lim, y
+
+   lim = one - bf_ext
+   do j = 1, ny
+      if (istret==0) y=real(j,mytype)*dy-yly*half
+      if (istret/=0) y=yp(j)-yly*half
+      
+      if (abs_prec(y)>lim) then
+         bf(j) = bf_amp*(abs_prec(y)-lim)/bf_ext
+      endif
+   enddo
+  end subroutine linear_bf
+
+  subroutine inner_bf(bf)
+   use var, only : ux1
+   use dbg_schemes, only: exp_prec, log_prec
+
+   real(mytype), dimension(ny), intent(out) :: bf
+   real(mytype), dimension(ny) :: weight
+
+   real(mytype) :: source_val, a, b
+   real(mytype) :: lim, y
+   integer :: j
+
+
+   source_val = compute_amp(tshift_inner)
+   call compute_bfweight(ux1, weight)
+   do j = 1, ny
+      if (istret==0) y=real(j,mytype)*dy
+      if (istret/=0) y=yp(j)
+      
+      a = log_prec(y/bf_inner_cen)
+      b = log_prec((yly-y)/bf_inner_cen)
+      bf(j) = weight(j)*source_val*bf_amp_inner*exp_prec(-bf_alp*a*a) \
+                        + source_val*bf_amp_inner*exp_prec(-bf_alp*b*b)
+   enddo
+  end subroutine inner_bf
+
+  subroutine outer_bf(bf)
+   use var, only : ux1
+   use dbg_schemes, only: sin_prec
+   real(mytype), dimension(ny), intent(out) :: bf
+   real(mytype), dimension(ny) :: weight
+   real(mytype) :: source_val
+   real(mytype) :: lim, y, a, b
+   integer :: j
+
+   source_val = compute_amp(tshift_outer)
+   call compute_bfweight(ux1,weight)
+   bf(:) = zero
+   do j = 1, ny
+      if (istret==0) y=real(j,mytype)*dy
+      if (istret/=0) y=yp(j)
+
+
+      if (y<bf_outer_llim) cycle
+      if (y>yly-bf_outer_llim) cycle
+
+      a = pi/(zpfive*yly-bf_outer_llim)
+      bf(j) = source_val*weight(j)*bf_amp_outer*sin_prec(a*(y-bf_outer_llim))**2
+   enddo
+
+  end subroutine
+
+  subroutine inner_outer_bf(bf) 
+   use var, only : ux1
+   use dbg_schemes, only: sin_prec, exp_prec, log_prec
+   real(mytype), dimension(ny), intent(out) :: bf
+
+   real(mytype), dimension(ny) :: bf1, bf2
+   real(mytype) :: source_val1, source_val2, weight
+   real(mytype) :: lim, y, a, b
+   integer :: j
+
+   bf(:) = zero
+   call inner_bf(bf1)
+   call outer_bf(bf2)
+   do j = 1, ny
+      bf(j) = bf1(j) + bf2(j)
+   enddo
+
+  end subroutine
+  subroutine body_forces_init
+   use dbg_schemes, only : abs_prec, sin_prec, tanh_prec, exp_prec, log_prec
+   integer :: j
+   real(mytype) :: lim, y, a
    if (ibodyforces.eq.1) then
 
-      allocate(body_force(ny))
-      body_force = zero
-      ub_old = one
-
       if (ibftype.eq.1) then
-         lim = one - bf_ext
-         do j = 1, ny
-            if (istret==0) y=real(j,mytype)*dy-yly*half
-            if (istret/=0) y=yp(j)-yly*half
-            
-            if (abs_prec(y)>lim) then
-               body_force(j) = bf_amp*(abs_prec(y)-lim)/bf_ext
-            endif
-         enddo
+         body_force_calc => linear_bf
       elseif (ibftype.eq.2) then
-         lim = one - bf_ext
-         do j = 1, ny
-            if (istret==0) y=real(j,mytype)*dy-yly*half
-            if (istret/=0) y=yp(j)-yly*half
-            
-            if (abs_prec(y)>lim) then
-               body_force(j) = bf_amp*sin_prec(pi*(one - abs_prec(y))/bf_ext)**2
-            endif
-         enddo
+         body_force_calc => inner_bf
       elseif (ibftype.eq.3) then
-         allocate(base_force(ny))
-         do j = 1, ny
-            if (istret==0) y=real(j,mytype)*dy
-            if (istret/=0) y=yp(j)
-            
-            base_force(j) = zpfive*bf_amp*(tanh_prec(bf_alp*(y-bf_ext)) &
-                                             + tanh_prec(-bf_alp*(y-(yly-bf_ext))))
-         enddo
-         body_force(:) = base_force(:)
+         body_force_calc => outer_bf
+      elseif (ibftype.eq.4) then
+         body_force_calc => inner_outer_bf
       endif
    endif
 

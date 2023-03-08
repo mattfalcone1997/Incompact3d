@@ -83,10 +83,12 @@ subroutine parameter(input_i3d)
   NAMELIST/tanhAccelTBL/U_ratio, accel_centre, alpha_accel
   NAMELIST/tanhAccelCubicTBL/U_ratio, accel_centre, alpha_accel, iaccel_thresh
   NAMELIST/fileAccel/accel_file
-  NAMELIST/bodyForce/ibodyforces,ibftype, itempbf
+
+  NAMELIST/bodyForce/ibodyforces,ibftype, itempbf, shear_thresh, tshift_inner, tshift_outer
   NAMELIST/linearBodyF/bf_amp,bf_ext
-  NAMELIST/sin2BodyF/bf_amp,bf_ext
-  NAMELIST/tanhBodyF/bf_amp,bf_ext,bf_alp
+  NAMELIST/innerBodyF/bf_amp_inner,bf_inner_cen,bf_alp
+  NAMELIST/outerBodyF/bf_amp_outer, bf_outer_llim
+
   NAMELIST/tempAccel/itempaccel, iacceltype, istatout,ispectout,ispectstart
   NAMELIST/linear_prof/Re_ratio, t_start, t_end
   NAMELIST/spatial_equiv/U_ratio, accel_centre, alpha_accel
@@ -277,9 +279,12 @@ subroutine parameter(input_i3d)
       if (ibftype.eq.1) then
          read(10,nml=linearBodyF); rewind(10)
       else if (ibftype.eq.2) then
-         read(10,nml=sin2BodyF); rewind(10)
+         read(10,nml=innerBodyF); rewind(10)
       else if (ibftype.eq.3) then
-         read(10,nml=tanhBodyF); rewind(10)
+         read(10,nml=outerBodyF); rewind(10)
+      else if (ibftype.eq.4) then
+         read(10,nml=innerBodyF); rewind(10)
+         read(10,nml=outerBodyF); rewind(10)
       endif
    else
       ibodyforces = 0
@@ -697,14 +702,29 @@ subroutine parameter(input_i3d)
          write(*,"(' Body force amplitude   : ',F17.8)") bf_amp
          write(*,"(' Body force extent   : ',F17.8)") bf_ext
       else if (ibftype.eq.2) then
-         write(*,*) "Sine squared body force selected"
-         write(*,"(' Body force amplitude   : ',F17.8)") bf_amp
-         write(*,"(' Body force extent   : ',F17.8)") bf_ext
+         write(*,*) "Inner body force selected"
+         write(*,"(' Body force amplitude   : ',F17.8)") bf_amp_inner
+         write(*,"(' Body peak location   : ',F17.8)") bf_inner_cen
+      else if (ibftype.eq.3) then
+         write(*,*) "Outer body force selected"
+         write(*,"(' Body force amplitude   : ',F17.8)") bf_amp_outer
+         write(*,"(' Body force lower limit   : ',F17.8)") bf_outer_llim
+      else if (ibftype.eq.4) then
+         write(*,*) "Combined inner-outer body force selected"
+         write(*,"(' Inner body force amplitude   : ',F17.8)") bf_amp_inner
+         write(*,"(' Outer body force amplitude   : ',F17.8)") bf_amp_outer
+         write(*,"(' Inner body peak location   : ',F17.8)") bf_inner_cen
+         write(*,"(' Outer body force lower limit   : ',F17.8)") bf_outer_llim
+      endif
+      if (itempbf.ne.0) then
+         write(*,*) "Transient body force selected"
+         write(*,"(' Shear threshold for relaxation   : ',F17.8)") shear_thresh
+         if (ibftype.eq.2.or.ibftype.eq.4) &
+               write(*,"(' dudt inner time shift   : ',F17.8)") tshift_inner
+         if (ibftype.eq.3.or.ibftype.eq.4) &
+               write(*,"(' dudt outer time shift   : ',F17.8)") tshift_outer
       else
-         write(*,*) "tanh body force selected"
-         write(*,"(' Body force amplitude   : ',F17.8)") bf_amp
-         write(*,"(' Body force extent   : ',F17.8)") bf_ext
-         write(*,"(' Tanh stretching   : ',F17.8)") bf_alp
+         write(*,*) "Steady body force selected"
       endif
       write(*,*) '==========================================================='
      else if (itype==itype_channel) then
@@ -896,6 +916,7 @@ subroutine parameter_defaults()
   bf_amp = zero
   bf_ext = zero
   bf_alp = zero
+  shear_thresh = zero
   ibftype = 0
   itempbf = 0
 
