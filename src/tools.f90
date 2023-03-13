@@ -166,19 +166,21 @@ contains
        call cpu_time(tstart)
        if (nrank==0.and.log_cputime) call output_cputime(1.0,reset=.true.)
     else if (iwhen == 2) then !AT THE START OF A TIME STEP
-       if (nrank == 0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime==ilast)) then
-          call cpu_time(time1)
-          write(*,*) '==========================================================='
-          write(*,"(' Time step =',i7,'/',i7,', Time unit =',F9.4)") itime,ilast,t
+       if (mod(itime, ilist) == 0 .or. itime == ifirst .or. itime==ilast) then
+         call get_cpu_time(time1)
+         if (nrank == 0) then
+            write(*,*) '==========================================================='
+            write(*,"(' Time step =',i7,'/',i7,', Time unit =',F9.4)") itime,ilast,t
+         endif
        endif
     else if ((iwhen == 3).and.(itime > ifirst)) then !AT THE END OF A TIME STEP
-       if (nrank == 0 .and.(mod(itime, ilist) == 0.or.mod(itime,istatcalc)==0)) then
-         call cpu_time(trank)
+       if (mod(itime, ilist) == 0.or.mod(itime,istatcalc)==0.or. itime == ifirst .or. itime==ilast) then
+         call get_cpu_time(trank)
          tstep = trank-time1
        endif
        if (nrank == 0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime==ilast)) then
-          if (nrank==0) write(*,*) 'Time for this time step (s):',tstep
-          if (nrank==0.and.log_cputime) call output_cputime(real(trank-time1))
+          write(*,*) 'Time for this time step (s):',tstep
+          if (log_cputime) call output_cputime(real(trank-time1))
 
           telapsed = (trank-tstart)/threethousandsixhundred
           tremaining  = telapsed*(ilast-itime)/(itime-ifirst)
@@ -206,23 +208,32 @@ contains
           write(*,*) '                                                           '
        endif
       else if (iwhen ==5 .and. itime>=initstat) then
-         if (nrank == 0) then
             if  (mod(itime,istatcalc) == 0.or.(itempaccel==1.and.mod(itime,istatout)==0)) then
                call cpu_time(trank)
-               if (itempaccel/=1) then
-                  tstats = (trank - time1 - tstep)/real(istatcalc)
-               else
-                  tstats = (trank - time1 - tstep)/real(istatout)
+               if (nrank == 0) then
+                  if (itempaccel/=1) then
+                     tstats = (trank - time1 - tstep)/real(istatcalc)
+                  else
+                     tstats = (trank - time1 - tstep)/real(istatout)
+                  endif
                endif
             endif
             if ((mod(itime, ilist) == 0 .or. itime == ifirst .or. itime==ilast)) then
-
-               write(*,*) 'Post-processing time for time step (s):',tstats
+               if (nrank==0) write(*,*) 'Post-processing time for time step (s):',tstats
             endif
-         endif
     endif
 
   end subroutine simu_stats
+  subroutine get_cpu_time(time)
+   use MPI
+   use decomp_2d, only: mytype
+   implicit none
+   real(mytype), intent(out) :: time
+   integer :: ierr
+   
+   call MPI_Barrier(  MPI_COMM_WORLD, ierr)
+   time = MPI_WTime()
+  end subroutine
   !##############################################################################
     !! 
   !##############################################################################

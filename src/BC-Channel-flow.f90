@@ -41,7 +41,7 @@ contains
     use variables
     use param
     use MPI
-    use dbg_schemes, only: exp_prec, abs_prec, sqrt_prec
+    use dbg_schemes, only: exp_prec, abs_prec, sqrt_prec, log_prec
 #ifdef DEBG 
     use tools, only : avg3d
 #endif
@@ -52,7 +52,7 @@ contains
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux1,uy1,uz1,ep1
     real(mytype),dimension(xsize(1),xsize(2),xsize(3),numscalar) :: phi1
 
-    real(mytype) :: y,r,um,r3,x,z,h,ct
+    real(mytype) :: y,r,um,r3,x,z,h,ct, a, b
     real(mytype) :: cx0,cy0,cz0,hg,lg
     real(mytype) :: ftent, u_max
     integer :: k,j,i,fh,ierror,ii,is,it,code, jj
@@ -162,7 +162,9 @@ contains
           do j=1,xsize(2)
              if (istret==0) y=real(j+xstart(2)-1-1,mytype)*dy-yly*half
              if (istret/=0) y=yp(j+xstart(2)-1)-yly*half
-             um=exp_prec(-zptwo*y*y)
+             a = log_prec((y+yly*half)/0.1)
+             b = log_prec((yly*half-y)/0.1)
+             um=exp_prec(-one*a*a) + exp_prec(-one*b*b)
              do i=1,xsize(1)
                 if (use_center) u_max = one
                 if (.not.use_center) u_max = onepfive
