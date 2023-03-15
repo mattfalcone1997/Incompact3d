@@ -72,7 +72,6 @@ contains
     ! Exit if no file or no probes
     if (nprobes.le.0) then
        flag_extra_probes = .false.
-       return
     else
       allocate(xyzprobes(3, nprobes))
     endif
