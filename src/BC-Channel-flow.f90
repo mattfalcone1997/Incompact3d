@@ -687,8 +687,8 @@ contains
     if (itime < spinup_time .and. iin <= 2) then
        if (nrank==0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime == ilast)) &
           write(*,*) 'Rotating turbulent channel at speed ',wrotation
-       dux1(:,:,:,1) = dux1(:,:,:,1) - wrotation*uy1(:,:,:)
-       duy1(:,:,:,1) = duy1(:,:,:,1) + wrotation*ux1(:,:,:)
+       duz1(:,:,:,1) = duz1(:,:,:,1) - wrotation*uy1(:,:,:)
+       duy1(:,:,:,1) = duy1(:,:,:,1) + wrotation*uz1(:,:,:)
     endif
 
     if (ibodyforces.eq.1) then
