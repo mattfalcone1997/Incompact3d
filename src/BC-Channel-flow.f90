@@ -672,7 +672,8 @@ contains
     real(mytype), intent(in), dimension(xsize(1), xsize(2), xsize(3)) :: ux1, uy1, uz1
     real(mytype), dimension(xsize(1), xsize(2), xsize(3), ntime) :: dux1, duy1, duz1
     real(mytype), dimension(ny) :: bforce
-    integer :: j, jloc
+    real(mytype) :: rot_sign
+    integer :: i, j, k, jloc
 
     if (cpg) then
         !! fcpg: add constant pressure gradient in streamwise direction
@@ -687,8 +688,20 @@ contains
     if (itime < spinup_time .and. iin <= 2) then
        if (nrank==0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime == ilast)) &
           write(*,*) 'Rotating turbulent channel at speed ',wrotation
-       duz1(:,:,:,1) = duz1(:,:,:,1) - wrotation*uy1(:,:,:)
-       duy1(:,:,:,1) = duy1(:,:,:,1) + wrotation*uz1(:,:,:)
+         do k = 1, xsize(3)
+            do j = 1, xsize(2)
+               jloc = j + xstart(2) -1
+               if (jloc>(ny+1)/2) then
+                  rot_sign = one
+               else
+                  rot_sign = -one
+               endif
+               do i = 1, xsize(1)
+                  dux1(i,j,k,1) = dux1(i,j,k,1) - rot_sign*wrotation*uy1(i,j,k)
+                  duy1(i,j,k,1) = duy1(i,j,k,1) + rot_sign*wrotation*ux1(i,j,k)
+               enddo
+            enddo
+         enddo
     endif
 
     if (ibodyforces.eq.1) then
