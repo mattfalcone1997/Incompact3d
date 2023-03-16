@@ -82,7 +82,6 @@ program xcompact3d
      call simu_stats(3)
 
      call postprocessing(rho1,ux1,uy1,uz1,pp3,phi1,ep1)
-     call simu_stats(5)
   enddo !! End time loop
 
   call finalise_xcompact3d()

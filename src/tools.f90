@@ -21,7 +21,7 @@ module tools
        apply_spatial_filter, read_inflow, append_outflow, write_outflow, init_inflow_outflow, &
        compute_cfldiff, compute_cfl, &
        rescale_pressure, mean_plane_x, mean_plane_y, mean_plane_z, &
-       avg3d
+       avg3d, get_cpu_time
 
 contains
   !##################################################################
@@ -161,8 +161,6 @@ contains
        trank=zero
        tranksum=zero
        ttotal=zero
-       tstats=zero
-       tstep=zero
        call cpu_time(tstart)
        if (nrank==0.and.log_cputime) call output_cputime(1.0,reset=.true.)
     else if (iwhen == 2) then !AT THE START OF A TIME STEP
@@ -174,18 +172,17 @@ contains
          endif
        endif
     else if ((iwhen == 3).and.(itime > ifirst)) then !AT THE END OF A TIME STEP
-       if (mod(itime, ilist) == 0.or.mod(itime,istatcalc)==0.or. itime == ifirst .or. itime==ilast) then
+       if (mod(itime, ilist) == 0 .or. itime == ifirst .or. itime==ilast) then
          call get_cpu_time(trank)
-         tstep = trank-time1
-       endif
-       if (nrank == 0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime==ilast)) then
-          write(*,*) 'Time for this time step (s):',tstep
-          if (log_cputime) call output_cputime(real(trank-time1))
+         if (nrank==0) then
+            write(*,*) 'Time for this time step (s):',trank-time1
+            if (log_cputime) call output_cputime(real(trank-time1))
 
-          telapsed = (trank-tstart)/threethousandsixhundred
-          tremaining  = telapsed*(ilast-itime)/(itime-ifirst)
-          write(*,"(' Remaining time:',I8,' h ',I2,' min')") int(tremaining), int((tremaining-int(tremaining))*sixty)
-          write(*,"(' Elapsed time:  ',I8,' h ',I2,' min')") int(telapsed), int((telapsed-int(telapsed))*sixty)
+            telapsed = (trank-tstart)/threethousandsixhundred
+            tremaining  = telapsed*(ilast-itime)/(itime-ifirst)
+            write(*,"(' Remaining time:',I8,' h ',I2,' min')") int(tremaining), int((tremaining-int(tremaining))*sixty)
+            write(*,"(' Elapsed time:  ',I8,' h ',I2,' min')") int(telapsed), int((telapsed-int(telapsed))*sixty)
+         endif
        endif
     else if (iwhen == 4) then !AT THE END OF THE SIMULATION
        call cpu_time(trank)
@@ -207,20 +204,6 @@ contains
           write(*,*) 'Total wallclock (h):',real(ttotal/threethousandsixhundred,4)
           write(*,*) '                                                           '
        endif
-      else if (iwhen ==5 .and. itime>=initstat) then
-            if  (mod(itime,istatcalc) == 0.or.(itempaccel==1.and.mod(itime,istatout)==0)) then
-               call cpu_time(trank)
-               if (nrank == 0) then
-                  if (itempaccel/=1) then
-                     tstats = (trank - time1 - tstep)/real(istatcalc)
-                  else
-                     tstats = (trank - time1 - tstep)/real(istatout)
-                  endif
-               endif
-            endif
-            if ((mod(itime, ilist) == 0 .or. itime == ifirst .or. itime==ilast)) then
-               if (nrank==0) write(*,*) 'Post-processing time for time step (s):',tstats
-            endif
     endif
 
   end subroutine simu_stats

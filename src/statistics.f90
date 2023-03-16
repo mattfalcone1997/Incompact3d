@@ -1001,7 +1001,7 @@ contains
     use variables
     use decomp_2d
     use decomp_2d_io
-    use tools, only : rescale_pressure
+    use tools, only : rescale_pressure, get_cpu_time
     USE var, only : ta1,tb1,tc1,td1,te1,tf1,tg1,th1,ti1,di1
     USE var, only : ta2,tb2,tc2,td2,te2,tf2,di2,ta3,tb3,tc3,td3,di3
     use ibm_param, only : ubcx, ubcy, ubcz
@@ -1026,6 +1026,8 @@ contains
     integer :: is
     character(len=30) :: filename
     logical :: any, depend,spectra, write, write_spectra
+    real(mytype) :: time1, time2, time3, normt
+    real(mytype), save :: tcompute
 
     if (itime.lt.initstat) then
        return
@@ -1039,7 +1041,10 @@ contains
           call restart_statistic()
        endif
     endif
-    
+    call get_cpu_time(time1)
+    if (itempaccel==0) normt = real(istatcalc)
+    if (itempaccel/=0) normt = real(istatout)
+
     call process_statistics(any, depend,spectra, write, write_spectra)
     if (any) then
 
@@ -1157,7 +1162,10 @@ contains
                                   tb3,dwdx,dwdy,tc3,td3)
       endif
     endif
-
+    call get_cpu_time(time2)
+    if (any) tcompute = time2- time1
+    if (nrank==0.and.(mod(itime,ilist)==0.or.itime==ifirst.or.itime==ilast))&
+           write(*,*) "Statistics compute time (s): ", tcompute/normt
     ! Write all statistics
     call put_write_read_start(.false., write, write_spectra.and.istatspectra,&
                                               write_spectra.and.istatautocorr)
@@ -1179,6 +1187,11 @@ contains
         endif
       endif
     endif
+    call get_cpu_time(time3)
+    if (nrank==0.and.(write.or.&
+          (write_spectra.and.(istatspectra.or.istatautocorr))))&
+           write(*,*) "Statistics write time (s): ", time3-time2
+
     call put_write_read_end(.false., write.or. (write_spectra.and.istatspectra)&
                                             .or.(write_spectra.and.istatautocorr))
 
