@@ -3,7 +3,7 @@
 !SPDX-License-Identifier: BSD 3-Clause
 
 module visu
-  
+  use decomp_2d, only: mytype
   implicit none
 
   ! True to activate the XDMF output
@@ -18,7 +18,7 @@ module visu
   integer, save :: output2D
   integer :: ioxdmf
   character(len=9) :: ifilenameformat = '(I7.7)'
-  real, save :: tstart, tend
+  real(mytype), save :: tstart, tend
 
   character(len=*), parameter :: io_name = "solution-io"
   character(len=128) :: output_fname
@@ -279,7 +279,7 @@ contains
     use var, only : ppi3, dip3, ph3, nzmsize
     use var, only : npress
 
-    use tools, only : rescale_pressure
+    use tools, only : rescale_pressure, get_cpu_time
 
     implicit none
 
@@ -301,8 +301,9 @@ contains
     logical :: dir_exists
 
     ! Update log file
+
+    call get_cpu_time(tstart)
     if (nrank.eq.0) then
-      call cpu_time(tstart)
       print *,'Writing snapshots =>', ioutput_num(itime)
     end if
 
@@ -372,6 +373,7 @@ contains
     use param, only : istret, xlx, yly, zlz
     use variables, only : nx, ny, nz, beta
     use var, only : dt,t
+    use tools, only: get_cpu_time
 
     implicit none
 
@@ -417,8 +419,8 @@ contains
 #endif
     
     ! Update log file
+    call get_cpu_time(tend)
     if (nrank.eq.0) then
-      call cpu_time(tend)
       write(*,'(" Time for writing snapshots (s): ",F12.8)') tend-tstart
     endif
 

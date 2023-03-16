@@ -161,7 +161,7 @@ contains
        trank=zero
        tranksum=zero
        ttotal=zero
-       call cpu_time(tstart)
+       call get_cpu_time(tstart)
        if (nrank==0.and.log_cputime) call output_cputime(1.0,reset=.true.)
     else if (iwhen == 2) then !AT THE START OF A TIME STEP
        if (mod(itime, ilist) == 0 .or. itime == ifirst .or. itime==ilast) then
@@ -185,7 +185,7 @@ contains
          endif
        endif
     else if (iwhen == 4) then !AT THE END OF THE SIMULATION
-       call cpu_time(trank)
+       call get_cpu_time(trank)
        ttotal=trank-tstart
        if (nrank == 0) then
           write(*,*) '==========================================================='

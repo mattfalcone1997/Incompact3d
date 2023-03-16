@@ -11,6 +11,7 @@ PROGRAM post
   USE var
   USE MPI
   USE post_processing
+  use tools, only: get_cpu_time
 
   implicit none
 
@@ -79,10 +80,10 @@ PROGRAM post
 
   ttsize=(read_phi*numscalar+read_u*3)*nx*ny*nz
   tstart=0.;t1=0.;trank=0.;tranksum=0.;ttotal=0.
-  call cpu_time(tstart)
+  call get_cpu_time(tstart)
 
   do ii=1, nt
-     call cpu_time(t1)
+     call get_cpu_time(t1)
      ifile = (ii-1)*icrfile+file1
      write(filename,"(I4.4)") ifile
      t=dt*real(imodulo*ifile,mytype)
@@ -93,7 +94,7 @@ PROGRAM post
      endif
 
      !READ DATA
-     call cpu_time(trstart)
+     call get_cpu_time(trstart)
      if ( read_phi .eq. 1 ) then
         do is=1, numscalar
            write(filename,"('./data/phi',I1.1,I4.4)") is, ifile
@@ -110,7 +111,7 @@ PROGRAM post
         call decomp_2d_read_one(1,uz1,filename)
         call test_speed_min_max(ux1,uy1,uz1)
      endif
-     call cpu_time(trend)
+     call get_cpu_time(trend)
 
      if (ivisu.ne.0) then
         if (comp_visu .eq. 1) then
@@ -122,7 +123,7 @@ PROGRAM post
            call postprocessing(ux1,uy1,uz1,phi1,ep1)
         endif
      endif
-     call cpu_time(trank)
+     call get_cpu_time(trank)
 
      telapsed = (trank-tstart)/3600.
      tremaining  =  telapsed*(nt-ii)/(ii)
@@ -135,7 +136,7 @@ PROGRAM post
      endif
   enddo
 
-  call cpu_time(trank)
+  call get_cpu_time(trank)
   ttotal=trank-tstart
 
   if (nrank==0) then

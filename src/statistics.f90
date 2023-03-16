@@ -1190,7 +1190,7 @@ contains
     call get_cpu_time(time3)
     if (nrank==0.and.(write.or.&
           (write_spectra.and.(istatspectra.or.istatautocorr))))&
-           write(*,*) "Statistics write time (s): ", time3-time2
+           write(*,*) "    write time (s): ", time3-time2
 
     call put_write_read_end(.false., write.or. (write_spectra.and.istatspectra)&
                                             .or.(write_spectra.and.istatautocorr))
