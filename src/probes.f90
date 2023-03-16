@@ -395,10 +395,11 @@ contains
   end subroutine
 
   subroutine write_line_probes(ux1,uy1,uz1)
-   use var, only : itime, nz, t, nzmsize, numscalar
+   use var, only : itime, nz, t, nzmsize, numscalar, ilast, ifirst,ilist
    use param, only : npress
    use decomp_2d
    use MPI
+   use tools, only: get_cpu_time
 
    !dummy argument declaration
    real(mytype),intent(in),dimension(xsize(1),xsize(2),xsize(3)) :: ux1, uy1, uz1
@@ -409,10 +410,17 @@ contains
    character(len=80) :: fname
    integer :: disp_bytes
    logical :: exists
+   real(mytype) :: time1, time2
+   real(mytype), save :: twrite
+
    !collect info
 
    if (nlineprobes.le.0) return
+   if (nrank==0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime==ilast))&
+      write(*,*) "Line probe write time (s):", twrite/probe_freq
+
    if (mod(itime, probe_freq) /= 0) return
+   call get_cpu_time(time1)
 
    j=0
    do i = 1, nlineprobes
@@ -474,7 +482,9 @@ contains
       write(unit,'(I0,",",g0)') itime, t
       close(unit)
    endif
-
+   call get_cpu_time(time2)
+    twrite = time2 - time1
+    
   end subroutine write_line_probes
 
   !############################################################################
@@ -486,7 +496,7 @@ contains
     use decomp_2d, only : xsize, ysize, zsize
     use param, only : itime, irestart, itr, t
     use param, only : npress, sync_vel_needed, sync_scal_needed
-    use var, only : nzmsize
+    use var, only : nzmsize, ilast, ifirst,ilist
     use variables, only : numscalar
     use variables, only : derx, dery, derz, derxs, derys, derzs
     use var, only : transpose_x_to_y, transpose_y_to_z
@@ -505,6 +515,7 @@ contains
     use var, only : sc_even
     
     use ibm_param, only : ubcx,ubcy,ubcz
+    use tools, only: get_cpu_time
 
     real(mytype),intent(in),dimension(xstart(1):xend(1),xstart(2):xend(2),xstart(3):xend(3)) :: ux1, uy1, uz1
     real(mytype), intent(in),dimension(ph1%zst(1):ph1%zen(1), ph1%zst(2):ph1%zen(2), nzmsize, npress) :: pp3
@@ -515,9 +526,12 @@ contains
     character(len=1),parameter :: NL=char(10) !new line character
     character(len=30) :: filename
     logical :: evensc
+    real(mytype) :: time1, time2
+    real(mytype), save :: twrite
     
     if (nprobes.le.0) return
-
+    
+    call get_cpu_time(time1)
     ! Number of columns
     FS = 1+3+numscalar
     FSP = 1+1 ! Pressure grid
@@ -630,8 +644,12 @@ contains
        ! Record the gradients
        call write_extra_probes()
 
+       
     endif
-
+    call get_cpu_time(time2)
+    twrite = time2 - time1
+    if (nrank==0.and.(mod(itime, ilist) == 0 .or. itime == ifirst .or. itime==ilast))&
+      write(*,*) "Probe write time (s):", twrite
   end subroutine write_probes
 
   !############################################################################
