@@ -52,6 +52,7 @@ module probes
   integer, save, allocatable, dimension(:) :: probecomms
   integer, save, allocatable, dimension(:,:) :: probelocs
   logical, allocatable, dimension(:) :: ranklineprobes
+  integer, allocatable, dimension(:) ::lineprobefh
 
   integer :: nprobes_local, probe_freq, run_number
   integer(MPI_OFFSET_KIND), allocatable, dimension(:) :: offset_mpi
@@ -292,6 +293,8 @@ contains
    allocate(ranklineprobes(nlineprobes))
    allocate(probelocs(2,nlineprobes))
    allocate(offset_mpi(nlineprobes))
+   allocate(lineprobefh(nlineprobes))
+   offset_mpi(:) =0_MPI_OFFSET_KIND
 
    nprobes_local = 0
    call MPI_cart_get(DECOMP_2D_COMM_CART_X,2,dims,&
@@ -392,6 +395,13 @@ contains
 
    call MPI_Bcast(run_number,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
    
+   do i = 1, nlineprobes
+      if (ranklineprobes(i)) then
+         write(fname,'("./probes/lineprobe",I4.4,"-run",I0)') i, run_number
+         call MPI_File_open(probecomms(i),fname,MPI_MODE_WRONLY + MPI_MODE_CREATE,&
+                           MPI_INFO_NULL, lineprobefh(i), ierr)
+      endif
+   enddo
   end subroutine
 
   subroutine write_line_probes(ux1,uy1,uz1)
@@ -445,30 +455,16 @@ contains
    call MPI_Type_commit(newtype,ierr)
 
    call MPI_Type_size(real_type,disp_bytes,ierr)
-
+   
    j=0
    do i = 1, nlineprobes
-      
-      write(fname,'("./probes/lineprobe",I4.4,"-run",I0)') i, run_number
-      inquire(file=fname,exist=exists)
-      if (exists) then
-         mode = MPI_MODE_WRONLY
-      else
-         mode = MPI_MODE_WRONLY + MPI_MODE_CREATE
-         offset_mpi(i) = 0_MPI_OFFSET_KIND
-      endif
-
       if (ranklineprobes(i)) then
          j= j + 1
-         call MPI_File_open(probecomms(i),fname,mode,&
-                           MPI_INFO_NULL, fh, ierr)
-
-         call MPI_file_set_view(fh,offset_mpi(i),real_type, &
+         call MPI_file_set_view(lineprobefh(i),offset_mpi(i),real_type, &
                            newtype,'native',MPI_INFO_NULL,ierr)
-         call MPI_File_write_all(fh,lineprobes(:,:,j),subsizes(1)*subsizes(2),&
+         call MPI_File_write_all(lineprobefh(i),lineprobes(:,:,j),subsizes(1)*subsizes(2),&
                                  real_type,MPI_STATUS_IGNORE,ierr)
-         
-         call MPI_File_close(fh,ierr)
+
          offset_mpi(i) = offset_mpi(i) + int(sizes(1),kind=MPI_OFFSET_KIND)&
                                        *int(sizes(2),kind=MPI_OFFSET_KIND)&
                                        *disp_bytes
@@ -849,7 +845,8 @@ contains
   ! Free allocated memory at the end of the simulation
   !
   subroutine finalize_probes()
-
+   use MPI
+   integer :: i, ierr
     if (nprobes.le.0) return
 
     deallocate(xyzprobes)
@@ -864,7 +861,11 @@ contains
     endif
 
     if (nlineprobes.gt.0) then
+      do i = 1, nlineprobes
+         if (ranklineprobes(i)) call MPI_File_close(lineprobefh(i),ierr)
+      enddo
       deallocate(probecomms,ranklineprobes)
+      deallocate(lineprobefh)
       deallocate(probelocs)
       if (nprobes_local.gt.0) deallocate(lineprobes)
       deallocate(zlineprobes)
