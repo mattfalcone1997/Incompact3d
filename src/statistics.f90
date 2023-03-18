@@ -760,8 +760,8 @@ contains
                         real_type, MPI_STATUS_IGNORE, code)
       call MPI_FILE_CLOSE(fh,code)
       
-
     endif
+    call MPI_Comm_free(split_comm_x,code)
   end subroutine write_one_xz
   subroutine read_write_spectra(flag_read, array, file_base,ipencil)
     use decomp_2d

@@ -353,6 +353,10 @@ contains
       endif      
    enddo
 
+   if (all(probecomms == MPI_COMM_NULL)) then
+      call MPI_Comm_free(split_comm_y,ierr)
+   endif
+
    if (nprobes_local.gt.0) then
       allocate(lineprobes(xsize(3),3,nprobes_local))
    endif
@@ -862,7 +866,10 @@ contains
 
     if (nlineprobes.gt.0) then
       do i = 1, nlineprobes
-         if (ranklineprobes(i)) call MPI_File_close(lineprobefh(i),ierr)
+         if (ranklineprobes(i)) then 
+            call MPI_File_close(lineprobefh(i),ierr)
+            call MPI_Comm_free(probecomms(i),ierr)
+         endif
       enddo
       deallocate(probecomms,ranklineprobes)
       deallocate(lineprobefh)
