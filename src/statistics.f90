@@ -63,7 +63,8 @@ module stats
   integer :: spectra_corr_nlocs, spectra_corr_thisrank, spectra_corr_comm
   real(mytype), dimension(:), allocatable :: spectra_corr_ylocs
   integer, dimension(:), allocatable :: spectra_corr_yinds, spectra_corr_ranks
-
+  logical :: correct_dissipation = .false.
+  integer :: initdissip
   private
   public :: overall_statistic, h_quads, spectra_level, lambda2,&
             autocorr_max_sep, autocorr_xlocs, spectra_corr_nlocs, spectra_corr_ylocs
@@ -218,7 +219,7 @@ contains
     call decomp_info_init(sizex, ny, 10, uuu_info)
     call decomp_info_init(sizex, ny, 3, pdudx_info)
     call decomp_info_init(sizex, ny, 9, dudx_info)
-    call decomp_info_init(sizex, ny, 12, dudxdudx_info)
+    call decomp_info_init(sizex, ny, 18, dudxdudx_info)
 
     call decomp_info_init(sizex, ny, 4*nquads, uv_quadrant_info)
 
@@ -237,7 +238,7 @@ contains
       allocate(uuu_mean(lsizex,zsize(2),10))
       allocate(pdudx_mean(lsizex,zsize(2),3))
       allocate(dudx_mean(lsizex,zsize(2),9))
-      allocate(dudxdudx_mean(lsizex,zsize(2),12))
+      allocate(dudxdudx_mean(lsizex,zsize(2),18))
 
       pu_mean = zero
       uuu_mean = zero
@@ -537,6 +538,7 @@ contains
     use decomp_2d_io, only : decomp_2d_write_mode, decomp_2d_read_mode, &
          decomp_2d_open_io, decomp_2d_close_io, decomp_2d_start_io, decomp_2d_end_io
     use var ,only: nz, nx
+    use MPI
     implicit none
 
     ! Argument
@@ -546,7 +548,7 @@ contains
     integer :: is, it
     character(len=30) :: filename
     integer :: io_mode
-    integer :: i, j
+    integer :: i, j, ierr
     real(mytype) :: factor
 
 
@@ -569,7 +571,11 @@ contains
       call read_or_write_one_stat(flag_read, gen_statname("pdudx_mean"), pdudx_mean, pdudx_info)
       call read_or_write_one_stat(flag_read, gen_statname("dudx_mean"), dudx_mean,dudx_info)
       call read_or_write_one_stat(flag_read, gen_statname("pu_mean"), pu_mean,pu_info)
-      call read_or_write_one_stat(flag_read, gen_statname("dudxdudx_mean"), dudxdudx_mean,dudxdudx_info)
+      if (flag_read) then
+        call read_dudx2_stat
+      else
+        call read_or_write_one_stat(flag_read, gen_statname("dudxdudx_mean"), dudxdudx_mean,dudxdudx_info)
+      endif
 
     endif
 
@@ -598,6 +604,11 @@ contains
   if (flag_read) then
 
     if (check_stat_correct(gen_statname("pdudx_mean"))) then
+      if (nclx.and.nrank==0) then
+        write(*,*) "unable to restart due to new xz avg format"
+        call MPI_Abort(MPI_COMM_WORLD,-1,ierr)
+      endif
+
       if (nrank ==0 ) write(*,*) "Correcting gradient means on read!!!!"
       factor = zpfive*real(nz,kind=mytype)/(real(nz)-two)
       do j = 1, zsize(2)
@@ -661,6 +672,80 @@ contains
       endif
     enddo
 
+  end function
+
+  subroutine read_dudx2_stat()
+    use param, only: zero, itime
+    use var, only: nx, ny
+    use decomp_2d
+    use MPI
+    type(DECOMP_INFO) :: dudx2_corr_info
+    real(mytype), dimension(zsize(1),zsize(2),12) :: dudx2_read
+    integer :: unit, code
+
+    if (check_dudx2_correct(gen_statname("dudxdudx_mean"))) then
+      if (nrank==0) write(*,*) "Making correction to dissipation"
+      call decomp_info_init(nx,ny,12, dudx2_corr_info)
+
+      call read_or_write_one_stat(.true., gen_statname("dudxdudx_mean"), dudx2_read,dudx2_corr_info)
+      dudxdudx_mean(:,:,1:12) = dudx2_read(:,:,:)
+      dudxdudx_mean(:,:,13:18) = zero
+      correct_dissipation = .true.
+      initdissip = itime
+      if (nrank ==0) then
+        open(newunit=unit,file='dissipation.log',action='write',status='replace')
+        write(unit,*) initdissip
+        close(unit)
+      endif
+    else
+      call read_or_write_one_stat(.true., gen_statname("dudxdudx_mean"), dudxdudx_mean,dudxdudx_info)
+      inquire(file='dissipation.log',exist=correct_dissipation)
+      if (correct_dissipation) then
+        open(newunit=unit,file='dissipation.log',status='old',action='read')
+        read(unit,*) initdissip
+        close(unit)
+        if (nrank==0 .and.initdissip>itime) then
+          write(*,*) "Bug test: initdissip must be less than itime"
+          call MPI_Abort(MPI_COMM_WORLD,1,code)
+        endif
+        if (nrank==0) write(*,*) "Restarting statistics with initdissip:",initdissip
+      endif
+    endif
+  end subroutine
+
+  function check_dudx2_correct(fname) result(update)
+    use decomp_2d
+    use var, only: nx, ny, nclx
+    use MPI
+
+    character(len=*), intent(in) :: fname
+    integer :: values(13), check
+    integer :: new_bytes, old_bytes
+    integer :: code, i
+    logical :: update
+
+    call stat('statistics/'//trim(fname),values,check)
+    if (check /=0 .and. nrank==0) then
+      write(*,*) "There has been a problem"
+      call MPI_Abort(MPI_COMM_WORLD,1,code)
+    endif
+    if (nclx) then
+      new_bytes = ny*18*8
+      old_bytes = ny*12*8
+    else
+      new_bytes = nx*ny*18*8
+      old_bytes = nx*ny*12*8
+    endif
+    if (values(8)==new_bytes) then
+      update = .false.
+    else if (values(8)==old_bytes) then
+      update = .true.
+    else
+      if (nrank==0) then
+        write(*,*) "File read is not valid size, big sad!"
+        call MPI_Abort(MPI_COMM_WORLD,1,code)
+      endif
+    endif
   end function
   !
   ! Statistics: perform one IO
@@ -1126,7 +1211,9 @@ contains
                                   tb3,dwdx,dwdy,tc3,td3)
 
       call update_velograd2_tensor(dudxdudx_mean,&
-                                  dudx,dvdx,dwdx,dudy,dvdy,dwdy,td3)
+                                  dudx,dvdx,dwdx,&
+                                  dudy,dvdy,dwdy,&
+                                  ta3,tb3,tc3,td3)
                         
       endif                             
 
@@ -1242,7 +1329,7 @@ contains
   !
   ! Update um, the average of ux
   !
-  subroutine update_average_scalar(um, ux, ep,mask,istat2)
+  subroutine update_average_scalar(um, ux, ep,mask,istat2,new_dissipation)
 
     use decomp_2d
     use param, only : itime, initstat, istatcalc, itempaccel, initstat2, nclx
@@ -1256,6 +1343,7 @@ contains
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ux
     logical, dimension(zsize(1),zsize(2),zsize(3)), optional, intent(in) :: mask
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ep
+    logical, optional, intent(in) :: new_dissipation
     real(mytype), dimension(zsize(2)) :: stat_x, stat_xg
     logical, optional, intent(in) :: istat2
     integer :: color, key
@@ -1298,6 +1386,12 @@ contains
     if (present(istat2)) then
       if (istat2) then
         stat_inc = real((itime-initstat2)/istatcalc+1, kind=mytype)
+      else
+        stat_inc = real((itime-initstat)/istatcalc+1, kind=mytype)
+      endif
+    else if (present(new_dissipation)) then
+      if (new_dissipation) then
+        stat_inc = real((itime-initdissip)/istatcalc+1, kind=mytype)
       else
         stat_inc = real((itime-initstat)/istatcalc+1, kind=mytype)
       endif
@@ -1451,13 +1545,16 @@ contains
   end subroutine update_velograd_tensor
 
   subroutine update_velograd2_tensor(dudxdudxm,&
-                                     dudx,dvdx,dwdx,dudy,dvdy,dwdy,ep)
+                                     dudx,dvdx,dwdx,&
+                                     dudy,dvdy,dwdy,&
+                                     dudz,dvdz,dwdz,ep)
     use decomp_2d, only : mytype, xsize, zsize
 
     real(mytype), dimension(:,:,:), intent(inout) :: dudxdudxm
 
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: dudx, dvdx, dwdx, ep
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: dudy, dvdy, dwdy
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: dudz, dvdz, dwdz
 
     call update_average_scalar(dudxdudxm(:,:,1), dudx*dudx, ep)
     call update_average_scalar(dudxdudxm(:,:,2), dudx*dvdx, ep)
@@ -1472,6 +1569,13 @@ contains
     call update_average_scalar(dudxdudxm(:,:,10), dvdy*dvdy, ep)
     call update_average_scalar(dudxdudxm(:,:,11), dvdy*dwdy, ep)
     call update_average_scalar(dudxdudxm(:,:,12), dwdy*dwdy, ep)
+
+    call update_average_scalar(dudxdudxm(:,:,13), dudz*dudz, ep,new_dissipation=correct_dissipation)
+    call update_average_scalar(dudxdudxm(:,:,14), dudz*dvdz, ep,new_dissipation=correct_dissipation)
+    call update_average_scalar(dudxdudxm(:,:,15), dudz*dwdz, ep,new_dissipation=correct_dissipation)
+    call update_average_scalar(dudxdudxm(:,:,16), dvdz*dvdz, ep,new_dissipation=correct_dissipation)
+    call update_average_scalar(dudxdudxm(:,:,17), dvdz*dwdz, ep,new_dissipation=correct_dissipation)
+    call update_average_scalar(dudxdudxm(:,:,18), dwdz*dwdz, ep,new_dissipation=correct_dissipation)
 
   end subroutine update_velograd2_tensor
   
