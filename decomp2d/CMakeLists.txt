@@ -6,6 +6,8 @@ if(${FFT_Choice} MATCHES "generic")
   file(GLOB files_fft fft_generic.f90)
 elseif(${FFT_Choice} MATCHES "fftw3")
   file(GLOB files_fft fft_fftw3.f90)
+elseif(${FFT_Choice} MATCHES "mkl")
+  file(GLOB files_fft fft_mkl.f90)
 endif(${FFT_Choice} MATCHES "generic")
 
 set(SRCFILES ${files_decomp} ${files_fft})
