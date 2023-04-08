@@ -30,7 +30,7 @@ if(${FFT_Choice} MATCHES "fftw3")
 elseif(${FFT_Choice} MATCHES "mkl")
   find_package(MKL CONFIG REQUIRED)
   target_link_libraries(decomp2d PUBLIC $<LINK_ONLY:MKL::MKL>)
-  target_include_directories(decomp2d PUBLIC $<TARGET_PROPERTY:MKL::MKL,INTERFACE_INCLUDE_DIRECTORIES>)
+  target_include_directories(decomp2d PUBLIC ${MKL_INCLUDE})
 endif()
 
 
