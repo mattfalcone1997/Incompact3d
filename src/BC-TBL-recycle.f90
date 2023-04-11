@@ -357,6 +357,8 @@ contains
 
       enddo
       u_infty_calc => file_BL
+   else if (iaccel == 4) then
+      u_infty_calc => sink_BL
    else
       if (nrank ==0) write(*,*) "Invalid iaccel value"
       call MPI_Abort(MPI_COMM_WORLD, 1,ierror)
@@ -546,6 +548,26 @@ contains
          u_infty_grad = 0.5*(u_infty_file(index+1)-u_infty_file(index-1))/dx
       endif
 
+   end subroutine
+   subroutine sink_BL(index,u_infty, u_infty_grad)
+      use param
+      use variables
+   
+      integer, intent(in) :: index
+      real(mytype), intent(out) :: u_infty, u_infty_grad
+      real(mytype) :: x, chi, a
+
+      x = real(index - 1, mytype) * dx
+      if (x < x0_accel) then
+         u_infty = one
+         u_infty_grad = zero
+      else
+         a = one/K_accel/re
+         chi = x0_accel + a
+         u_infty = a/(chi-x)
+         u_infty_grad = a/((chi-x)*(chi-x))
+      endif
+      ! write(*,*)  u_infty, u_infty_grad, x, x0_accel
    end subroutine
   subroutine momentum_forcing_tbl_recy(dux1, duy1, duz1, ux1, uy1, uz1)
    real(mytype), intent(in), dimension(xsize(1), xsize(2), xsize(3)) :: ux1, uy1, uz1

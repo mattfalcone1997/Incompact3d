@@ -83,6 +83,7 @@ subroutine parameter(input_i3d)
   NAMELIST/tanhAccelTBL/U_ratio, accel_centre, alpha_accel
   NAMELIST/tanhAccelCubicTBL/U_ratio, accel_centre, alpha_accel, iaccel_thresh
   NAMELIST/fileAccel/accel_file
+  NAMELIST/sinkAccel/K_accel,x0_accel
 
   NAMELIST/bodyForce/ibodyforces,ibftype, itempbf, shear_thresh, tshift_inner, tshift_outer
   NAMELIST/linearBodyF/bf_amp,bf_ext
@@ -265,6 +266,8 @@ subroutine parameter(input_i3d)
          read(10, nml=tanhAccelCubicTBL); rewind(10)
       else if (iaccel == 3) then
          read(10, nml=fileAccel); rewind(10)
+      else if (iaccel == 4) then
+         read(10, nml=sinkAccel); rewind(10)
       endif
 
    endif

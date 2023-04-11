@@ -416,7 +416,7 @@ module param
   real(mytype) :: re_in
 
   !TBL acceleration params
-  real(mytype) :: alpha_accel, U_ratio, accel_centre, iaccel_thresh
+  real(mytype) :: alpha_accel, U_ratio, accel_centre, iaccel_thresh,K_accel, x0_accel
   character(len=80) :: accel_file
   !channel body forces
   integer :: ibodyforces, ibftype, itempbf
