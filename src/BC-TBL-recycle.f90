@@ -465,8 +465,12 @@ contains
       real(mytype), intent(out) :: u_infty, u_infty_grad
 
       real(mytype) :: x_coord
+      
       x_coord = real(index - 1, mytype) * dx
-   
+      if (x_coord>xlx-x_fringe) then
+         x_coord = xlx-x_fringe
+      endif
+      
       u_infty = one +  half *(U_ratio - one)*(&
                   tanh_prec( alpha_accel*(x_coord - accel_centre )) &
                      + one )
@@ -560,6 +564,11 @@ contains
       x = real(index - 1, mytype) * dx
       if (x < x0_accel) then
          u_infty = one
+         u_infty_grad = zero
+      else if (x>xlx-x_fringe) then
+         a = one/K_accel/re
+         chi = x0_accel + a
+         u_infty = a/(chi-(xlx-x_fringe))
          u_infty_grad = zero
       else
          a = one/K_accel/re

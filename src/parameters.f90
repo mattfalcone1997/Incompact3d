@@ -83,7 +83,7 @@ subroutine parameter(input_i3d)
   NAMELIST/tanhAccelTBL/U_ratio, accel_centre, alpha_accel
   NAMELIST/tanhAccelCubicTBL/U_ratio, accel_centre, alpha_accel, iaccel_thresh
   NAMELIST/fileAccel/accel_file
-  NAMELIST/sinkAccel/K_accel,x0_accel
+  NAMELIST/sinkAccel/K_accel,x0_accel,x_fringe
 
   NAMELIST/bodyForce/ibodyforces,ibftype, itempbf, shear_thresh, tshift_inner, tshift_outer
   NAMELIST/linearBodyF/bf_amp,bf_ext
@@ -913,6 +913,7 @@ subroutine parameter_defaults()
   U_ratio = one
   t_trip = 600.0_mytype
   re_in = -1
+  x_fringe = zero
 
    ! body forces
   ibodyforces = 0
