@@ -408,7 +408,7 @@ module param
   real(mytype), allocatable, dimension(:) :: h_coeff2, h_2,phase2
 
   ! TBL recyling
-  integer :: iaccel
+  integer :: iaccel, iscramble
   real(mytype) :: t_avg1, t_avg2
   real(mytype) :: t_recy1, t_recy2
   real(mytype) :: t_trip

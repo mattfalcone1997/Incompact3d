@@ -80,8 +80,6 @@ contains
     integer, dimension (:), allocatable :: seed
     real(mytype), dimension(nx,ny) :: u_mean, v_mean
 
-    u_mean = zero
-    v_mean = zero
 #ifdef BL_DEBG
     real(mytype), allocatable, dimension(:,:,:) :: ux_dbg, uy_dbg, uz_dbg
     real(mytype) :: dbg_t_recy1, dbg_t_recy2
@@ -107,6 +105,8 @@ contains
     allocate(u_out(xsize(2)), u_in(ny))
 #endif
 
+    u_mean = zero
+    v_mean = zero
     call setup_tbl_recy
 
     if (iscalar==1) then
@@ -1475,10 +1475,12 @@ end subroutine tbl_recy_tripping
   subroutine fluct_interp(y_in, y_out, u_in, u_out)
    use iso_fortran_env, only: output_unit
    use decomp_2d
+   use decomp_2d_io
    use MPI
+   use param, only : iscramble
 
    real(mytype), dimension(:),intent(in) :: y_in, y_out
-   real(mytype), dimension(:,:),intent(in) :: u_in
+   real(mytype), dimension(:,:),intent(inout) :: u_in
    real(mytype), dimension(:,:), intent(out) :: u_out
    integer :: i, j, k
 
@@ -1486,57 +1488,86 @@ end subroutine tbl_recy_tripping
    integer, dimension(2) :: dims, coords
    logical, dimension(2) :: periods 
 
-   integer :: sendcount, ierr, split_comm_y
-   real(mytype), allocatable, dimension(:,:) :: u_in_local
-   integer, allocatable, dimension(:) :: ldispl,displs,recvcounts
+   integer :: sendcount, ierr, split_comm_y, split_comm_z
+   real(mytype), dimension(nz,ny) :: u_in_local
+   real(mytype), dimension(xsize(2),nz) :: u_in_g
+   real(mytype), dimension(nz,xsize(2)) :: u_in_switch
 
-   integer :: j_lower, j_upper, idx, send_glb
-   real(mytype), allocatable, dimension(:,:) :: u_in_switched
+   integer, allocatable, dimension(:) :: ldispl,recvcounts
+   integer, allocatable, dimension(:) :: ldispl2,recvcounts2
+
+   integer, dimension(2) :: sizes, subsizes, starts
+   integer :: temp_type, ytype, tsize, localtype
+   integer :: j_lower, j_upper, jdx, kdx, j2,send_glb, unit
+   character(len=80) :: file
 
    call MPI_Cart_get(DECOMP_2D_COMM_CART_X, 2, dims, periods, coords, ierr)
    
    key = coords(1)
    color = coords(2)
 
-   call MPI_Comm_split(DECOMP_2D_COMM_CART_X, color, key, split_comm_y,ierr)
-
-   allocate(u_in_local(xsize(3),ny))
-   allocate(displs(dims(1)))
-   allocate(recvcounts(dims(1)))
-   allocate(u_in_switched(xsize(3),xsize(2)))
-   allocate(ldispl(dims(1)))
-
-   call MPI_Allgather(xstart(2), 1, MPI_INTEGER, ldispl,&
-                     1, MPI_INTEGER,split_comm_y,ierr)  
-   call MPI_Allgather(xsize(2)*xsize(3), 1, MPI_INTEGER, recvcounts,&
-                     1, MPI_INTEGER,split_comm_y,ierr)                        
+   call MPI_Comm_split(DECOMP_2D_COMM_CART_X, key, color, split_comm_y,ierr)
+   call MPI_Comm_split(DECOMP_2D_COMM_CART_X, color, key, split_comm_z,ierr)       
    
+   allocate(ldispl(dims(1)))
+   allocate(recvcounts(dims(1)))
+   allocate(ldispl2(dims(2)))
+   allocate(recvcounts2(dims(2)))
+   u_in_g(:,:) = -1
+   
+   call MPI_Allgather(xsize(2)*(xstart(3)-1), 1, MPI_INTEGER, ldispl2,&
+                     1, MPI_INTEGER,split_comm_y,ierr)
    sendcount = xsize(2)*xsize(3)
-   do j = 1, xsize(2)
-      do k = 1, xsize(3)
-         u_in_switched(k,j) = u_in(j,k)
+   call MPI_Allgather(sendcount, 1, MPI_INTEGER, recvcounts2,&
+                     1, MPI_INTEGER,split_comm_y,ierr)                        
+   ! u_in_g = real(-1,kind=mytype)
+   ! u_in(:,:) = real(nrank+1,kind=mytype)
+   ! write(*,*) u_in
+   call MPI_Allgatherv(u_in, sendcount, real_type,u_in_g,&
+                        recvcounts2,ldispl2,real_type,split_comm_y,&
+                        ierr)    
+
+   do k = 1, nz
+      do j = 1, xsize(2)
+         u_in_switch(k,j) = u_in_g(j,k)
       enddo
    enddo
+   sendcount = nz*xsize(2)
+   call MPI_Allgather((xstart(2)-1)*nz, 1, MPI_INTEGER, ldispl,&
+                     1, MPI_INTEGER,split_comm_z,ierr)  
+   call MPI_Allgather(sendcount, 1, MPI_INTEGER, recvcounts,&
+                     1, MPI_INTEGER,split_comm_z,ierr)                        
 
-   displs = xsize(3)*(ldispl - 1)
-   call MPI_Allgatherv(u_in_switched, sendcount, real_type,u_in_local,&
-                        recvcounts,displs,real_type,split_comm_y,&
+   call MPI_allgatherv(u_in_switch, sendcount, real_type,u_in_local,&
+                        recvcounts,ldispl,real_type,split_comm_z,&
                         ierr)
 
-   do i = 1, xsize(3)
+   do k = 1, xsize(3)
+      if (iscramble.eq.0) then
+         kdx = xstart(3)+k-1
+      else if (iscramble.eq.1) then
+         kdx =xstart(3)+k-1
+         if (kdx>nz/2) then
+            kdx = kdx - nz/2
+         else
+            kdx = kdx + nz/2
+         endif
+      else if (iscramble.eq.2) then
+         kdx = nz - (xstart(3)+k-2)
+      endif
       do j = 1, xsize(2)
-         idx = xstart(2) + j -1
-         do k = 1, ny
-            if (y_in(k).gt.y_out(idx )) then
-               j_lower = k - 1
-               j_upper = k
+         jdx = xstart(2) + j -1
+         do j2 = 1, ny
+            if (y_in(j2).gt.y_out(jdx )) then
+               j_lower = j2 - 1
+               j_upper = j2
 
-               u_out(j,i) = u_in_local(i,j_lower) + &
-                        (y_out(idx) - y_in(j_lower)) * &
-                        (u_in_local(i,j_upper) - u_in_local(i,j_lower))
+               u_out(j,k) = u_in_local(kdx,jdx) + &
+                        (y_out(jdx) - y_in(j_lower)) * &
+                        (u_in_local(kdx,j_upper) - u_in_local(kdx,jdx))
                exit
-            elseif (k == ny) then
-               u_out(j,i) = zero
+            elseif (j2 == ny) then
+               u_out(j,k) = zero
                exit
 
             endif
@@ -1547,8 +1578,6 @@ end subroutine tbl_recy_tripping
 
    call MPI_Comm_free(split_comm_y,ierr)
 
-   deallocate(u_in_switched)
-   deallocate(u_in_local)
   end subroutine fluct_interp
 
    ! subroutine initialise_avg
