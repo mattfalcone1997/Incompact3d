@@ -556,11 +556,6 @@ contains
 
     if (itype.eq.itype_tbl.or.itype.eq.itype_tbl_recy) &
                call tbl_flrt(ux,uy,uz)
-
-    if (itype.eq.itype_tbl_recy) then
-      dpdyx1(:,:) = zero
-      dpdzx1(:,:) = zero
-    endif
     
     if (nclx1==2) then
        do k=1,xsize(3)

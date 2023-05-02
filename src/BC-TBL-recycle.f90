@@ -610,6 +610,7 @@ end subroutine tbl_recy_tripping
     use navier, only : tbl_flrt
     use param , only : zero, zptwofive
     use dbg_schemes, only: cos_prec
+    use variables, only: dpdyx1, dpdzx1
     implicit none
 
     real(mytype),dimension(xsize(1),xsize(2),xsize(3)) :: ux,uy,uz
@@ -717,6 +718,10 @@ end subroutine tbl_recy_tripping
 
     !update of the flow rate (what is coming in the domain is getting out)
     call tbl_flrt(ux,uy,uz)
+    if (t<t_trip+100) then
+      dpdyx1(:,:) = zero
+      dpdzx1(:,:) = zero
+    endif
 
     return
   end subroutine boundary_conditions_tbl_recy
