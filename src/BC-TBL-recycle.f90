@@ -1577,6 +1577,7 @@ end subroutine tbl_recy_tripping
    enddo
 
    call MPI_Comm_free(split_comm_y,ierr)
+   call MPI_Comm_free(split_comm_z,ierr)
 
   end subroutine fluct_interp
 
