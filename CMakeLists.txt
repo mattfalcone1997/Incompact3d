@@ -129,6 +129,8 @@ if(USE_ADIOS2)
   #find_package(ADIOS2 COMPONENTS fortran)
   find_package(ADIOS2)
 endif()
+option(STAT6ORD "Use 6th order compact scheme for gradients" OFF)
+
 if(ADIOS2_FOUND)
   message(STATUS "ADIOS INCLUDE ${ADIOS2_INCLUDE_DIRS}")
   include_directories(${ADIOS2_INCLUDE_DIRS})

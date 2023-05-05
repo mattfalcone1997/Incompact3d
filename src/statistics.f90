@@ -1170,6 +1170,20 @@ contains
                                   ux3, uy3, uz3, td3)
 
       if (istatbudget) then
+#ifdef STAT6ORD
+        call derx (ta1,ux1,di1,sx,ffx,fsx,fwx,xsize(1),xsize(2),xsize(3),0,ubcx)
+        call derx (tb1,uy1,di1,sx,ffxp,fsxp,fwxp,xsize(1),xsize(2),xsize(3),1,ubcy)
+        call derx (tc1,uz1,di1,sx,ffxp,fsxp,fwxp,xsize(1),xsize(2),xsize(3),1,ubcz)
+        !y-derivatives
+        call dery (ta2,ux2,di2,sy,ffyp,fsyp,fwyp,ppy,ysize(1),ysize(2),ysize(3),1,ubcx)
+        call dery (tb2,uy2,di2,sy,ffy,fsy,fwy,ppy,ysize(1),ysize(2),ysize(3),0,ubcy)
+        call dery (tc2,uz2,di2,sy,ffyp,fsyp,fwyp,ppy,ysize(1),ysize(2),ysize(3),1,ubcz)
+        !!z-derivatives
+        call derz (ta3,ux3,di3,sz,ffzp,fszp,fwzp,zsize(1),zsize(2),zsize(3),1,ubcx)
+        call derz (tb3,uy3,di3,sz,ffzp,fszp,fwzp,zsize(1),zsize(2),zsize(3),1,ubcy)
+        call derz (tc3,uz3,di3,sz,ffz,fsz,fwz,zsize(1),zsize(2),zsize(3),0,ubcz)
+
+#else        
         call grad_x(ux1, ta1)
         call grad_x(uy1, tb1)
         call grad_x(uz1, tc1)
@@ -1184,7 +1198,7 @@ contains
         call grad_z(ux3,ta3)
         call grad_z(uy3,tb3)
         call grad_z(uz3,tc3)
-
+#endif
         call transpose_y_to_z(ta2,dudy)
         call transpose_y_to_z(tb2,dvdy)
         call transpose_y_to_z(tc2,dwdy)

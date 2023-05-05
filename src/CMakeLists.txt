@@ -80,6 +80,12 @@ if(FFTW_FOUND)
   target_compile_definitions(xcompact3d PUBLIC HAVE_FFTW)
 endif()
 
+if(STAT6ORD)
+  message(STATUS "Using 6th order for statistics")
+  target_compile_definitions(xcompact3d PUBLIC STAT6ORD)
+else()
+  message(STATUS "Using 2nd order for statistics")
+endif()
 install(TARGETS xcompact3d
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
