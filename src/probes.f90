@@ -267,7 +267,7 @@ contains
   subroutine init_line_probes
    use decomp_2d
    use MPI
-   use var, only: dx, ny,yp, t0, itime0, itime, t, xlx
+   use var, only: dx, ny,yp, t0, ifirst, itime, t, xlx
    use dbg_schemes, only : abs_prec
    integer :: i, j, index
    real(mytype) :: x, y, dyl,dyu, ymin, ymax, xmin, xmax
@@ -374,7 +374,7 @@ contains
       open(newunit=unit,file=fname,status='new',action='write')
       write(unit,'(A)') "{"
       write(unit,'(A," : ",g0,",")') '  "t0"', t0
-      write(unit,'(A," : ",I0,",")') '  "itime0"', itime0
+      write(unit,'(A," : ",I0,",")') '  "itime0"', ifirst-1
       write(unit,'(A," : ",I0,",")') '  "nlineprobes"', nlineprobes
       write(unit,'(A," : ",I0,",")') '  "probe_freq"', probe_freq
       do i = 1, nlineprobes-1
