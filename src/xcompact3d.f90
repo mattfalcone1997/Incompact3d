@@ -227,6 +227,12 @@ subroutine init_xcompact3d()
   call compute_cfldiff()
   !####################################################################
   if (irestart==0) then
+      if (ifirst /= 1) then
+         if (nrank==0) then
+            write(*,*) "ifirst must be 1 if reinitialising"
+            call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+         endif
+      endif
      call init(rho1,ux1,uy1,uz1,ep1,phi1,drho1,dux1,duy1,duz1,dphi1,pp3,px1,py1,pz1)
      itime = 0
      call preprocessing(rho1,ux1,uy1,uz1,pp3,phi1,ep1)
