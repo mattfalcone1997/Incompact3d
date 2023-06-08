@@ -873,6 +873,7 @@ end subroutine
    real(mytype) :: lim, y
 
    lim = one - bf_ext
+   bf = zero
    do j = 1, ny
       if (istret==0) y=real(j,mytype)*dy-yly*half
       if (istret/=0) y=yp(j)-yly*half
