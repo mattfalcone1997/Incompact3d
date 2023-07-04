@@ -22,10 +22,12 @@ module stats
   real(mytype), dimension(:,:,:), allocatable ::  pdudx_mean
   real(mytype), dimension(:,:,:), allocatable ::  dudx_mean
   real(mytype), dimension(:,:,:), allocatable ::  dudxdudx_mean
+  real(mytype), dimension(:,:,:), allocatable ::  ud2udx2_mean
 
   real(mytype), dimension(:,:,:), allocatable ::  pdvdy_q_mean
 
   real(mytype), dimension(:,:,:), allocatable :: uv_quadrant_mean
+  real(mytype), dimension(:,:,:), allocatable :: I_quadrant_mean
   real(mytype), dimension(:,:,:), allocatable :: uuuu_mean
   real(mytype), dimension(:,:,:), allocatable :: autocorr_mean
 
@@ -37,7 +39,7 @@ module stats
   type(DECOMP_INFO) :: uvwp_info, uu_info, pu_info
   type(DECOMP_INFO) :: uuu_info, pdudx_info, dudx_info
   type(DECOMP_INFO) :: dudxdudx_info, pdvdy_q_info
-  type(DECOMP_INFO) :: uv_quadrant_info, uuuu_info
+  type(DECOMP_INFO) :: uv_quadrant_info, uuuu_info, ud2udx2_info
   real(mytype), dimension(:,:,:), allocatable :: lambda2mean, lambda22mean
 
   
@@ -72,6 +74,7 @@ module stats
 contains
   subroutine write_params_stats
     use param
+    use var, only: isecondder
     use variables
     use decomp_2d
     real(mytype), dimension(:), allocatable :: u_w, t_b
@@ -83,6 +86,10 @@ contains
     
     open(newunit=fl,file='statistics.json',status='replace',action='write')
     write(fl,'(A)') "{"
+    if (istatbudget.and.isecondder==5) then
+      write(fl,'(A,":",I0,",")') '  "isecondder"', isecondder
+      write(*,*) "LES dissipation computation is currently experimental"
+    endif
     if (istatquadrant) then
       write(fl,"(A ,': {')") '  "uv_quadrant"'
       if (nquads > 1) then
@@ -177,7 +184,8 @@ contains
        endif
        if (istatquadrant) then
         call decomp_2d_register_variable(io_statistics, "uv_quadrant_mean", 3, 0, 0, mytype,opt_decomp=uv_quadrant_info)
-       endif
+        call decomp_2d_register_variable(io_statistics, "I_quadrant_mean", 3, 0, 0, mytype,opt_decomp=uv_quadrant_info)
+      endif
 
        do is=1, numscalar
           write(varname,"('phi',I2.2)") is
@@ -198,7 +206,7 @@ contains
 
     use param, only : zero, iscalar, istatbudget, istatpstrain
     use param, only : istatquadrant, istatlambda2, nquads, istatspectra
-    use param, only : istatflatness, istatautocorr, nclx
+    use param, only : istatflatness, istatautocorr, nclx, isecondder
     use variables, only : nx, ny, nz
     use decomp_2d, only : zsize, decomp_info_init
     use MPI
@@ -219,6 +227,7 @@ contains
     call decomp_info_init(sizex, ny, 10, uuu_info)
     call decomp_info_init(sizex, ny, 3, pdudx_info)
     call decomp_info_init(sizex, ny, 9, dudx_info)
+    call decomp_info_init(sizex, ny, 9, ud2udx2_info)
     call decomp_info_init(sizex, ny, 18, dudxdudx_info)
 
     call decomp_info_init(sizex, ny, 4*nquads, uv_quadrant_info)
@@ -239,7 +248,10 @@ contains
       allocate(pdudx_mean(lsizex,zsize(2),3))
       allocate(dudx_mean(lsizex,zsize(2),9))
       allocate(dudxdudx_mean(lsizex,zsize(2),18))
-
+      if (isecondder.eq.5) then
+        allocate(ud2udx2_mean(lsizex,zsize(2),9))
+        ud2udx2_mean = zero
+      endif
       pu_mean = zero
       uuu_mean = zero
       pdudx_mean = zero
@@ -266,8 +278,10 @@ contains
 
     if (istatquadrant) then
       allocate(uv_quadrant_mean(lsizex,zsize(2),4*nquads))
+      allocate(I_quadrant_mean(lsizex,zsize(2),4*nquads))
 
       uv_quadrant_mean = zero
+      I_quadrant_mean = zero
     endif
     if (istatlambda2) then
 
@@ -537,7 +551,7 @@ contains
     use decomp_2d, only : nrank, zsize, zstart,zend
     use decomp_2d_io, only : decomp_2d_write_mode, decomp_2d_read_mode, &
          decomp_2d_open_io, decomp_2d_close_io, decomp_2d_start_io, decomp_2d_end_io
-    use var ,only: nz, nx
+    use var ,only: nz, nx, isecondder
     use MPI
     implicit none
 
@@ -576,6 +590,9 @@ contains
       else
         call read_or_write_one_stat(flag_read, gen_statname("dudxdudx_mean"), dudxdudx_mean,dudxdudx_info)
       endif
+      if (isecondder==5) then
+        call read_or_write_one_stat(flag_read, gen_statname("ud2dx2_mean"), ud2udx2_mean, ud2udx2_info)
+      endif
 
     endif
 
@@ -589,6 +606,7 @@ contains
 
     if (istatquadrant .and. (itime>initstat2.or.itempaccel==1)) then
       call read_or_write_one_stat(flag_read, gen_statname("uv_quadrant_mean"), uv_quadrant_mean, uv_quadrant_info)
+      call read_or_write_one_stat(flag_read, gen_statname("I_quadrant_mean"), I_quadrant_mean, uv_quadrant_info)
     endif
 
     if (istatlambda2.and. (itime>initstat2.or.itempaccel==1)) then
@@ -1088,10 +1106,11 @@ contains
     use decomp_2d_io
     use tools, only : rescale_pressure, get_cpu_time
     USE var, only : ta1,tb1,tc1,td1,te1,tf1,tg1,th1,ti1,di1
-    USE var, only : ta2,tb2,tc2,td2,te2,tf2,di2,ta3,tb3,tc3,td3,di3
+    USE var, only : ta2,tb2,tc2,td2,te2,tf2,di2
+    USE var, only : ta3,tb3,tc3,td3,te3,tf3,tg3,th3,ti3,di3
     use ibm_param, only : ubcx, ubcy, ubcz
     use var, only : ux2, ux3, uy2, uy3, uz2, uz3
-    use var, only : ta2
+    use var, only : ta2, isecondder
     use var, only : nxmsize, nymsize, nzmsize
     use var, only : ppi3, dip3
     use var, only : pp2, ppi2, dip2
@@ -1107,6 +1126,7 @@ contains
 
     real(mytype),dimension(zsize(1),zsize(2),zsize(3)) :: dudy, dvdy, dwdy
     real(mytype),dimension(zsize(1),zsize(2),zsize(3)) :: dudx, dvdx, dwdx
+    real(mytype),dimension(zsize(1),zsize(2),zsize(3)) :: d2udz2, d2vdz2, d2wdz2
 
     integer :: is
     character(len=30) :: filename
@@ -1228,7 +1248,40 @@ contains
                                   dudx,dvdx,dwdx,&
                                   dudy,dvdy,dwdy,&
                                   ta3,tb3,tc3,td3)
-                        
+      
+      if (isecondder==5) then
+   ! for second derivatives
+        call derxx (ta1,ux1,di1,sx,sfx ,ssx ,swx ,xsize(1),xsize(2),xsize(3),0,ubcx)
+        call derxx (tb1,uy1,di1,sx,sfxp,ssxp,swxp,xsize(1),xsize(2),xsize(3),1,ubcy)
+        call derxx (tc1,uz1,di1,sx,sfxp,ssxp,swxp,xsize(1),xsize(2),xsize(3),1,ubcz)
+        !y-derivatives
+        call deryy (ta2,ux2,di2,sy,sfyp,ssyp,swyp,ysize(1),ysize(2),ysize(3),1,ubcx) 
+        call deryy (tb2,uy2,di2,sy,sfy ,ssy ,swy ,ysize(1),ysize(2),ysize(3),0,ubcy) 
+        call deryy (tc2,uz2,di2,sy,sfyp,ssyp,swyp,ysize(1),ysize(2),ysize(3),1,ubcz) 
+        !!z-derivatives
+        call derzz (d2udz2,ux3,di3,sz,sfzp,sszp,swzp,zsize(1),zsize(2),zsize(3),1,ubcx)
+        call derzz (d2vdz2,uy3,di3,sz,sfzp,sszp,swzp,zsize(1),zsize(2),zsize(3),1,ubcy)
+        call derzz (d2wdz2,uz3,di3,sz,sfz ,ssz ,swz ,zsize(1),zsize(2),zsize(3),0,ubcz)
+ 
+        call transpose_y_to_z(ta2,te3)
+        call transpose_y_to_z(tb2,tf3)
+        call transpose_y_to_z(tc2,tg3)
+
+        call transpose_x_to_y(ta1,ta2)
+        call transpose_x_to_y(tb1,tb2)
+        call transpose_x_to_y(tc1,tc2)
+
+        call transpose_y_to_z(ta2,th3)
+        call transpose_y_to_z(tb2,ti3)
+        call transpose_y_to_z(tc2,di3)
+
+        ! compute extra
+        call update_ud2udx2(ud2udx2_mean,ux3, uy3, uz3,&
+                            te3,tf3,tg3,&
+                            th3,ti3,di3,&
+                            d2udz2,d2vdz2,d2wdz2,&
+                            td3)
+      endif
       endif                             
 
       if (istatflatness) then
@@ -1241,7 +1294,7 @@ contains
       endif
 
       if (istatquadrant .and. depend) then
-        call update_uv_quad_avg(uv_quadrant_mean, uu_mean(:,:,1), uu_mean(:,:,2),&
+        call update_uv_quad_avg(uv_quadrant_mean,I_quadrant_mean, uu_mean(:,:,1), uu_mean(:,:,2),&
                                 uvwp_mean(:,:,1), uvwp_mean(:,:,2),ux3,uy3, td3)
       endif
 
@@ -1592,7 +1645,30 @@ contains
     call update_average_scalar(dudxdudxm(:,:,18), dwdz*dwdz, ep,new_dissipation=correct_dissipation)
 
   end subroutine update_velograd2_tensor
-  
+  subroutine update_ud2udx2(ud2dx2m,ux, uy, uz, d2udx2,d2udy2,d2udz2,&
+                                  d2vdx2,d2vdy2,d2vdz2,&
+                                  d2wdx2,d2wdy2,d2wdz2,ep)
+    use decomp_2d, only : mytype, xsize, zsize
+
+    real(mytype), dimension(:,:,:), intent(inout) :: ud2dx2m
+
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ux, uy, uz, ep
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: d2udx2,d2udy2,d2udz2
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: d2vdx2,d2vdy2,d2vdz2
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: d2wdx2,d2wdy2,d2wdz2
+
+    call update_average_scalar(ud2dx2m(:,:,1), ux*d2udx2, ep)
+    call update_average_scalar(ud2dx2m(:,:,2), ux*d2udy2, ep)
+    call update_average_scalar(ud2dx2m(:,:,3), ux*d2udz2, ep)
+    call update_average_scalar(ud2dx2m(:,:,4), uy*d2vdx2, ep)
+    call update_average_scalar(ud2dx2m(:,:,5), uy*d2vdy2, ep)
+    call update_average_scalar(ud2dx2m(:,:,6), uy*d2vdz2, ep)
+    call update_average_scalar(ud2dx2m(:,:,7), uz*d2wdx2, ep)
+    call update_average_scalar(ud2dx2m(:,:,8), uz*d2wdy2, ep)
+    call update_average_scalar(ud2dx2m(:,:,9), uz*d2wdz2, ep)
+
+  end subroutine update_ud2udx2 
+
   subroutine update_flatness(uuuum, ux, uy, uz, ep)
     use decomp_2d, only : mytype, xsize, zsize
     real(mytype), dimension(:,:,:), intent(inout) :: uuuum
@@ -1604,12 +1680,12 @@ contains
 
   end subroutine update_flatness
 
-  subroutine update_uv_quad_avg(uvqm, uum, vvm, um, vm, ux, uy, ep)
+  subroutine update_uv_quad_avg(uvqm,Iqm, uum, vvm, um, vm, ux, uy, ep)
     use dbg_schemes, only : sqrt_prec, abs_prec
     use decomp_2d, only : mytype, xsize, zsize
     use param, only: nquads, zero, nclx
     use MPI
-    real(mytype), dimension(:,:,:), intent(inout) :: uvqm
+    real(mytype), dimension(:,:,:), intent(inout) :: uvqm, Iqm
     real(mytype), dimension(:,:), intent(in) :: um, vm
     real(mytype), dimension(:,:), intent(in) :: uum, vvm
     real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: ux, uy, ep
@@ -1664,6 +1740,9 @@ contains
       do i = 1, 4
         call update_average_scalar(uvqm(:,:,(j-1)*4+i),uv_fluct,&
                                   ep,mask=mask(:,:,:,j,i),istat2=.true.)
+        call update_average_scalar(Iqm(:,:,(j-1)*4+i),&
+                                  merge(1._mytype,0._mytype,mask(:,:,:,j,i)),&
+                                  ep,istat2=.true.)                                  
       enddo
     enddo
 
