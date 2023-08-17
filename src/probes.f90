@@ -471,7 +471,7 @@ contains
 
          offset_mpi(i) = offset_mpi(i) + int(sizes(1),kind=MPI_OFFSET_KIND)&
                                        *int(sizes(2),kind=MPI_OFFSET_KIND)&
-                                       *disp_bytes
+                                       *int(disp_bytes,kind=MPI_OFFSET_KIND)
       endif
    enddo
    call MPI_type_free(newtype,ierr)
