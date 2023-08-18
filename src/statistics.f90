@@ -24,7 +24,7 @@ module stats
   real(mytype), dimension(:,:,:), allocatable ::  dudxdudx_mean
   real(mytype), dimension(:,:,:), allocatable ::  ud2udx2_mean
 
-  real(mytype), dimension(:,:,:), allocatable ::  pdvdy_q_mean
+  real(mytype), dimension(:,:,:), allocatable ::  pdudxq_mean
 
   real(mytype), dimension(:,:,:), allocatable :: uv_quadrant_mean
   real(mytype), dimension(:,:,:), allocatable :: I_quadrant_mean
@@ -38,7 +38,7 @@ module stats
 
   type(DECOMP_INFO) :: uvwp_info, uu_info, pu_info
   type(DECOMP_INFO) :: uuu_info, pdudx_info, dudx_info
-  type(DECOMP_INFO) :: dudxdudx_info, pdvdy_q_info
+  type(DECOMP_INFO) :: dudxdudx_info, pdudxq_info
   type(DECOMP_INFO) :: uv_quadrant_info, uuuu_info, ud2udx2_info
   real(mytype), dimension(:,:,:), allocatable :: lambda2mean, lambda22mean
 
@@ -171,7 +171,7 @@ contains
       endif
 
        if (istatpstrain) then
-        call decomp_2d_register_variable(io_statistics, "pdvdy_q_mean", 3, 0, 0, mytype, opt_decomp=pdvdy_q_info)
+        call decomp_2d_register_variable(io_statistics, "pdudxq_mean", 3, 0, 0, mytype, opt_decomp=pdudxq_info)
        endif
 
        if (istatlambda2) then
@@ -232,7 +232,7 @@ contains
 
     call decomp_info_init(sizex, ny, 4*nquads, uv_quadrant_info)
 
-    call decomp_info_init(sizex, ny, 4, pdvdy_q_info)
+    call decomp_info_init(sizex, ny, 4, pdudxq_info)
     call decomp_info_init(sizex, ny, 3, uuuu_info)
     call decomp_info_init(sizex, ny, 1, dstat_plane)
     
@@ -271,9 +271,9 @@ contains
         call MPI_Abort(MPI_COMM_WORLD,1,code)
       endif
 
-      allocate(pdvdy_q_mean(lsizex,zsize(2),4))
+      allocate(pdudxq_mean(lsizex,zsize(2),4))
 
-      pdvdy_q_mean = zero
+      pdudxq_mean = zero
     endif
 
     if (istatquadrant) then
@@ -601,7 +601,7 @@ contains
     endif
 
     if (istatpstrain .and. (itime>initstat2.or.itempaccel==1)) then
-      call read_or_write_one_stat(flag_read, gen_statname("pdvdy_q_mean"), pdvdy_q_mean, pdvdy_q_info)
+      call read_or_write_one_stat(flag_read, gen_statname("pdudxq_mean"), pdudxq_mean, pdudxq_info)
     endif
 
     if (istatquadrant .and. (itime>initstat2.or.itempaccel==1)) then
@@ -1288,9 +1288,11 @@ contains
         call update_flatness(uuuu_mean,ux3, uy3, uz3,td3)
       endif
       if (istatpstrain .and. depend) then
-        call update_pstrain_cond_avg(pdvdy_q_mean(:,:,1),pdvdy_q_mean(:,:,2),&
-                                    pdvdy_q_mean(:,:,3),pdvdy_q_mean(:,:,4),&
-                                    td3,dvdy,uvwp_mean(:,:,4),dudx_mean(:,:,5),td3)
+        call update_pstrain_cond_avg(pdudxq_mean(:,:,1),pdudxq_mean(:,:,2),&
+                                     pdudxq_mean(:,:,3),pdudxq_mean(:,:,4),&
+                                    td3,dudx, dvdy, tc3,uvwp_mean(:,:,4),&
+                                    dudx_mean(:,:,1),dudx_mean(:,:,5),&
+                                    dudx_mean(:,:,9),td3)
       endif
 
       if (istatquadrant .and. depend) then
@@ -1749,18 +1751,20 @@ contains
     deallocate(mask)
 
   end subroutine update_uv_quad_avg
-  subroutine update_pstrain_cond_avg(pdvdy_q1m,pdvdy_q2m,&
-                                     pdvdy_q3m,pdvdy_q4m,&
-                                     p,dvdy, pm, dvdym,ep)
+  subroutine update_pstrain_cond_avg(pdudx_m1,pdudx_m2,&
+                                     pdudx_m3,pdudx_m4,&
+                                     p,dudx,dvdy,dwdz, pm,&
+                                     dudxm, dvdym, dwdzm, ep)
     use decomp_2d, only : mytype, xsize, zsize
-    use param, only : zero, zpfive, nclx
-    real(mytype), dimension(:,:), intent(inout) :: pdvdy_q1m, pdvdy_q2m
-    real(mytype), dimension(:,:), intent(inout) :: pdvdy_q3m, pdvdy_q4m
-    real(mytype), dimension(:,:), intent(in) :: pm, dvdym
-    real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: p,dvdy, ep
+    use param, only : zero, zpfive, nclx, two
+    real(mytype), dimension(:,:), intent(inout) :: pdudx_m1, pdudx_m2
+    real(mytype), dimension(:,:), intent(inout) :: pdudx_m3, pdudx_m4
+    real(mytype), dimension(:,:), intent(in) :: pm, dudxm, dvdym, dwdzm
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)), intent(in) :: p, dudx, dvdy, dwdz, ep
 
-    logical, dimension(zsize(1),zsize(2),zsize(3)) :: mask1, mask2, mask3, mask4
-    real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: p_fluct, dvdy_fluct
+    logical, dimension(zsize(1),zsize(2),zsize(3)) :: mask
+    real(mytype) ::  p_fluct, dudx_fluct, dvdy_fluct, dwdz_fluct
+    real(mytype), dimension(zsize(1),zsize(2),zsize(3)) :: pdudx, pdwdz
     integer :: i,j,k, avg_i
 
     do k = 1, zsize(3)
@@ -1769,20 +1773,23 @@ contains
           if (nclx) avg_i = 1
           if (.not.nclx) avg_i = i
 
-          p_fluct(i,j,k) = p(i,j,k) - pm(avg_i,j)
-          dvdy_fluct(i,j,k) = dvdy(i,j,k) - dvdym(avg_i,j)
-          mask1(i,j,k) = p_fluct(i,j,k) .gt. zero .and.  dvdy_fluct(i,j,k) .gt. zero
-          mask2(i,j,k) = p_fluct(i,j,k) .lt. zero .and.  dvdy_fluct(i,j,k) .gt. zero
-          mask3(i,j,k) = p_fluct(i,j,k) .lt. zero .and.  dvdy_fluct(i,j,k) .lt. zero
-          mask4(i,j,k) = p_fluct(i,j,k) .gt. zero .and.  dvdy_fluct(i,j,k) .lt. zero
+          p_fluct = p(i,j,k) - pm(avg_i,j)
+          dudx_fluct = dudx(i,j,k) - dudxm(avg_i,j)
+          dvdy_fluct = dvdy(i,j,k) - dvdym(avg_i,j)
+          dwdz_fluct = dwdz(i,j,k) - dwdzm(avg_i,j)
+
+          mask(i,j,k) = -two*p_fluct*dvdy_fluct .lt. zero
+          
+          pdudx(i,j,k) = -two*p_fluct*dudx_fluct
+          pdwdz(i,j,k) = -two*p_fluct*dwdz_fluct
         enddo
       enddo
     enddo
 
-    call update_average_scalar(pdvdy_q1m, p_fluct*dvdy_fluct, ep, mask=mask1,istat2=.true.)
-    call update_average_scalar(pdvdy_q2m, p_fluct*dvdy_fluct, ep, mask=mask2,istat2=.true.)
-    call update_average_scalar(pdvdy_q3m, p_fluct*dvdy_fluct, ep, mask=mask3,istat2=.true.)
-    call update_average_scalar(pdvdy_q4m, p_fluct*dvdy_fluct, ep, mask=mask4,istat2=.true.)
+    call update_average_scalar(pdudx_m1, pdudx, ep, mask=mask,istat2=.true.)
+    call update_average_scalar(pdudx_m2, pdwdz, ep, mask=mask,istat2=.true.)
+    call update_average_scalar(pdudx_m3, pdudx, ep, mask=.not.mask,istat2=.true.)
+    call update_average_scalar(pdudx_m4, pdwdz, ep, mask=.not.mask,istat2=.true.)
 
   end subroutine update_pstrain_cond_avg
 

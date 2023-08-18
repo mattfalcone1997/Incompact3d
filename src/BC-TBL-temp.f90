@@ -327,7 +327,7 @@ module tbl_temp
     subroutine visu_tbl_temp_init (visu_initialised)
         logical, intent(out) :: visu_initialised
 
-
+        visu_initialised = .true.
     end subroutine visu_tbl_temp_init
 
     subroutine visu_tbl_temp(ux1, uy1, uz1, pp3, phi1, ep1, num)
