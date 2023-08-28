@@ -1354,7 +1354,7 @@ contains
   end subroutine overall_statistic
 
   subroutine process_statistics(any,depend,spectra,write,write_spectra)
-    use param, only: ispectstart, itempaccel, istatcalc, initstat2, ispectout, istatout
+    use param, only: ispectstart, itempaccel, istatcalc, initstat2, ispectout, istatout, initstat
     use var, only: itime
     logical, intent(out) :: any, depend, spectra, write, write_spectra
 
@@ -1366,7 +1366,7 @@ contains
       write = any 
       write_spectra =  spectra
     else
-      any = mod(itime,istatcalc) == 0
+      any = mod(itime-initstat,istatcalc) == 0
       depend = itime >= initstat2
       spectra = depend
       write = mod(itime,istatout)==0

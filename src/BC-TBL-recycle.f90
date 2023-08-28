@@ -104,7 +104,7 @@ contains
     allocate(y_in(ny), y_out(ny))
     allocate(u_out(xsize(2)), u_in(ny))
 #endif
-
+    
     u_mean = zero
     v_mean = zero
     call setup_tbl_recy
@@ -1218,7 +1218,7 @@ end subroutine tbl_recy_tripping
       do i = 1, nx
          x = real(i-1,mytype)*dx
          Re_theta = ( 0.015_mytype*x*re  + re_in**1.25_mytype)**0.8_mytype
-         delta_plus(i) = 1.13_mytype*Re_theta**(0.843_mytype)
+         delta_plus(i) = 0.9718_mytype*Re_theta**(0.843_mytype)
       enddo
   end subroutine
   elemental subroutine initWallUnitCalc(Cf, u_tau, delta_v)
@@ -1317,15 +1317,15 @@ end subroutine tbl_recy_tripping
       recy_mean_t(:,:) = recy_mean_z(:,:)
 
    else
-
-      if (itime .lt. t_avg1.and.itime.lt. t_avg2) then
+      
+      if (t .lt. t_avg1.and.t.lt. t_avg2) then
          T_period = 1
 
-      elseif (itime.lt. t_avg2) then
+      elseif (t.lt. t_avg2) then
          T_period = 50
 
       else
-         T_period =50 + itime - t_avg2
+         T_period =50 + t - t_avg2
 
       endif
 
@@ -1352,14 +1352,15 @@ end subroutine tbl_recy_tripping
 
    logical, save :: first_call = .true.
    real(mytype) :: dyy, u_infty_recy, u_infty_inlt, u_thresh
-   real(mytype) :: theta_inlt, theta_recy, int_inlt
-   real(mytype) :: int_recy, mid_u, u_tau, theta_inlt_des
-   real(mytype), parameter :: alp = 0.3
+   real(mytype) :: theta_inlt, theta_recy, int_inlt, int_inlt_z, theta_inlt_z
+   real(mytype) :: int_recy, mid_u, u_tau, theta_inlt_des, T_period
+   real(mytype), parameter :: alp = 0.2
    integer :: i,j, unit, pos, nreads
    logical :: reset_local
 
    ! compute theta
    theta_inlt = zero
+   theta_inlt_z = zero
    theta_recy = zero
 
    u_infty_inlt = inlt_mean_t(1,ny)
@@ -1369,10 +1370,14 @@ end subroutine tbl_recy_tripping
       mid_u = zpfive * (inlt_mean_t(1,j) + inlt_mean_t(1,j-1))/u_infty_inlt
       int_inlt = (mid_u)*( one - mid_u)
 
+      mid_u = zpfive * (inlt_mean_z(1,j) + inlt_mean_z(1,j-1))/u_infty_inlt
+      int_inlt_z = (mid_u)*( one - mid_u)
+
       mid_u = zpfive * (recy_mean_t(1,j) + recy_mean_t(1,j-1))/u_infty_recy
       int_recy = mid_u*( one - mid_u)
 
       theta_inlt = theta_inlt + int_inlt*(yp(j) - yp(j-1))
+      theta_inlt_z = theta_inlt_z + int_inlt_z*(yp(j) - yp(j-1))
       theta_recy = theta_recy + int_recy*(yp(j) - yp(j-1))
    enddo
 
@@ -1394,6 +1399,8 @@ end subroutine tbl_recy_tripping
    enddo
 
    if (irestart.ne.0) first_call = .false.
+   T_period = two
+   theta_inlt_des = re_in / re
    if (first_call) then
       delta_i = delta_meas
       
@@ -1405,14 +1412,13 @@ end subroutine tbl_recy_tripping
       else
          first_call = .false.
       endif
-   else if (itr .eq. 1) then
-      theta_inlt_des = re_in / re
+   else if (t > t_avg1.or.itr.ne.1.or..not.mod(t,T_period)<dt) then
+         delta_i = delta_inlt_old
+   else
       delta_i = delta_inlt_old + alp*( theta_inlt_des - theta_inlt)*delta_inlt_old
       if (abs_prec(delta_i - delta_meas) > one) then
          delta_i = delta_meas + sign(one,delta_i - delta_meas)
       endif
-   else 
-      delta_i = delta_inlt_old
    endif
    
    ! compute friction velocity
@@ -1428,18 +1434,19 @@ end subroutine tbl_recy_tripping
    if (write_logs.and.nrank.eq.0) then
       if (itime==1) then
          open(newunit=tbl_recy_log,file='tbl_recy.log',status='replace',action='write')
-         write(tbl_recy_log,"(A,*(',',A))") "itime","theta_inlt", "theta_recy",&
+         write(tbl_recy_log,"(A,*(',',A))") "itime","theta_des","theta_inlt","theta_inlt_z", "theta_recy",&
                                  "delta_r","delta_meas","delta_old","delta_i",&
                                  "u_tau_inlt","delta_v_recy","delta_v_inlt"
-      
+
       else if (itime == ifirst) then
          open(newunit=tbl_recy_log,file='tbl_recy.log',status='old',action='write',position='append')
       endif
 
       if ((mod(itime,ilist)==0.or.itime==1) .and. itr.eq.1) then
-            write(tbl_recy_log,"(I0,*(',',g0))") itime,theta_inlt,theta_recy,delta_r,&
+            write(tbl_recy_log,"(I0,*(',',g0))") itime,theta_inlt_des,theta_inlt,theta_inlt_z,theta_recy,delta_r,&
             delta_meas,delta_inlt_old, delta_i, u_tau, delta_v_recy,&
             delta_v_inlt
+            flush(tbl_recy_log)
       endif
       if (itime == ilast) close(tbl_recy_log)
    endif
