@@ -162,9 +162,14 @@ contains
           do j=1,xsize(2)
              if (istret==0) y=real(j+xstart(2)-1-1,mytype)*dy-yly*half
              if (istret/=0) y=yp(j+xstart(2)-1)-yly*half
-             a = log_prec((y+yly*half)/0.1)
-             b = log_prec((yly*half-y)/0.1)
-             um=exp_prec(-one*a*a) + exp_prec(-one*b*b)
+             if ((y+yly*half == zero) .or. (y+yly*half == zero)) then
+               um = zero
+             else
+               a = log_prec((y+yly*half)/0.1)
+               b = log_prec((y+yly*half)/0.1)
+               um=exp_prec(-one*a*a) + exp_prec(-one*b*b)
+             endif
+
              do i=1,xsize(1)
                 if (use_center) u_max = one
                 if (.not.use_center) u_max = onepfive
