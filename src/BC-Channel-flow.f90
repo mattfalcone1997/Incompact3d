@@ -162,7 +162,7 @@ contains
           do j=1,xsize(2)
              if (istret==0) y=real(j+xstart(2)-1-1,mytype)*dy-yly*half
              if (istret/=0) y=yp(j+xstart(2)-1)-yly*half
-             if ((y+yly*half == zero) .or. (y+yly*half == zero)) then
+             if ((y+yly*half <= zero) .or. (y+yly*half <= zero)) then
                um = zero
              else
                a = log_prec((y+yly*half)/0.1)
