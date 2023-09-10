@@ -45,20 +45,20 @@ module tbl_temp
         write(fl,"(A ,': {')") '  "tbl_temp_accel"'
         if(iaccel==1) then
             write(fl,"(A,': ',A,',')") '    "profile"','"linear"'
-            write(fl,"(A,': ',ES22.16,',')") '    "U_ratio"',U_ratio
-            write(fl,"(A,': ',ES22.16,',')") '    "t_start"',t_start
-            write(fl,"(A,': ',ES22.16,',')") '    "t_end"',t_end
+            write(fl,"(A,': ',ES23.16,',')") '    "U_ratio"',U_ratio
+            write(fl,"(A,': ',ES23.16,',')") '    "t_start"',t_start
+            write(fl,"(A,': ',ES23.16,',')") '    "t_end"',t_end
         else if (iaccel==2) then
             write(fl,"(A,': ',A,',')") '    "profile"','"spatial equiv"'
-            write(fl,"(A,': ',ES22.16,',')") '    "U_ratio"',U_ratio
-            write(fl,"(A,': ',ES22.16,',')") '    "x0"',accel_centre
-            write(fl,"(A,': ',ES22.16,',')") '    "alpha_accel"',alpha_accel
-            write(fl,"(A,': ',ES22.16,',')") '    "re_ref"',re_ref
+            write(fl,"(A,': ',ES23.16,',')") '    "U_ratio"',U_ratio
+            write(fl,"(A,': ',ES23.16,',')") '    "x0"',accel_centre
+            write(fl,"(A,': ',ES23.16,',')") '    "alpha_accel"',alpha_accel
+            write(fl,"(A,': ',ES23.16,',')") '    "re_ref"',re_ref
         endif
         
-        write(yfmt,'(A,I0,A)') "( A, ': [',ES22.16,",ilast/ilist-1,"(',',ES22.16),'],')"
+        write(yfmt,'(A,I0,A)') "( A, ': [',ES23.16,",ilast/ilist-1,"(',',ES23.16),'],')"
         write(fl,yfmt) '    "t"', t_b
-        write(yfmt,'(A,I0,A)') "( A, ': [',ES22.16,",ilast/ilist-1,"(',',ES22.16),']')"
+        write(yfmt,'(A,I0,A)') "( A, ': [',ES23.16,",ilast/ilist-1,"(',',ES23.16),']')"
         write(fl,yfmt) '    "U_w"', u_w
 
         write(fl,'(A)') "  }"
