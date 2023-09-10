@@ -269,20 +269,20 @@ contains
       write(fl,"(A ,': {')") '  "tbl_recy"'
       if (iaccel== 1) then
          write(fl,"(A,': ',A,',')") '    "profile"','"tanh"'
-         write(fl,"(A,': ',g0,',')") '    "U_ratio"',U_ratio
-         write(fl,"(A,': ',g0,',')") '    "x0"',accel_centre
-         write(fl,"(A,': ',g0,',')") '    "alpha_accel"',alpha_accel
+         write(fl,"(A,': ',ES22.16,',')") '    "U_ratio"',U_ratio
+         write(fl,"(A,': ',ES22.16,',')") '    "x0"',accel_centre
+         write(fl,"(A,': ',ES22.16,',')") '    "alpha_accel"',alpha_accel
       else if (iaccel==2) then
          write(fl,"(A,': ',A,',')") '    "profile"','"tanh cubic"'
-         write(fl,"(A,': ',g0,',')") '    "U_ratio"',U_ratio
-         write(fl,"(A,': ',g0,',')") '    "x0"',accel_centre
-         write(fl,"(A,': ',g0,',')") '    "alpha_accel"',alpha_accel
-         write(fl,"(A,': ',g0,',')") '    "iaccel_thresh"',iaccel_thresh
+         write(fl,"(A,': ',ES22.16,',')") '    "U_ratio"',U_ratio
+         write(fl,"(A,': ',ES22.16,',')") '    "x0"',accel_centre
+         write(fl,"(A,': ',ES22.16,',')") '    "alpha_accel"',alpha_accel
+         write(fl,"(A,': ',ES22.16,',')") '    "iaccel_thresh"',iaccel_thresh
       else if (iaccel==3) then
          write(fl,"(A,': ',A,',')") '    "profile"','"file"'
       endif
       
-      write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nx-1,"(',',g0),']')"
+      write(xfmt,'(A,I0,A)') "( A, ': [',ES22.16,",nx-1,"(',',ES22.16),']')"
       write(fl,xfmt) '    "u_infty"',u_infty
       write(fl,'(A)') "  }"
       write(fl,'(A)') "}"

@@ -93,9 +93,9 @@ contains
     if (istatquadrant) then
       write(fl,"(A ,': {')") '  "uv_quadrant"'
       if (nquads > 1) then
-         write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nquads-1,"(',',g0),']')"
+         write(xfmt,'(A,I0,A)') "( A, ': [',ES22.16,",nquads-1,"(',',ES22.16),']')"
       else
-         xfmt =  "( A, ': [',g0,']')"
+         xfmt =  "( A, ': [',ES22.16,']')"
       endif
       write(fl,xfmt) '    "h_quads"',h_quads
       if ((istatspectra.and.spectra_level == 3.or.istatautocorr)) then

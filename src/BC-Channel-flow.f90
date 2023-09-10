@@ -313,7 +313,7 @@ contains
    open(newunit=fl,file='parameters.json',status='old',action='write',position='append')
 
    if (ibodyforces.eq.1) then
-      write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ny-1,"(',',g0),'],')"
+      write(yfmt,'(A,I0,A)') "( A, ': [',ES22.16,",ny-1,"(',',ES22.16),'],')"
       
       write(fl,"(A ,': {')") '  "bodyforces"'
       write(fl,yfmt) '    "bf_array"', bf
@@ -328,14 +328,14 @@ contains
       write(fl,"(A ,': {')") '  "temp_accel"'
       if (iacceltype== 1) then
          write(fl,"(A,': ',A,',')") '    "profile"','"linear"'
-         write(fl,"(A,': ',g0,',')") '    "t_start"',t_start
-         write(fl,"(A,': ',g0,',')") '    "t_end"',t_start
-         write(fl,"(A,': ',g0,',')") '    "Re_ratio"',Re_ratio
+         write(fl,"(A,': ',ES22.16,',')") '    "t_start"',t_start
+         write(fl,"(A,': ',ES22.16,',')") '    "t_end"',t_start
+         write(fl,"(A,': ',ES22.16,',')") '    "Re_ratio"',Re_ratio
       else if (iacceltype==2) then
          write(fl,"(A,': ',A,',')") '    "profile"','"spatial equiv"'
-         write(fl,"(A,': ',g0,',')") '    "U_ratio"',U_ratio
-         write(fl,"(A,': ',g0,',')") '    "x0"',accel_centre
-         write(fl,"(A,': ',g0,',')") '    "alpha_accel"',alpha_accel
+         write(fl,"(A,': ',ES22.16,',')") '    "U_ratio"',U_ratio
+         write(fl,"(A,': ',ES22.16,',')") '    "x0"',accel_centre
+         write(fl,"(A,': ',ES22.16,',')") '    "alpha_accel"',alpha_accel
       endif
 
       allocate(u_b(ilast/ilist))
@@ -345,9 +345,9 @@ contains
          t_b(i) = real(i,kind=mytype)*dt*ilist
          u_b(i) = temp_accel_calc( t_b(i))
       enddo
-      write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ilast/ilist-1,"(',',g0),'],')"
+      write(yfmt,'(A,I0,A)') "( A, ': [',ES22.16,",ilast/ilist-1,"(',',ES22.16),'],')"
       write(fl,yfmt) '    "t"', t_b
-      write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ilast/ilist-1,"(',',g0),']')"
+      write(yfmt,'(A,I0,A)') "( A, ': [',ES22.16,",ilast/ilist-1,"(',',ES22.16),']')"
       write(fl,yfmt) '    "U_b"', u_b
 
       deallocate(u_b,t_b)

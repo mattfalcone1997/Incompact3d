@@ -373,19 +373,19 @@ contains
       write(fname,'("./probes/probe_info-run",I0,".json")') run_number
       open(newunit=unit,file=fname,status='new',action='write')
       write(unit,'(A)') "{"
-      write(unit,'(A," : ",g0,",")') '  "t0"', t0
+      write(unit,'(A," : ",ES22.16,",")') '  "t0"', t0
       write(unit,'(A," : ",I0,",")') '  "itime0"', ifirst-1
       write(unit,'(A," : ",I0,",")') '  "nlineprobes"', nlineprobes
       write(unit,'(A," : ",I0,",")') '  "probe_freq"', probe_freq
       do i = 1, nlineprobes-1
          x = real(probelocs(1,i) -1)*dx
          y = yp(probelocs(2,i))
-         write(unit,"(A,I0,A,' : [',g0,',',g0,'],')") '  "probe ',i, '"', x, y
+         write(unit,"(A,I0,A,' : [',ES22.16,',',ES22.16,'],')") '  "probe ',i, '"', x, y
       enddo
 
       x = real(probelocs(1,nlineprobes) -1)*dx
       y = yp(probelocs(2,nlineprobes))
-      write(unit,"(A,I0,A,' : [',g0,',',g0,']')") '  "probe ',i, '"', x, y
+      write(unit,"(A,I0,A,' : [',ES22.16,',',ES22.16,']')") '  "probe ',i, '"', x, y
       write(unit,'(A)') "}"
       
       close(unit)

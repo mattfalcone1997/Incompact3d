@@ -407,14 +407,14 @@ subroutine write_params_json
       write(fl,"(A ,':',I0,',')") '  "initstat2"',initstat2
 
       write(fl,"(A ,' : {')") '  "geometry"'
-      write(fl,"(A ,': ',g0,',')") '    "xlx"',xlx
-      write(fl,"(A ,' : ',g0,',')") '    "yly"', yly
-      write(fl,"(A ,': ',g0)") '    "zlz"', zlz
+      write(fl,"(A ,': ',ES22.16,',')") '    "xlx"',xlx
+      write(fl,"(A ,' : ',ES22.16,',')") '    "yly"', yly
+      write(fl,"(A ,': ',ES22.16)") '    "zlz"', zlz
       write(fl,*) "  },"
 
-      write(xfmt,'(A,I0,A)') "( A, ': [',g0,",nx-1,"(',',g0),'],')"
-      write(yfmt,'(A,I0,A)') "( A, ': [',g0,",ny-1,"(',',g0),'],')"
-      write(zfmt,'(A,I0,A)') "( A, ': [',g0,",nz-1,"(',',g0),']')"
+      write(xfmt,'(A,I0,A)') "( A, ': [',ES22.16,",nx-1,"(',',ES22.16),'],')"
+      write(yfmt,'(A,I0,A)') "( A, ': [',ES22.16,",ny-1,"(',',ES22.16),'],')"
+      write(zfmt,'(A,I0,A)') "( A, ': [',ES22.16,",nz-1,"(',',ES22.16),']')"
 
       write(fl,"(A ,': {')") '  "mesh"'
       write(fl,"(A ,': [',I0,',',I0,',',I0,'],')") '    "sizes"',nx, ny, nz
@@ -432,16 +432,16 @@ subroutine write_params_json
          write(fl,'(A)') "  },"   
       endif
       
-      write(fl,"(A ,':',g0,',')") '  "re"',re
+      write(fl,"(A ,':',ES22.16,',')") '  "re"',re
       endstop = itype .eq. itype_tbl_recy&
                    .or.(itype.eq. itype_channel&
                    .and.(itempaccel/=0.or.ibodyforces/=0))&
                    .or.itype.eq.itype_tbl_temp
 
       if (endstop) then
-         write(fl,'(A," : ",g0,",")') '  "dt"',dt
+         write(fl,'(A," : ",ES22.16,",")') '  "dt"',dt
       else
-         write(fl,'(A," : ",g0)') '  "dt"',dt
+         write(fl,'(A," : ",ES22.16)') '  "dt"',dt
       endif   
 
       close(fl)
@@ -484,8 +484,8 @@ subroutine write_run_info
    endif
 
    write(fl,'(A," : ",I0,",")') '    "itime0"',ifirst
-   write(fl,'(A," : ",g0,",")') '    "t0"', t0
-   write(fl,'(A," : ",g0)') '    "dt"',dt
+   write(fl,'(A," : ",ES22.16,",")') '    "t0"', t0
+   write(fl,'(A," : ",ES22.16)') '    "dt"',dt
    write(fl,'(A)') "  }"
    write(fl,'(A)') "}"
 
