@@ -667,14 +667,16 @@ contains
     character(len=*), intent(in) :: fname
     integer :: values(13), check
     integer :: date(9), ref_date(6)
-    integer :: code, i
+    integer :: code, i, unit
     logical :: update
 
-    call stat('statistics/'//trim(fname),values,check)
+    open(newunit=unit,file='statistics/'//trim(fname),status='old',action='read')
+    check = fstat(unit,values)
     if (check /=0 .and. nrank==0) then
       write(*,*) "There has been a problem"
       call MPI_Abort(MPI_COMM_WORLD,1,code)
     endif
+    close(unit)
 
     ref_date = [0,0,15,13,0,123]
     call ltime(values(10),date)
@@ -739,14 +741,16 @@ contains
     character(len=*), intent(in) :: fname
     integer :: values(13), check
     integer :: new_bytes, old_bytes
-    integer :: code, i
+    integer :: code, i, unit
     logical :: update
 
-    call stat('statistics/'//trim(fname),values,check)
+    open(newunit=unit,file='statistics/'//trim(fname),status='old',action='read')
+    check = fstat(unit,values)
     if (check /=0 .and. nrank==0) then
       write(*,*) "There has been a problem"
       call MPI_Abort(MPI_COMM_WORLD,1,code)
     endif
+    close(unit)
     if (nclx) then
       new_bytes = ny*18*8
       old_bytes = ny*12*8
