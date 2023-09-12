@@ -668,7 +668,7 @@ contains
 #endif
     character(len=*), intent(in) :: fname
     integer :: values(13), check
-    integer :: date(9), ref_date(6)
+    integer :: fdate(9), ref_date(6)
     integer :: code, i, unit
     logical :: update
 
@@ -681,14 +681,14 @@ contains
     close(unit)
 
     ref_date = [0,0,15,13,0,123]
-    call ltime(values(10),date)
+    call ltime(values(10),fdate)
 
     do i = 6, 1,-1
-      if (ref_date(i)>date(i)) then
+      if (ref_date(i)>fdate(i)) then
         update = .true.
         return
       endif
-      if (ref_date(i)<date(i)) then
+      if (ref_date(i)<fdate(i)) then
         update = .false.
         return
       endif
