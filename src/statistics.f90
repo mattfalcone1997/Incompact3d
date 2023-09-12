@@ -2106,7 +2106,7 @@ contains
           enddo
         enddo
       enddo
-
+      
       call fft_2d_calc(u_spec,te3)
       call fft_2d_calc(v_spec,tf3)
       call fft_2d_calc(w_spec,tg3)
@@ -2173,41 +2173,24 @@ contains
     use var, only: nx
     use param, only: zero
     real(mytype), dimension(zsize(2),6), intent(out) :: uvw_m
-    real(mytype), dimension(zsize(2),6) :: uvw_l
     
-    integer :: color, key
-    integer, dimension(2) :: dims, coords
-    logical, dimension(2) :: periods 
-    integer :: split_comm_y
-    integer :: i,j,k, code
+    integer :: i,j
 
-    uvw_l = zero
     do j =1, zsize(2)
-        uvw_l(j,1) = uvwp_mean(1,j,1)
-        uvw_l(j,2) = uvwp_mean(1,j,2)
-        uvw_l(j,3) = uvwp_mean(1,j,3)
+        uvw_m(j,1) = uvwp_mean(1,j,1)
+        uvw_m(j,2) = uvwp_mean(1,j,2)
+        uvw_m(j,3) = uvwp_mean(1,j,3)
     enddo
 
     if (spectra_level.ge.2) then
       do j =1, zsize(2)
         do i =1,zsize(1)
-          uvw_l(j,4) = uvwp_mean(1,j,4)
-          uvw_l(j,5) = dudx_mean(1,j,5)
-          uvw_l(j,6) = dudx_mean(1,j,3) - dudx_mean(1,j,7)
+          uvw_m(j,4) = uvwp_mean(1,j,4)
+          uvw_m(j,5) = dudx_mean(1,j,5)
+          uvw_m(j,6) = dudx_mean(1,j,3) - dudx_mean(1,j,7)
         enddo
       enddo
     endif
-    uvw_l(:,:) = uvw_l(:,:)/real(nx,kind=mytype)
-
-    call MPI_CART_GET(DECOMP_2D_COMM_CART_Z, 2, dims, periods, coords, code)
-    key = coords(2)
-    color = coords(1)
-
-    call MPI_Comm_split(DECOMP_2D_COMM_CART_Z, key,color, split_comm_y,code)
-
-    call MPI_Allreduce(uvw_l,uvw_m,size(uvw_m),&
-                       real_type,MPI_SUM,split_comm_y,code)
-    call MPI_Comm_free(split_comm_y,code)
 
   end subroutine
   
