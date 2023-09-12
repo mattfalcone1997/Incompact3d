@@ -663,7 +663,9 @@ contains
   function check_stat_correct(fname) result(update)
     use decomp_2d
     use MPI
-
+#ifdef __INTEL_COMPILER
+    use ifport
+#endif
     character(len=*), intent(in) :: fname
     integer :: values(13), check
     integer :: date(9), ref_date(6)
@@ -737,6 +739,9 @@ contains
     use decomp_2d
     use var, only: nx, ny, nclx
     use MPI
+#ifdef __INTEL_COMPILER
+    use ifport
+#endif
 
     character(len=*), intent(in) :: fname
     integer :: values(13), check
