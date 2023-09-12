@@ -396,7 +396,7 @@ contains
    endif
     
     if (use_center) then
-      u_b = two/three
+      u_b = one
     else
       u_b = one
     endif
