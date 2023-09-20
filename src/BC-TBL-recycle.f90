@@ -1318,14 +1318,14 @@ end subroutine tbl_recy_tripping
 
    else
       
-      if (t .lt. t_avg1.and.t.lt. t_avg2) then
+      if (itime .lt. t_avg1.and.itime.lt. t_avg2) then
          T_period = 1
 
-      elseif (t.lt. t_avg2) then
+      elseif (itime.lt. t_avg2) then
          T_period = 50
 
       else
-         T_period =50 + t - t_avg2
+         T_period =50 + itime - t_avg2
 
       endif
 
@@ -1353,8 +1353,8 @@ end subroutine tbl_recy_tripping
    logical, save :: first_call = .true.
    real(mytype) :: dyy, u_infty_recy, u_infty_inlt, u_thresh
    real(mytype) :: theta_inlt, theta_recy, int_inlt, int_inlt_z, theta_inlt_z
-   real(mytype) :: int_recy, mid_u, u_tau, theta_inlt_des, T_period
-   real(mytype), parameter :: alp = 0.2
+   real(mytype) :: int_recy, mid_u, u_tau, theta_inlt_des
+   real(mytype), parameter :: alp = 0.3
    integer :: i,j, unit, pos, nreads
    logical :: reset_local
 
@@ -1399,7 +1399,6 @@ end subroutine tbl_recy_tripping
    enddo
 
    if (irestart.ne.0) first_call = .false.
-   T_period = two
    theta_inlt_des = re_in / re
    if (first_call) then
       delta_i = delta_meas
@@ -1412,13 +1411,13 @@ end subroutine tbl_recy_tripping
       else
          first_call = .false.
       endif
-   else if (t > t_avg1.or.itr.ne.1.or..not.mod(t,T_period)<dt) then
-         delta_i = delta_inlt_old
-   else
+   else if (itr .eq. 1) then
       delta_i = delta_inlt_old + alp*( theta_inlt_des - theta_inlt)*delta_inlt_old
       if (abs_prec(delta_i - delta_meas) > one) then
          delta_i = delta_meas + sign(one,delta_i - delta_meas)
       endif
+   else 
+      delta_i = delta_inlt_old
    endif
    
    ! compute friction velocity
