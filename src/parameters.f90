@@ -93,6 +93,7 @@ subroutine parameter(input_i3d)
   NAMELIST/tempAccel/itempaccel, iacceltype, istatout,ispectout,ispectstart
   NAMELIST/linear_prof/Re_ratio, t_start, t_end
   NAMELIST/spatial_equiv/U_ratio, accel_centre, alpha_accel
+  NAMELIST/temp_file/accel_file
   NAMELIST/hquadrant/h_quads
   NAMELIST/spectra_corr/spectra_corr_ylocs
   NAMELIST/tbl_temp/Re_D, istatout, ispectout, ispectstart, iaccel
@@ -299,6 +300,8 @@ subroutine parameter(input_i3d)
          read(10,nml=linear_prof); rewind(10)
       else if (iacceltype==2) then
          read(10,nml=spatial_equiv); rewind(10)
+      else if (iacceltype==3) then
+         read(10,nml=temp_file); rewind(10)
       endif
    endif
   endif

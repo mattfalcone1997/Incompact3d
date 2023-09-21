@@ -847,10 +847,11 @@ end subroutine
   subroutine temp_accel_init
 
    use param
-   use dbg_schemes, only : tanh_prec
+   use dbg_schemes, only : tanh_prec, abs_prec
+   use MPI
 
-   integer :: i
-   real(mytype) :: dudx, x=0
+   integer :: i, unit, ierror, ios
+   real(mytype) :: dudx, x=0, t_read
 
    if (itempaccel == 1) then
       if (iacceltype == 1) then
@@ -863,6 +864,29 @@ end subroutine
             ub_temp_accel(i) = one +   half *(U_ratio - one)*(&
                                        tanh_prec( alpha_accel*(x &
                                        - accel_centre ))  + one )
+         enddo
+
+         temp_accel_calc => spatial_equiv
+
+      else if (iacceltype == 3) then
+         allocate(ub_temp_accel(ilast))
+         
+         open(newunit=unit,file=accel_file,action='read',status='old',iostat=ios)
+         if (ios /= 0) then
+            write(*,*) "Error reading file "//trim(adjustl(accel_file))
+            call MPI_Abort(MPI_COMM_WORLD, 1,ierror)
+         endif
+         
+         do i = 1, ilast
+            t = real(i,kind=mytype)*dt
+            read(unit,fmt=*) &
+                  t_read, ub_temp_accel(i)
+   
+            if (abs_prec(t_read-t) > real(1e-8,kind=mytype)) then
+               write(*,*) "time in file does not match case setup"
+               call MPI_Abort(MPI_COMM_WORLD, 1,ierror)
+            endif
+   
          enddo
 
          temp_accel_calc => spatial_equiv
