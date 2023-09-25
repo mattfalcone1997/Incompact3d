@@ -59,7 +59,8 @@ subroutine parameter(input_i3d)
   NAMELIST /Statistics/ wrotation,spinup_time, nstat, initstat, &
             istatcalc, istatbudget,istatpstrain,istatlambda2, initstat2,&
             istatquadrant, nquads, istatflatness, istatspectra,spectra_level,&
-            istatautocorr, autocorr_max_sep,autocorr_xlocs, spectra_corr_nlocs
+            istatautocorr, autocorr_max_sep,autocorr_xlocs, spectra_corr_nlocs,&
+            istatpvar
   NAMELIST /ProbesParam/ flag_all_digits, flag_extra_probes, xyzprobes, zlineprobes, probe_freq
   NAMELIST /ScalarParam/ sc, ri, uset, cp, &
        nclxS1, nclxSn, nclyS1, nclySn, nclzS1, nclzSn, &
@@ -946,6 +947,7 @@ subroutine parameter_defaults()
   istatspectra = .false.
   istatautocorr = .false.
   istatflatness = .false.
+  istatpvar = .false.
   istatout = -1
   ispectout = -1
   spectra_level=-1

@@ -336,6 +336,8 @@ contains
          write(fl,"(A,': ',ES23.16,',')") '    "U_ratio"',U_ratio
          write(fl,"(A,': ',ES23.16,',')") '    "x0"',accel_centre
          write(fl,"(A,': ',ES23.16,',')") '    "alpha_accel"',alpha_accel
+      else if (iacceltype==3) then
+         write(fl,"(A,': ',A,',')") '    "profile"','"file"'
       endif
 
       allocate(u_b(ilast/ilist))

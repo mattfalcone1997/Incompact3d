@@ -17,6 +17,7 @@ module stats
   integer :: stats_time
   real(mytype), dimension(:,:,:), allocatable ::  uvwp_mean
   real(mytype), dimension(:,:,:), allocatable ::  uu_mean
+  real(mytype), dimension(:,:,:), allocatable ::  pp_mean
   real(mytype), dimension(:,:,:), allocatable ::  pu_mean
   real(mytype), dimension(:,:,:), allocatable ::  uuu_mean
   real(mytype), dimension(:,:,:), allocatable ::  pdudx_mean
@@ -204,7 +205,7 @@ contains
   !
   subroutine init_statistic
 
-    use param, only : zero, iscalar, istatbudget, istatpstrain
+    use param, only : zero, iscalar, istatbudget, istatpstrain, istatpvar
     use param, only : istatquadrant, istatlambda2, nquads, istatspectra
     use param, only : istatflatness, istatautocorr, nclx, isecondder
     use variables, only : nx, ny, nz
@@ -260,6 +261,10 @@ contains
       
     endif
 
+    if (istatpvar) then
+      allocate(pp_mean(sizex,zsize(2),1))
+      pp_mean = zero
+    endif
     if (istatflatness) then
       allocate(uuuu_mean(lsizex,zsize(2),3))
       uuuu_mean = zero
@@ -545,7 +550,8 @@ contains
   subroutine read_or_write_all_stats(flag_read)
 
     use param, only : iscalar, itime, istatbudget, istatpstrain, nclx, itempaccel
-    use param, only : initstat2, istatlambda2, istatquadrant, istatflatness, istatspectra
+    use param, only : initstat2, istatlambda2, istatquadrant, istatflatness
+    use param, only: istatspectra, istatpvar
     use param, only : zpfive, zptwofive, two
     use variables, only : numscalar
     use decomp_2d, only : nrank, zsize, zstart,zend
@@ -607,6 +613,10 @@ contains
     if (istatquadrant .and. (itime>initstat2.or.itempaccel==1)) then
       call read_or_write_one_stat(flag_read, gen_statname("uv_quadrant_mean"), uv_quadrant_mean, uv_quadrant_info)
       call read_or_write_one_stat(flag_read, gen_statname("I_quadrant_mean"), I_quadrant_mean, uv_quadrant_info)
+    endif
+
+    if (istatpvar) then
+      call read_or_write_one_stat(flag_read, gen_statname("pp_mean"), pp_mean, dstat_plane)
     endif
 
     if (istatlambda2.and. (itime>initstat2.or.itempaccel==1)) then
@@ -1292,6 +1302,10 @@ contains
                             td3)
       endif
       endif                             
+
+      if (istatpvar) then
+        call update_average_scalar(pp_mean(:,:,1),td3*td3,ep1)
+      endif
 
       if (istatflatness) then
         call update_flatness(uuuu_mean,ux3, uy3, uz3,td3)

@@ -299,7 +299,7 @@ module param
   integer :: ivisu, ipost, initstat,initstat2,istatcalc, istatout
   integer :: nquads, ispectout,ispectstart
   logical :: istatbudget, istatpstrain, istatlambda2, istatquadrant, istatspectra
-  logical :: istatflatness, istatautocorr
+  logical :: istatflatness, istatautocorr, istatpvar
   logical :: log_cputime
   integer :: ifilter
   
