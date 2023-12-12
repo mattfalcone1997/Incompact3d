@@ -686,12 +686,7 @@ contains
     open(newunit=unit,file='statistics/'//trim(fname),status='old',action='read')
     check = fstat(unit,values)
     close(unit)
-#else
-    if (nrank == 0) then
-      write(*,*) "WARNING: cannot check that "&
-              //"statistics are correct with this compiler"
-    endif
-#endif
+
     if (check /=0 .and. nrank==0) then
       write(*,*) "There has been a problem"
       call MPI_Abort(MPI_COMM_WORLD,1,code)
@@ -710,6 +705,15 @@ contains
         return
       endif
     enddo
+#else
+    if (nrank == 0) then
+      write(*,*) "WARNING: cannot check that "&
+              //"statistics are correct with this compiler"
+    endif
+    update = .false.
+    return
+#endif
+    
 
   end function
 
@@ -770,18 +774,13 @@ contains
     open(newunit=unit,file='statistics/'//trim(fname),status='old',action='read')
     check = fstat(unit,values)
     close(unit)
-#else
-    if (nrank == 0) then
-      write(*,*) "WARNING: cannot check that "&
-              //"statistics are correct with this compiler"
-    endif
-#endif
 
     if (check /=0 .and. nrank==0) then
       write(*,*) "There has been a problem"
       call MPI_Abort(MPI_COMM_WORLD,1,code)
     endif
     close(unit)
+    
     if (nclx) then
       new_bytes = ny*18*8
       old_bytes = ny*12*8
@@ -799,6 +798,17 @@ contains
         call MPI_Abort(MPI_COMM_WORLD,1,code)
       endif
     endif
+
+#else
+    if (nrank == 0) then
+      write(*,*) "WARNING: cannot check that "&
+              //"statistics are correct with this compiler"
+    endif
+    update = .false.
+    return
+#endif
+
+   
   end function
   !
   ! Statistics: perform one IO
