@@ -628,7 +628,7 @@ contains
     call decomp_2d_end_io(io_statistics, stat_dir)
     call decomp_2d_close_io(io_statistics, stat_dir)
 #endif
-    
+
   if (flag_read) then
 
     if (check_stat_correct(gen_statname("pdudx_mean"))) then
@@ -682,13 +682,20 @@ contains
     integer :: code, i, unit
     logical :: update
 
+#ifdef CORRECT_STAT
     open(newunit=unit,file='statistics/'//trim(fname),status='old',action='read')
     check = fstat(unit,values)
+    close(unit)
+#else
+    if (nrank == 0) then
+      write(*,*) "WARNING: cannot check that "&
+              //"statistics are correct with this compiler"
+    endif
+#endif
     if (check /=0 .and. nrank==0) then
       write(*,*) "There has been a problem"
       call MPI_Abort(MPI_COMM_WORLD,1,code)
     endif
-    close(unit)
 
     ref_date = [0,0,15,13,0,123]
     call ltime(values(10),fldate)
@@ -759,8 +766,17 @@ contains
     integer :: code, i, unit
     logical :: update
 
+#ifdef CORRECT_STAT
     open(newunit=unit,file='statistics/'//trim(fname),status='old',action='read')
     check = fstat(unit,values)
+    close(unit)
+#else
+    if (nrank == 0) then
+      write(*,*) "WARNING: cannot check that "&
+              //"statistics are correct with this compiler"
+    endif
+#endif
+
     if (check /=0 .and. nrank==0) then
       write(*,*) "There has been a problem"
       call MPI_Abort(MPI_COMM_WORLD,1,code)
@@ -845,44 +861,47 @@ contains
     character(len=*), intent(in) :: dir, filename
     integer, intent(in) :: asize
     real(mytype), dimension(1,zsize(2),asize), intent(inout) :: array
-    real(mytype), dimension(ny,asize) :: data_array
+    real(mytype), dimension(asize, zsize(2)) :: array_copy
+
+    real(mytype), dimension(asize,ny) :: data_array
     character(len=128) :: fn
-    integer :: fh, split_comm_x, newtype, resized_type
-    integer :: color, key, code
+    integer :: fh, split_comm_x
+    integer ::  resizedsubarray, sendsubarray, receivesubarray
+    integer :: color, key, code, start
+    integer(MPI_ADDRESS_KIND) real_size
     logical :: exists
     integer, dimension(2):: sizes, subsizes, starts
     integer, dimension(2) :: dims, coords
     logical, dimension(2) :: periods 
-    
+    integer, dimension(:), allocatable :: recvcounts, displs
     call MPI_CART_GET(DECOMP_2D_COMM_CART_Z, 2, dims, periods, coords, code)
-    key = coords(1)
-    color = coords(2)
+    color = coords(1)
+    key = coords(2)
 
-    call MPI_Comm_split(DECOMP_2D_COMM_CART_Z, key,color, split_comm_x,code)
-    sizes(:) = [ny,asize]
-    subsizes(:) = [zsize(2),asize]
-    starts(:) = [zstart(2)-1,0]
-
-    call MPI_Type_create_subarray(2, sizes, subsizes, starts,  &
-                              MPI_ORDER_FORTRAN, real_type, newtype, code)
-    call MPI_Type_commit(newtype,code)
-
-    if (key==0) then
+    call MPI_Comm_split(DECOMP_2D_COMM_CART_Z, color, key, split_comm_x,code)
+    if (color==0) then
       inquire(file=dir,exist=exists)
       if (.not.exists) call system("mkdir -p "//trim(dir))
+      
+      allocate(recvcounts(dims(2)), displs(dims(2)))
+      array_copy = transpose(array(1,:,:))
+      call MPI_Gather(asize*zsize(2),1,MPI_INTEGER,recvcounts,1, MPI_INTEGER,0,split_comm_x,code)
+      call MPI_Gather(asize*(zstart(2)-1),1,MPI_INTEGER,displs,1, MPI_INTEGER,0,split_comm_x,code)
 
-      fn = trim(dir)//'/'//trim(filename)
-      call MPI_File_open(split_comm_x,fn,MPI_MODE_CREATE+MPI_MODE_WRONLY,&
-                        MPI_INFO_NULL, fh, code)
-      call MPI_FILE_SET_SIZE(fh,0_MPI_OFFSET_KIND,code)                        
-      call MPI_FILE_SET_VIEW(fh,0_MPI_OFFSET_KIND,real_type, &
-                        newtype,'native',MPI_INFO_NULL,code)
-      call MPI_FILE_WRITE_ALL(fh, array, &
-                        subsizes(1)*subsizes(2), &
-                        real_type, MPI_STATUS_IGNORE, code)
-      call MPI_FILE_CLOSE(fh,code)
+      call MPI_Gatherv(array_copy,asize*zsize(2),real_type,&
+                       data_array,recvcounts,displs,real_type,&
+                       0,split_comm_x,code)
+      
+      deallocate(recvcounts, displs)
+      if (key == 0) then
+        fn = trim(dir)//'/'//trim(filename)
+        open(newunit=fh, file=fn, action='write',status='replace',access='stream')
+        write(fh) transpose(data_array)
+        close(fh)
+      endif
       
     endif
+
     call MPI_Comm_free(split_comm_x,code)
   end subroutine write_one_xz
   subroutine read_write_spectra(flag_read, array, file_base,ipencil)

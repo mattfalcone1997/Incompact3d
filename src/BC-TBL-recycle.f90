@@ -1354,7 +1354,7 @@ end subroutine tbl_recy_tripping
    real(mytype) :: dyy, u_infty_recy, u_infty_inlt, u_thresh
    real(mytype) :: theta_inlt, theta_recy, int_inlt, int_inlt_z, theta_inlt_z
    real(mytype) :: int_recy, mid_u, u_tau, theta_inlt_des
-   real(mytype), parameter :: alp = 0.3
+   real(mytype), parameter :: alp = 0.1
    integer :: i,j, unit, pos, nreads
    logical :: reset_local
 
@@ -1400,6 +1400,7 @@ end subroutine tbl_recy_tripping
 
    if (irestart.ne.0) first_call = .false.
    theta_inlt_des = re_in / re
+   
    if (first_call) then
       delta_i = delta_meas
       
@@ -1411,13 +1412,16 @@ end subroutine tbl_recy_tripping
       else
          first_call = .false.
       endif
+
    else if (itr .eq. 1) then
       delta_i = delta_inlt_old + alp*( theta_inlt_des - theta_inlt)*delta_inlt_old
       if (abs_prec(delta_i - delta_meas) > one) then
          delta_i = delta_meas + sign(one,delta_i - delta_meas)
       endif
+
    else 
       delta_i = delta_inlt_old
+
    endif
    
    ! compute friction velocity
