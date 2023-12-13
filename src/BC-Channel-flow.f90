@@ -935,7 +935,7 @@ end subroutine
       
       a = log_prec(y/bf_inner_cen)
       b = log_prec((yly-y)/bf_inner_cen)
-      bf(j) = weight(j)*source_val*bf_amp_inner*exp_prec(-bf_alp*a*a) \
+      bf(j) = weight(j)*source_val*bf_amp_inner*exp_prec(-bf_alp*a*a) &
                         + source_val*bf_amp_inner*exp_prec(-bf_alp*b*b)
    enddo
   end subroutine inner_bf
