@@ -957,24 +957,24 @@ end subroutine tbl_recy_tripping
 
    ! interpolating u for inner and outer
    call fluct_interp(y_plus_recy, y_plus_inlt,&
-                     u_fluct_in, u_fluct_inner)
+                     u_fluct_in, u_fluct_inner, .false.)
 
    call fluct_interp(eta_recy, eta_inlt,&
-                     u_fluct_in, u_fluct_outer)
+                     u_fluct_in, u_fluct_outer, .false.)
 
    ! interpolating v for inner and outer
    call fluct_interp(y_plus_recy, y_plus_inlt,&
-                     v_fluct_in, v_fluct_inner)
+                     v_fluct_in, v_fluct_inner, .false.)
 
    call fluct_interp(eta_recy, eta_inlt,&
-                     v_fluct_in, v_fluct_outer)
+                     v_fluct_in, v_fluct_outer, .false.)
 
    ! interpolating w for inner and outer
    call fluct_interp(y_plus_recy, y_plus_inlt,&
-                     w_fluct_in, w_fluct_inner)
+                     w_fluct_in, w_fluct_inner, .true.)
 
    call fluct_interp(eta_recy, eta_inlt,&
-                     w_fluct_in, w_fluct_outer)               
+                     w_fluct_in, w_fluct_outer, .true.)               
 
 #ifdef BL_DEBG
    do j = 1, xsize(2)
@@ -1485,7 +1485,7 @@ end subroutine tbl_recy_tripping
 
   end subroutine mean_interp
 
-  subroutine fluct_interp(y_in, y_out, u_in, u_out)
+  subroutine fluct_interp(y_in, y_out, u_in, u_out,is_w)
    use iso_fortran_env, only: output_unit
    use decomp_2d
    use decomp_2d_io
@@ -1495,6 +1495,7 @@ end subroutine tbl_recy_tripping
    real(mytype), dimension(:),intent(in) :: y_in, y_out
    real(mytype), dimension(:,:),intent(inout) :: u_in
    real(mytype), dimension(:,:), intent(out) :: u_out
+   logical :: is_w
    integer :: i, j, k
 
    integer :: color, key
@@ -1578,6 +1579,7 @@ end subroutine tbl_recy_tripping
                u_out(j,k) = u_in_local(kdx,jdx) + &
                         (y_out(jdx) - y_in(j_lower)) * &
                         (u_in_local(kdx,j_upper) - u_in_local(kdx,jdx))
+               if (is_w.and.iscramble.eq.2) u_out(j,k) = -u_out(j,k)
                exit
             elseif (j2 == ny) then
                u_out(j,k) = zero
